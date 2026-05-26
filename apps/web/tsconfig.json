@@ -1,0 +1,27 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"jsx": "preserve",
+		"incremental": true,
+		"plugins": [
+			{
+				"name": "next"
+			}
+		],
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+			"paymesh": ["../../packages/paymesh/src/index.ts"],
+			"@paymesh/stripe": ["../../packages/stripe/src/index.ts"]
+		},
+		"types": ["node"]
+	},
+	"include": [
+		"next-env.d.ts",
+		"next.config.ts",
+		"src/**/*.ts",
+		"src/**/*.tsx",
+		".next/types/**/*.ts"
+	],
+	"exclude": ["node_modules"]
+}
