@@ -21,12 +21,12 @@
 		},
 		"./stripe": {
 			"import": {
-				"types": "./dist/stripe.d.mts",
-				"default": "./dist/stripe.mjs"
+				"types": "./dist/providers/stripe.d.mts",
+				"default": "./dist/providers/stripe.mjs"
 			},
 			"require": {
-				"types": "./dist/stripe.d.cts",
-				"default": "./dist/stripe.cjs"
+				"types": "./dist/providers/stripe.d.cts",
+				"default": "./dist/providers/stripe.cjs"
 			}
 		}
 	},
