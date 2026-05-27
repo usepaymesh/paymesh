@@ -9,7 +9,8 @@ export type ProviderCapability =
 	| 'subscriptions'
 	| 'webhooks'
 	| 'refunds'
-	| 'customerPortal';
+	| 'customerPortal'
+	| 'customers';
 
 export type ProviderCapabilities = Partial<Record<ProviderCapability, boolean>>;
 
@@ -60,6 +61,40 @@ export interface Payment {
 	raw?: unknown;
 }
 
+export interface Customer {
+	id: string;
+	provider: string;
+
+	name?: string;
+	email?: string;
+	phone?: string;
+
+	metadata?: Record<string, unknown>;
+
+	raw?: unknown;
+}
+
+export interface CustomerCreateData {
+	name?: string;
+	email?: string;
+	phone?: string;
+	metadata?: Record<string, string | number | boolean | null>;
+}
+
+export interface CustomerUpdateData {
+	name?: string;
+	email?: string;
+	phone?: string;
+	metadata?: Record<string, string | number | boolean | null>;
+}
+
+export interface CustomerDeleteResult {
+	id: string;
+	provider: string;
+	deleted: boolean;
+	raw?: unknown;
+}
+
 export interface ProviderRequestOptions {
 	baseUrl?: string;
 	timeout?: number;
@@ -72,6 +107,23 @@ export interface ProviderPayments {
 		data: PaymentCreateData,
 		options?: ProviderRequestOptions,
 	): Promise<Payment>;
+}
+
+export interface ProviderCustomers {
+	create(
+		data: CustomerCreateData,
+		options?: ProviderRequestOptions,
+	): Promise<Customer>;
+	get(id: string, options?: ProviderRequestOptions): Promise<Customer>;
+	update(
+		id: string,
+		data: CustomerUpdateData,
+		options?: ProviderRequestOptions,
+	): Promise<Customer>;
+	delete(
+		id: string,
+		options?: ProviderRequestOptions,
+	): Promise<CustomerDeleteResult>;
 }
 
 export interface ProviderVerifyWebhookContext {
@@ -117,6 +169,8 @@ export interface ProviderDefinition<Name extends string = string> {
 	id: Name;
 
 	payments: ProviderPayments;
+
+	customers: ProviderCustomers;
 
 	webhooks?: ProviderWebhooks;
 

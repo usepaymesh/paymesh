@@ -10,6 +10,8 @@ import type {
 } from '../types/providers';
 import type {
 	StripeCheckoutSession,
+	StripeCustomer,
+	StripeDeletedCustomer,
 	StripeEvent,
 	StripePaymentObject,
 	StripeProviderOptions,
@@ -26,6 +28,7 @@ const STRIPE_CAPABILITIES = {
 	subscriptions: true,
 	webhooks: true,
 	customerPortal: true,
+	customers: true,
 } satisfies ProviderCapabilities;
 
 const STRIPE_EVENTS: Record<string, PaymeshEventType> = {
@@ -53,8 +56,13 @@ export const stripe = ({
 	retry,
 	timeout,
 	fetch,
-}: StripeProviderOptions = {}) =>
-	defineProvider({
+}: StripeProviderOptions = {}) => {
+	const headers = {
+		authorization: `Bearer ${secret}`,
+		'content-type': 'application/x-www-form-urlencoded',
+	};
+
+	return defineProvider({
 		id: 'stripe',
 		capabilities: STRIPE_CAPABILITIES,
 		payments: {
@@ -70,9 +78,8 @@ export const stripe = ({
 
 				if (data.successUrl) body.set('success_url', data.successUrl);
 				if (data.cancelUrl) body.set('cancel_url', data.cancelUrl);
-				if (data.customer?.id)
-					body.set('client_reference_id', data.customer.id);
-				if (data.customer?.email)
+				if (data.customer?.id) body.set('customer', data.customer.id);
+				else if (data.customer?.email)
 					body.set('customer_email', data.customer.email);
 
 				for (const [key, value] of Object.entries(data.metadata ?? {})) {
@@ -87,15 +94,121 @@ export const stripe = ({
 						retry: options?.retry ?? retry,
 						fetch: options?.fetch ?? fetch,
 						method: 'POST',
-						headers: {
-							authorization: `Bearer ${secret}`,
-							'content-type': 'application/x-www-form-urlencoded',
-						},
+						headers,
 						body,
 					},
 				);
 
 				return toPayment(session);
+			},
+		},
+		customers: {
+			async create(data, options?: ProviderRequestOptions) {
+				const body = new URLSearchParams();
+
+				if (data.name !== undefined) body.set('name', data.name);
+				if (data.email !== undefined) body.set('email', data.email);
+				if (data.phone !== undefined) body.set('phone', data.phone);
+
+				for (const [key, value] of Object.entries(data.metadata ?? {})) {
+					if (value !== null) body.set(`metadata[${key}]`, String(value));
+				}
+
+				const customer = await request<StripeCustomer>('/v1/customers', {
+					baseUrl: options?.baseUrl ?? baseUrl,
+					timeout: options?.timeout ?? timeout,
+					retry: options?.retry ?? retry,
+					fetch: options?.fetch ?? fetch,
+					method: 'POST',
+					headers,
+					body,
+				});
+
+				return {
+					id: customer.id,
+					provider: 'stripe',
+					name: customer.name ?? undefined,
+					email: customer.email ?? undefined,
+					phone: customer.phone ?? undefined,
+					metadata: customer.metadata ?? undefined,
+					raw: customer,
+				};
+			},
+			async get(id, options?: ProviderRequestOptions) {
+				const customer = await request<StripeCustomer>(
+					`/v1/customers/${encodeURIComponent(id)}`,
+					{
+						baseUrl: options?.baseUrl ?? baseUrl,
+						timeout: options?.timeout ?? timeout,
+						retry: options?.retry ?? retry,
+						fetch: options?.fetch ?? fetch,
+						headers,
+					},
+				);
+
+				return {
+					id: customer.id,
+					provider: 'stripe',
+					name: customer.name ?? undefined,
+					email: customer.email ?? undefined,
+					phone: customer.phone ?? undefined,
+					metadata: customer.metadata ?? undefined,
+					raw: customer,
+				};
+			},
+			async update(id, data, options?: ProviderRequestOptions) {
+				const body = new URLSearchParams();
+
+				if (data.name !== undefined) body.set('name', data.name);
+				if (data.email !== undefined) body.set('email', data.email);
+				if (data.phone !== undefined) body.set('phone', data.phone);
+
+				for (const [key, value] of Object.entries(data.metadata ?? {})) {
+					if (value !== null) body.set(`metadata[${key}]`, String(value));
+				}
+
+				const customer = await request<StripeCustomer>(
+					`/v1/customers/${encodeURIComponent(id)}`,
+					{
+						baseUrl: options?.baseUrl ?? baseUrl,
+						timeout: options?.timeout ?? timeout,
+						retry: options?.retry ?? retry,
+						fetch: options?.fetch ?? fetch,
+						method: 'POST',
+						headers,
+						body,
+					},
+				);
+
+				return {
+					id: customer.id,
+					provider: 'stripe',
+					name: customer.name ?? undefined,
+					email: customer.email ?? undefined,
+					phone: customer.phone ?? undefined,
+					metadata: customer.metadata ?? undefined,
+					raw: customer,
+				};
+			},
+			async delete(id, options?: ProviderRequestOptions) {
+				const customer = await request<StripeDeletedCustomer>(
+					`/v1/customers/${encodeURIComponent(id)}`,
+					{
+						baseUrl: options?.baseUrl ?? baseUrl,
+						timeout: options?.timeout ?? timeout,
+						retry: options?.retry ?? retry,
+						fetch: options?.fetch ?? fetch,
+						method: 'DELETE',
+						headers,
+					},
+				);
+
+				return {
+					id: customer.id,
+					provider: 'stripe',
+					deleted: customer.deleted,
+					raw: customer,
+				};
 			},
 		},
 		webhooks: {
@@ -133,6 +246,7 @@ export const stripe = ({
 			},
 		},
 	});
+};
 
 function toPayment(data: StripePaymentObject): Payment {
 	const status: PaymentStatus =

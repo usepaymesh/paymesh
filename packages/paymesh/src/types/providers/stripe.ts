@@ -27,6 +27,21 @@ export interface StripeCheckoutSession {
 	url?: string | null;
 }
 
+export interface StripeCustomer {
+	id: string;
+	object: 'customer';
+	name?: string | null;
+	email?: string | null;
+	phone?: string | null;
+	metadata?: Record<string, string> | null;
+}
+
+export interface StripeDeletedCustomer {
+	id: string;
+	object: 'customer';
+	deleted: boolean;
+}
+
 export interface StripePaymentIntent {
 	id: string;
 	object: 'payment_intent';
