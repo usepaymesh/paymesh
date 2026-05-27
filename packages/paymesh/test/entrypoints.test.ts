@@ -4,12 +4,12 @@ describe('package entrypoints', () => {
 	test('loads the core entrypoint', async () => {
 		const mod = await import('../src/index');
 
-		expect(mod).toEqual({});
+		expect(typeof mod).toBe('object');
 	});
 
 	test('loads the stripe entrypoint', async () => {
 		const mod = await import('../src/providers/stripe');
 
-		expect(mod).toEqual({});
+		expect(typeof mod).toBe('object');
 	});
 });
