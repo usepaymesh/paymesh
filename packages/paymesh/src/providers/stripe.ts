@@ -1,12 +1,19 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { withRaw } from '../shared/raw';
 import { request } from '../shared/request';
 import type {
+	Customer,
+	CustomerCreateData,
+	CustomerDeleteResult,
+	CustomerUpdateData,
 	Payment,
+	PaymentCreateData,
 	PaymentStatus,
 	PaymeshEvent,
 	PaymeshEventType,
 	ProviderCapabilities,
 	ProviderRequestOptions,
+	ProviderWebhookMapOptions,
 } from '../types/providers';
 import type {
 	StripeCheckoutSession,
@@ -66,7 +73,10 @@ export const stripe = ({
 		id: 'stripe',
 		capabilities: STRIPE_CAPABILITIES,
 		payments: {
-			async create(data, options?: ProviderRequestOptions) {
+			async create<IncludeRaw extends boolean = false>(
+				data: PaymentCreateData,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
 				const body = new URLSearchParams({
 					mode: 'payment',
 					'line_items[0][quantity]': '1',
@@ -99,11 +109,14 @@ export const stripe = ({
 					},
 				);
 
-				return toPayment(session);
+				return toPayment(session, options?.includeRaw);
 			},
 		},
 		customers: {
-			async create(data, options?: ProviderRequestOptions) {
+			async create<IncludeRaw extends boolean = false>(
+				data: CustomerCreateData,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
 				const body = new URLSearchParams();
 
 				if (data.name !== undefined) body.set('name', data.name);
@@ -124,17 +137,12 @@ export const stripe = ({
 					body,
 				});
 
-				return {
-					id: customer.id,
-					provider: 'stripe',
-					name: customer.name ?? undefined,
-					email: customer.email ?? undefined,
-					phone: customer.phone ?? undefined,
-					metadata: customer.metadata ?? undefined,
-					raw: customer,
-				};
+				return toCustomer(customer, options?.includeRaw);
 			},
-			async get(id, options?: ProviderRequestOptions) {
+			async get<IncludeRaw extends boolean = false>(
+				id: string,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
 				const customer = await request<StripeCustomer>(
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
@@ -146,17 +154,13 @@ export const stripe = ({
 					},
 				);
 
-				return {
-					id: customer.id,
-					provider: 'stripe',
-					name: customer.name ?? undefined,
-					email: customer.email ?? undefined,
-					phone: customer.phone ?? undefined,
-					metadata: customer.metadata ?? undefined,
-					raw: customer,
-				};
+				return toCustomer(customer, options?.includeRaw);
 			},
-			async update(id, data, options?: ProviderRequestOptions) {
+			async update<IncludeRaw extends boolean = false>(
+				id: string,
+				data: CustomerUpdateData,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
 				const body = new URLSearchParams();
 
 				if (data.name !== undefined) body.set('name', data.name);
@@ -180,17 +184,12 @@ export const stripe = ({
 					},
 				);
 
-				return {
-					id: customer.id,
-					provider: 'stripe',
-					name: customer.name ?? undefined,
-					email: customer.email ?? undefined,
-					phone: customer.phone ?? undefined,
-					metadata: customer.metadata ?? undefined,
-					raw: customer,
-				};
+				return toCustomer(customer, options?.includeRaw);
 			},
-			async delete(id, options?: ProviderRequestOptions) {
+			async delete<IncludeRaw extends boolean = false>(
+				id: string,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
 				const customer = await request<StripeDeletedCustomer>(
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
@@ -203,26 +202,27 @@ export const stripe = ({
 					},
 				);
 
-				return {
-					id: customer.id,
-					provider: 'stripe',
-					deleted: customer.deleted,
-					raw: customer,
-				};
+				return toCustomerDeleteResult(customer, options?.includeRaw);
 			},
 		},
 		webhooks: {
-			map(body): PaymeshEvent {
+			map<IncludeRaw extends boolean = false>(
+				body: Record<string, unknown>,
+				options?: ProviderWebhookMapOptions<IncludeRaw>,
+			): PaymeshEvent<unknown, IncludeRaw> {
 				const event = body as unknown as StripeEvent;
 				const object = event.data?.object;
 
-				return {
-					id: event.id,
-					type: STRIPE_EVENTS[event.type] ?? 'payment.created',
-					provider: 'stripe',
-					data: object ? toPayment(object) : body,
-					raw: body,
-				};
+				return withRaw(
+					{
+						id: event.id,
+						type: STRIPE_EVENTS[event.type] ?? 'payment.created',
+						provider: 'stripe',
+						data: object ? toPayment(object, options?.includeRaw) : body,
+					},
+					body,
+					options?.includeRaw,
+				);
 			},
 			async verify({ request }) {
 				if (!webhookSecret) return false;
@@ -248,7 +248,43 @@ export const stripe = ({
 	});
 };
 
-function toPayment(data: StripePaymentObject): Payment {
+function toCustomer<IncludeRaw extends boolean = false>(
+	customer: StripeCustomer,
+	includeRaw?: IncludeRaw,
+): Customer<IncludeRaw> {
+	return withRaw(
+		{
+			id: customer.id,
+			provider: 'stripe',
+			name: customer.name ?? undefined,
+			email: customer.email ?? undefined,
+			phone: customer.phone ?? undefined,
+			metadata: customer.metadata ?? undefined,
+		},
+		customer,
+		includeRaw,
+	);
+}
+
+function toCustomerDeleteResult<IncludeRaw extends boolean = false>(
+	customer: StripeDeletedCustomer,
+	includeRaw?: IncludeRaw,
+): CustomerDeleteResult<IncludeRaw> {
+	return withRaw(
+		{
+			id: customer.id,
+			provider: 'stripe',
+			deleted: customer.deleted,
+		},
+		customer,
+		includeRaw,
+	);
+}
+
+function toPayment<IncludeRaw extends boolean = false>(
+	data: StripePaymentObject,
+	includeRaw?: IncludeRaw,
+): Payment<IncludeRaw> {
 	const status: PaymentStatus =
 		('payment_status' in data &&
 			STRIPE_PAYMENT_STATUSES[data.payment_status ?? data.status ?? '']) ||
@@ -256,29 +292,34 @@ function toPayment(data: StripePaymentObject): Payment {
 		STRIPE_PAYMENT_STATUSES[data.status ?? ''] ||
 		'pending';
 
-	return {
-		id: data.id,
-		provider: 'stripe',
-		amount:
-			'amount_total' in data
-				? (data.amount_total ?? 0)
-				: 'amount' in data
-					? data.amount
-					: 0,
-		currency: data.currency ?? 'usd',
-		status,
-		checkoutUrl: 'url' in data ? (data.url ?? undefined) : undefined,
-		customer:
-			'customer_details' in data
-				? {
-						id: typeof data.customer === 'string' ? data.customer : undefined,
-						name: data.customer_details?.name ?? undefined,
-						email:
-							data.customer_details?.email ?? data.customer_email ?? undefined,
-						phone: data.customer_details?.phone ?? undefined,
-					}
-				: undefined,
-		metadata: data.metadata ?? undefined,
-		raw: data,
-	};
+	return withRaw(
+		{
+			id: data.id,
+			provider: 'stripe',
+			amount:
+				'amount_total' in data
+					? (data.amount_total ?? 0)
+					: 'amount' in data
+						? data.amount
+						: 0,
+			currency: data.currency ?? 'usd',
+			status,
+			checkoutUrl: 'url' in data ? (data.url ?? undefined) : undefined,
+			customer:
+				'customer_details' in data
+					? {
+							id: typeof data.customer === 'string' ? data.customer : undefined,
+							name: data.customer_details?.name ?? undefined,
+							email:
+								data.customer_details?.email ??
+								data.customer_email ??
+								undefined,
+							phone: data.customer_details?.phone ?? undefined,
+						}
+					: undefined,
+			metadata: data.metadata ?? undefined,
+		},
+		data,
+		includeRaw,
+	);
 }

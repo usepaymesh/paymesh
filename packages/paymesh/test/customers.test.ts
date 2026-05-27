@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { createClient } from '../src';
 import { stripe } from '../src/providers/stripe';
 
+function expectType<T>(_value: T) {}
+
 describe('customers', () => {
 	test('manages Stripe customers through the client', async () => {
 		const requests: Array<{
@@ -138,12 +140,49 @@ describe('customers', () => {
 			id: 'cus_create',
 			provider: 'stripe',
 			deleted: true,
-			raw: {
-				id: 'cus_create',
-				object: 'customer',
-				deleted: true,
-			},
+			raw: null,
 		});
+	});
+
+	test('supports raw customer payloads globally and per call', async () => {
+		const provider = stripe({
+			secret: 'sk_test_123',
+			baseUrl: 'https://stripe.customers.test',
+			fetch: (async () =>
+				Response.json({
+					id: 'cus_raw',
+					object: 'customer',
+					name: 'Ana',
+					email: 'ana@example.com',
+				})) as unknown as typeof fetch,
+		});
+		const defaultClient = createClient({ provider });
+		const rawClient = createClient({ provider, includeRaw: true });
+
+		const defaultCustomer = await defaultClient.customers.get('cus_raw');
+		const callRawCustomer = await defaultClient.customers.get('cus_raw', {
+			includeRaw: true,
+		});
+		const globalRawCustomer = await rawClient.customers.get('cus_raw');
+		const callNullCustomer = await rawClient.customers.get('cus_raw', {
+			includeRaw: false,
+		});
+
+		expectType<null>(defaultCustomer.raw);
+		expectType<unknown>(callRawCustomer.raw);
+		expectType<unknown>(globalRawCustomer.raw);
+		expectType<null>(callNullCustomer.raw);
+
+		expect(defaultCustomer.raw).toBeNull();
+		expect(callRawCustomer.raw).toMatchObject({
+			id: 'cus_raw',
+			object: 'customer',
+		});
+		expect(globalRawCustomer.raw).toMatchObject({
+			id: 'cus_raw',
+			object: 'customer',
+		});
+		expect(callNullCustomer.raw).toBeNull();
 	});
 
 	test('uses Stripe customer id when creating checkout sessions', async () => {

@@ -22,6 +22,15 @@ export type PaymentStatus =
 	| 'canceled'
 	| 'refunded';
 
+export interface RawObject {
+	raw: unknown;
+}
+
+export type WithRaw<
+	TObject,
+	IncludeRaw extends boolean,
+> = IncludeRaw extends true ? TObject & RawObject : TObject & { raw: null };
+
 export interface PaymentCustomer {
 	id?: string;
 	name?: string;
@@ -44,7 +53,7 @@ export interface PaymentCreateData {
 	returnUrl?: string;
 }
 
-export interface Payment {
+export interface BasePayment {
 	id: string;
 	provider: string;
 
@@ -57,11 +66,14 @@ export interface Payment {
 	customer?: PaymentCustomer;
 
 	metadata?: Record<string, unknown>;
-
-	raw?: unknown;
 }
 
-export interface Customer {
+export type Payment<IncludeRaw extends boolean = false> = WithRaw<
+	BasePayment,
+	IncludeRaw
+>;
+
+export interface BaseCustomer {
 	id: string;
 	provider: string;
 
@@ -70,9 +82,12 @@ export interface Customer {
 	phone?: string;
 
 	metadata?: Record<string, unknown>;
-
-	raw?: unknown;
 }
+
+export type Customer<IncludeRaw extends boolean = false> = WithRaw<
+	BaseCustomer,
+	IncludeRaw
+>;
 
 export interface CustomerCreateData {
 	name?: string;
@@ -88,42 +103,50 @@ export interface CustomerUpdateData {
 	metadata?: Record<string, string | number | boolean | null>;
 }
 
-export interface CustomerDeleteResult {
+export interface BaseCustomerDeleteResult {
 	id: string;
 	provider: string;
 	deleted: boolean;
-	raw?: unknown;
 }
 
-export interface ProviderRequestOptions {
+export type CustomerDeleteResult<IncludeRaw extends boolean = false> = WithRaw<
+	BaseCustomerDeleteResult,
+	IncludeRaw
+>;
+
+export interface ProviderRequestOptions<IncludeRaw extends boolean = false> {
 	baseUrl?: string;
 	timeout?: number;
 	retry?: RetryOptions;
 	fetch?: typeof fetch;
+	includeRaw?: IncludeRaw;
 }
 
 export interface ProviderPayments {
-	create(
+	create<IncludeRaw extends boolean = false>(
 		data: PaymentCreateData,
-		options?: ProviderRequestOptions,
-	): Promise<Payment>;
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Payment<IncludeRaw>>;
 }
 
 export interface ProviderCustomers {
-	create(
+	create<IncludeRaw extends boolean = false>(
 		data: CustomerCreateData,
-		options?: ProviderRequestOptions,
-	): Promise<Customer>;
-	get(id: string, options?: ProviderRequestOptions): Promise<Customer>;
-	update(
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Customer<IncludeRaw>>;
+	get<IncludeRaw extends boolean = false>(
+		id: string,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Customer<IncludeRaw>>;
+	update<IncludeRaw extends boolean = false>(
 		id: string,
 		data: CustomerUpdateData,
-		options?: ProviderRequestOptions,
-	): Promise<Customer>;
-	delete(
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Customer<IncludeRaw>>;
+	delete<IncludeRaw extends boolean = false>(
 		id: string,
-		options?: ProviderRequestOptions,
-	): Promise<CustomerDeleteResult>;
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<CustomerDeleteResult<IncludeRaw>>;
 }
 
 export interface ProviderVerifyWebhookContext {
@@ -141,15 +164,22 @@ export type PaymeshEventType =
 	| 'subscription.canceled'
 	| 'checkout.completed';
 
-export interface PaymeshEvent<Data = unknown> {
+export interface BasePaymeshEvent<Data = unknown> {
 	id: string;
 
 	type: PaymeshEventType;
 	provider: string;
 
 	data: Data;
+}
 
-	raw: unknown;
+export type PaymeshEvent<
+	Data = unknown,
+	IncludeRaw extends boolean = false,
+> = WithRaw<BasePaymeshEvent<Data>, IncludeRaw>;
+
+export interface ProviderWebhookMapOptions<IncludeRaw extends boolean = false> {
+	includeRaw?: IncludeRaw;
 }
 
 export interface ProviderWebhooks {
@@ -162,7 +192,12 @@ export interface ProviderWebhooks {
 	 * Map the provider-specific webhook payload
 	 * into a normalized Paymesh event.
 	 */
-	map(payload: Record<string, unknown>): PaymeshEvent | Promise<PaymeshEvent>;
+	map<IncludeRaw extends boolean = false>(
+		payload: Record<string, unknown>,
+		options?: ProviderWebhookMapOptions<IncludeRaw>,
+	):
+		| PaymeshEvent<unknown, IncludeRaw>
+		| Promise<PaymeshEvent<unknown, IncludeRaw>>;
 }
 
 export interface ProviderDefinition<Name extends string = string> {

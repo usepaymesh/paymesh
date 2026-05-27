@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { createClient } from '../src';
 import { stripe } from '../src/providers/stripe';
 
+function expectType<T>(_value: T) {}
+
 describe('stripe provider', () => {
 	test('creates a checkout session using Stripe form params', async () => {
 		const provider = stripe({
@@ -72,6 +74,7 @@ describe('stripe provider', () => {
 				email: 'ana@example.com',
 			},
 		});
+		expect(payment.raw).toBeNull();
 	});
 
 	test('uses client request options when creating payments', async () => {
@@ -118,5 +121,105 @@ describe('stripe provider', () => {
 		expect(attempts).toBe(2);
 		expect(timeoutSignal).toBeInstanceOf(AbortSignal);
 		expect(payment.status).toBe('paid');
+		expect(payment.raw).toBeNull();
+	});
+
+	test('supports raw payment payloads globally and per call', async () => {
+		const provider = stripe({
+			secret: 'sk_test_123',
+			baseUrl: 'https://stripe.payments.test',
+			fetch: (async () =>
+				Response.json({
+					id: 'cs_test_raw',
+					object: 'checkout.session',
+					amount_total: 1200,
+					currency: 'usd',
+					payment_status: 'paid',
+					status: 'complete',
+				})) as unknown as typeof fetch,
+		});
+		const defaultClient = createClient({ provider });
+		const rawClient = createClient({ provider, includeRaw: true });
+
+		const defaultPayment = await defaultClient.payments.create({
+			amount: 1200,
+			currency: 'USD',
+		});
+		const callRawPayment = await defaultClient.payments.create(
+			{
+				amount: 1200,
+				currency: 'USD',
+			},
+			{ includeRaw: true },
+		);
+		const globalRawPayment = await rawClient.payments.create({
+			amount: 1200,
+			currency: 'USD',
+		});
+		const callNullPayment = await rawClient.payments.create(
+			{
+				amount: 1200,
+				currency: 'USD',
+			},
+			{ includeRaw: false },
+		);
+
+		expectType<null>(defaultPayment.raw);
+		expectType<unknown>(callRawPayment.raw);
+		expectType<unknown>(globalRawPayment.raw);
+		expectType<null>(callNullPayment.raw);
+
+		expect(defaultPayment.raw).toBeNull();
+		expect(callRawPayment.raw).toMatchObject({
+			id: 'cs_test_raw',
+			object: 'checkout.session',
+		});
+		expect(globalRawPayment.raw).toMatchObject({
+			id: 'cs_test_raw',
+			object: 'checkout.session',
+		});
+		expect(callNullPayment.raw).toBeNull();
+	});
+
+	test('supports raw webhook payloads per map call', () => {
+		const provider = stripe({
+			secret: 'sk_test_123',
+		});
+		const payload = {
+			id: 'evt_raw',
+			type: 'payment_intent.succeeded',
+			data: {
+				object: {
+					id: 'pi_raw',
+					object: 'payment_intent',
+					amount: 1200,
+					currency: 'usd',
+					status: 'succeeded',
+				},
+			},
+		};
+
+		const defaultEvent = provider.webhooks?.map(payload);
+		const rawEvent = provider.webhooks?.map(payload, { includeRaw: true });
+
+		if (defaultEvent instanceof Promise || rawEvent instanceof Promise) {
+			throw new Error('Stripe webhook mapping should be synchronous');
+		}
+
+		expectType<null>(defaultEvent?.raw ?? null);
+		expectType<unknown>(rawEvent?.raw);
+
+		expect(defaultEvent?.raw).toBeNull();
+		expect(rawEvent?.raw).toBe(payload);
+		expect(defaultEvent?.data).toMatchObject({
+			id: 'pi_raw',
+			raw: null,
+		});
+		expect(rawEvent?.data).toMatchObject({
+			id: 'pi_raw',
+			raw: {
+				id: 'pi_raw',
+			},
+		});
 	});
 });
