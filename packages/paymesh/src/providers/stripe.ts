@@ -2,11 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { withRaw } from '../shared/raw';
 import { request } from '../shared/request';
 import type {
-	Customer,
 	CustomerCreateData,
-	CustomerDeleteResult,
 	CustomerUpdateData,
-	Payment,
 	PaymentCreateData,
 	PaymentStatus,
 	PaymeshEvent,
@@ -46,6 +43,24 @@ const STRIPE_EVENTS: Record<string, PaymeshEventType> = {
 	'payment_intent.payment_failed': 'payment.failed',
 	'payment_intent.canceled': 'payment.canceled',
 	'charge.refunded': 'payment.refunded',
+	'customer.created': 'customer.created',
+	'customer.updated': 'customer.updated',
+	'customer.deleted': 'customer.deleted',
+};
+
+const STRIPE_HOOKS: Record<PaymeshEventType, string> = {
+	'payment.created': 'onPaymentCreated',
+	'payment.succeeded': 'onPaymentSucceeded',
+	'payment.failed': 'onPaymentFailed',
+	'payment.canceled': 'onPaymentCanceled',
+	'payment.refunded': 'onPaymentRefunded',
+	'customer.created': 'onCustomerCreated',
+	'customer.updated': 'onCustomerUpdated',
+	'customer.deleted': 'onCustomerDeleted',
+	'subscription.created': 'onSubscriptionCreated',
+	'subscription.updated': 'onSubscriptionUpdated',
+	'subscription.canceled': 'onSubscriptionCanceled',
+	'checkout.completed': 'onCheckoutCompleted',
 };
 
 const STRIPE_PAYMENT_STATUSES: Record<string, PaymentStatus> = {
@@ -108,8 +123,38 @@ export const stripe = ({
 						body,
 					},
 				);
+				const status: PaymentStatus =
+					STRIPE_PAYMENT_STATUSES[
+						session.payment_status ?? session.status ?? ''
+					] ?? 'pending';
 
-				return toPayment(session, options?.includeRaw);
+				return withRaw(
+					{
+						id: session.id,
+						provider: 'stripe',
+						amount: session.amount_total ?? 0,
+						currency: session.currency ?? 'usd',
+						status,
+						checkoutUrl: session.url ?? undefined,
+						customer: session.customer_details
+							? {
+									id:
+										typeof session.customer === 'string'
+											? session.customer
+											: undefined,
+									name: session.customer_details.name ?? undefined,
+									email:
+										session.customer_details.email ??
+										session.customer_email ??
+										undefined,
+									phone: session.customer_details.phone ?? undefined,
+								}
+							: undefined,
+						metadata: session.metadata ?? undefined,
+					},
+					session,
+					options?.includeRaw,
+				);
 			},
 		},
 		customers: {
@@ -137,7 +182,18 @@ export const stripe = ({
 					body,
 				});
 
-				return toCustomer(customer, options?.includeRaw);
+				return withRaw(
+					{
+						id: customer.id,
+						provider: 'stripe',
+						name: customer.name ?? undefined,
+						email: customer.email ?? undefined,
+						phone: customer.phone ?? undefined,
+						metadata: customer.metadata ?? undefined,
+					},
+					customer,
+					options?.includeRaw,
+				);
 			},
 			async get<IncludeRaw extends boolean = false>(
 				id: string,
@@ -154,7 +210,18 @@ export const stripe = ({
 					},
 				);
 
-				return toCustomer(customer, options?.includeRaw);
+				return withRaw(
+					{
+						id: customer.id,
+						provider: 'stripe',
+						name: customer.name ?? undefined,
+						email: customer.email ?? undefined,
+						phone: customer.phone ?? undefined,
+						metadata: customer.metadata ?? undefined,
+					},
+					customer,
+					options?.includeRaw,
+				);
 			},
 			async update<IncludeRaw extends boolean = false>(
 				id: string,
@@ -184,7 +251,18 @@ export const stripe = ({
 					},
 				);
 
-				return toCustomer(customer, options?.includeRaw);
+				return withRaw(
+					{
+						id: customer.id,
+						provider: 'stripe',
+						name: customer.name ?? undefined,
+						email: customer.email ?? undefined,
+						phone: customer.phone ?? undefined,
+						metadata: customer.metadata ?? undefined,
+					},
+					customer,
+					options?.includeRaw,
+				);
 			},
 			async delete<IncludeRaw extends boolean = false>(
 				id: string,
@@ -202,28 +280,18 @@ export const stripe = ({
 					},
 				);
 
-				return toCustomerDeleteResult(customer, options?.includeRaw);
-			},
-		},
-		webhooks: {
-			map<IncludeRaw extends boolean = false>(
-				body: Record<string, unknown>,
-				options?: ProviderWebhookMapOptions<IncludeRaw>,
-			): PaymeshEvent<unknown, IncludeRaw> {
-				const event = body as unknown as StripeEvent;
-				const object = event.data?.object;
-
 				return withRaw(
 					{
-						id: event.id,
-						type: STRIPE_EVENTS[event.type] ?? 'payment.created',
+						id: customer.id,
 						provider: 'stripe',
-						data: object ? toPayment(object, options?.includeRaw) : body,
+						deleted: customer.deleted,
 					},
-					body,
+					customer,
 					options?.includeRaw,
 				);
 			},
+		},
+		webhooks: {
 			async verify({ request }) {
 				if (!webhookSecret) return false;
 
@@ -244,82 +312,117 @@ export const stripe = ({
 					timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
 				);
 			},
+			async parse(request) {
+				const payload = await request.json();
+
+				if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+					throw new TypeError('Stripe webhook payload must be a JSON object.');
+				}
+
+				return payload as Record<string, unknown>;
+			},
+			map<IncludeRaw extends boolean = false>(
+				body: Record<string, unknown>,
+				options?: ProviderWebhookMapOptions<IncludeRaw>,
+			): PaymeshEvent<unknown, IncludeRaw> {
+				const event = body as unknown as StripeEvent;
+				const object = event.data?.object;
+				const type = STRIPE_EVENTS[event.type] ?? 'payment.created';
+				let data: unknown = body;
+
+				if (object) {
+					if (type === 'customer.deleted') {
+						const customer = object as StripeDeletedCustomer;
+
+						data = withRaw(
+							{
+								id: customer.id,
+								provider: 'stripe',
+								deleted: customer.deleted,
+							},
+							customer,
+							options?.includeRaw,
+						);
+					} else if (
+						type === 'customer.created' ||
+						type === 'customer.updated'
+					) {
+						const customer = object as StripeCustomer;
+
+						data = withRaw(
+							{
+								id: customer.id,
+								provider: 'stripe',
+								name: customer.name ?? undefined,
+								email: customer.email ?? undefined,
+								phone: customer.phone ?? undefined,
+								metadata: customer.metadata ?? undefined,
+							},
+							customer,
+							options?.includeRaw,
+						);
+					} else {
+						const payment = object as StripePaymentObject;
+						const status: PaymentStatus =
+							('payment_status' in payment &&
+								STRIPE_PAYMENT_STATUSES[
+									payment.payment_status ?? payment.status ?? ''
+								]) ||
+							('refunded' in payment && payment.refunded && 'refunded') ||
+							STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ||
+							'pending';
+
+						data = withRaw(
+							{
+								id: payment.id,
+								provider: 'stripe',
+								amount:
+									'amount_total' in payment
+										? (payment.amount_total ?? 0)
+										: 'amount' in payment
+											? payment.amount
+											: 0,
+								currency: payment.currency ?? 'usd',
+								status,
+								checkoutUrl:
+									'url' in payment ? (payment.url ?? undefined) : undefined,
+								customer:
+									'customer_details' in payment
+										? {
+												id:
+													typeof payment.customer === 'string'
+														? payment.customer
+														: undefined,
+												name: payment.customer_details?.name ?? undefined,
+												email:
+													payment.customer_details?.email ??
+													payment.customer_email ??
+													undefined,
+												phone: payment.customer_details?.phone ?? undefined,
+											}
+										: undefined,
+								metadata: payment.metadata ?? undefined,
+							},
+							payment,
+							options?.includeRaw,
+						);
+					}
+				}
+
+				return withRaw(
+					{
+						id: event.id,
+						type,
+						provider: 'stripe',
+						data,
+					},
+					body,
+					options?.includeRaw,
+				);
+			},
+			hook(event) {
+				return STRIPE_HOOKS[event.type];
+			},
 		},
 	});
 };
-
-function toCustomer<IncludeRaw extends boolean = false>(
-	customer: StripeCustomer,
-	includeRaw?: IncludeRaw,
-): Customer<IncludeRaw> {
-	return withRaw(
-		{
-			id: customer.id,
-			provider: 'stripe',
-			name: customer.name ?? undefined,
-			email: customer.email ?? undefined,
-			phone: customer.phone ?? undefined,
-			metadata: customer.metadata ?? undefined,
-		},
-		customer,
-		includeRaw,
-	);
-}
-
-function toCustomerDeleteResult<IncludeRaw extends boolean = false>(
-	customer: StripeDeletedCustomer,
-	includeRaw?: IncludeRaw,
-): CustomerDeleteResult<IncludeRaw> {
-	return withRaw(
-		{
-			id: customer.id,
-			provider: 'stripe',
-			deleted: customer.deleted,
-		},
-		customer,
-		includeRaw,
-	);
-}
-
-function toPayment<IncludeRaw extends boolean = false>(
-	data: StripePaymentObject,
-	includeRaw?: IncludeRaw,
-): Payment<IncludeRaw> {
-	const status: PaymentStatus =
-		('payment_status' in data &&
-			STRIPE_PAYMENT_STATUSES[data.payment_status ?? data.status ?? '']) ||
-		('refunded' in data && data.refunded && 'refunded') ||
-		STRIPE_PAYMENT_STATUSES[data.status ?? ''] ||
-		'pending';
-
-	return withRaw(
-		{
-			id: data.id,
-			provider: 'stripe',
-			amount:
-				'amount_total' in data
-					? (data.amount_total ?? 0)
-					: 'amount' in data
-						? data.amount
-						: 0,
-			currency: data.currency ?? 'usd',
-			status,
-			checkoutUrl: 'url' in data ? (data.url ?? undefined) : undefined,
-			customer:
-				'customer_details' in data
-					? {
-							id: typeof data.customer === 'string' ? data.customer : undefined,
-							name: data.customer_details?.name ?? undefined,
-							email:
-								data.customer_details?.email ??
-								data.customer_email ??
-								undefined,
-							phone: data.customer_details?.phone ?? undefined,
-						}
-					: undefined,
-			metadata: data.metadata ?? undefined,
-		},
-		data,
-		includeRaw,
-	);
-}
