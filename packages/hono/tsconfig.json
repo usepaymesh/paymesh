@@ -1,0 +1,12 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"paymesh": ["../paymesh/src/index.ts"],
+			"paymesh/stripe": ["../paymesh/src/providers/stripe.ts"]
+		},
+		"types": ["bun"]
+	},
+	"include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -159,6 +159,9 @@ export type PaymeshEventType =
 	| 'payment.failed'
 	| 'payment.canceled'
 	| 'payment.refunded'
+	| 'customer.created'
+	| 'customer.updated'
+	| 'customer.deleted'
 	| 'subscription.created'
 	| 'subscription.updated'
 	| 'subscription.canceled'
@@ -189,6 +192,14 @@ export interface ProviderWebhooks {
 	verify(context: ProviderVerifyWebhookContext): boolean | Promise<boolean>;
 
 	/**
+	 * Parse the provider-specific webhook request
+	 * into the payload used by map().
+	 */
+	parse(
+		request: Request,
+	): Record<string, unknown> | Promise<Record<string, unknown>>;
+
+	/**
 	 * Map the provider-specific webhook payload
 	 * into a normalized Paymesh event.
 	 */
@@ -198,6 +209,13 @@ export interface ProviderWebhooks {
 	):
 		| PaymeshEvent<unknown, IncludeRaw>
 		| Promise<PaymeshEvent<unknown, IncludeRaw>>;
+
+	/**
+	 * Return the hook key for a normalized Paymesh event.
+	 */
+	hook<IncludeRaw extends boolean = false>(
+		event: PaymeshEvent<unknown, IncludeRaw>,
+	): string | undefined;
 }
 
 export interface ProviderDefinition<Name extends string = string> {

@@ -1,4 +1,4 @@
-export type PaymeshErrorType = 'request_error';
+export type PaymeshErrorType = 'request_error' | 'unsupported_capacity';
 
 export interface PaymeshErrorProps {
 	type: PaymeshErrorType;

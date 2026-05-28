@@ -65,7 +65,12 @@ export interface StripeEvent {
 	id: string;
 	type: string;
 	data?: {
-		object?: StripeCheckoutSession | StripePaymentIntent | StripeCharge;
+		object?:
+			| StripeCheckoutSession
+			| StripePaymentIntent
+			| StripeCharge
+			| StripeCustomer
+			| StripeDeletedCustomer;
 	};
 }
 

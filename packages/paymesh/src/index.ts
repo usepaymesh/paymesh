@@ -1,38 +1,12 @@
 import type { ClientOptions } from './types/client';
 import type { Provider, ProviderRequestOptions } from './types/providers';
 
-export type { PaymeshErrorProps, PaymeshErrorType } from './errors';
+export type * from './errors';
+
 export { PaymeshError } from './errors';
-export type { ClientOptions, PaymeshLogger } from './types/client';
-export type {
-	BaseCustomer,
-	BaseCustomerDeleteResult,
-	BasePayment,
-	BasePaymeshEvent,
-	Customer,
-	CustomerCreateData,
-	CustomerDeleteResult,
-	CustomerUpdateData,
-	Payment,
-	PaymentCreateData,
-	PaymentCustomer,
-	PaymentStatus,
-	PaymeshEvent,
-	PaymeshEventType,
-	Provider,
-	ProviderCapabilities,
-	ProviderCapability,
-	ProviderCustomers,
-	ProviderDefinition,
-	ProviderId,
-	ProviderPayments,
-	ProviderRequestOptions,
-	ProviderVerifyWebhookContext,
-	ProviderWebhookMapOptions,
-	ProviderWebhooks,
-	RawObject,
-	WithRaw,
-} from './types/providers';
+
+export type * from './types/client';
+export type * from './types/providers';
 
 export const createClient = <
 	P extends Provider<string>,
@@ -54,6 +28,9 @@ export const createClient = <
 	});
 
 	return {
+		provider,
+		hooks: options.hooks,
+		includeRaw: options.includeRaw,
 		payments: {
 			create: <CallIncludeRaw extends boolean = IncludeRaw>(
 				data: Parameters<P['payments']['create']>[0],
