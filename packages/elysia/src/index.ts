@@ -1,5 +1,10 @@
 import type { Context } from 'elysia';
-import type { PaymeshClient, PaymeshHook, PaymeshHooks } from 'paymesh';
+import {
+	type PaymeshClient,
+	PaymeshError,
+	type PaymeshHook,
+	type PaymeshHooks,
+} from 'paymesh';
 
 type AnyHook = (event: unknown) => void | Promise<void>;
 
@@ -14,6 +19,13 @@ export function Webhooks<IncludeRaw extends boolean = false>({
 	includeRaw,
 	...hooks
 }: WebhooksOptions<IncludeRaw>) {
+	if (!client.provider.webhooks || !client.provider.capabilities.webhooks)
+		throw new PaymeshError({
+			cause: client.provider,
+			type: 'unsupported_capacity',
+			message: `Provider "${client.provider.id}" does not support webhooks feature`,
+		});
+
 	return async ({ request, status }: Context) => {
 		const { webhooks } = client.provider;
 
