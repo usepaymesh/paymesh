@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createClient } from '../src';
-import { stripe } from '../src/providers/stripe';
+import { createClient } from 'paymesh';
+import { stripe } from '../src';
 
 function expectType<T>(_value: T) {}
 

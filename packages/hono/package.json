@@ -33,6 +33,7 @@
 	},
 	"devDependencies": {
 		"hono": "^4",
+		"@paymesh/stripe": "workspace:*",
 		"paymesh": "workspace:*"
 	}
 }

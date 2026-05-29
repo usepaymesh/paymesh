@@ -9,7 +9,10 @@ import type {
 export type * from './errors';
 
 export { PaymeshError } from './errors';
-
+export { defineProvider } from './providers';
+export { withRaw } from './shared/raw';
+export type { RetryOptions } from './shared/request';
+export { request } from './shared/request';
 export type * from './types/client';
 export type * from './types/providers';
 

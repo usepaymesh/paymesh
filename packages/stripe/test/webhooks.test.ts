@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
-import { stripe } from '../src/providers/stripe';
+import { stripe } from '../src';
 
 describe('provider webhooks', () => {
 	test('Stripe verifies, parses, maps, and resolves hook names', async () => {

@@ -1,7 +1,7 @@
 {
-	"name": "@paymesh/next",
+	"name": "@paymesh/stripe",
 	"version": "0.0.0",
-	"description": "Next.js app router webhook adapter for Paymesh.",
+	"description": "Stripe provider for Paymesh.",
 	"type": "module",
 	"license": "MIT",
 	"sideEffects": false,
@@ -28,12 +28,9 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"peerDependencies": {
-		"next": ">=13.4",
 		"paymesh": ">=0.0.0"
 	},
 	"devDependencies": {
-		"@paymesh/stripe": "workspace:*",
-		"next": "^16",
 		"paymesh": "workspace:*"
 	}
 }

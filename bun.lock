@@ -34,6 +34,7 @@
       "name": "@paymesh/elysia",
       "version": "0.0.0",
       "devDependencies": {
+        "@paymesh/stripe": "workspace:*",
         "elysia": "^1.4.28",
         "paymesh": "workspace:*",
       },
@@ -46,6 +47,7 @@
       "name": "@paymesh/express",
       "version": "0.0.0",
       "devDependencies": {
+        "@paymesh/stripe": "workspace:*",
         "@types/express": "^5",
         "express": "^5",
         "paymesh": "workspace:*",
@@ -59,6 +61,7 @@
       "name": "@paymesh/fastify",
       "version": "0.0.0",
       "devDependencies": {
+        "@paymesh/stripe": "workspace:*",
         "fastify": "^5",
         "paymesh": "workspace:*",
       },
@@ -71,6 +74,7 @@
       "name": "@paymesh/hono",
       "version": "0.0.0",
       "devDependencies": {
+        "@paymesh/stripe": "workspace:*",
         "hono": "^4",
         "paymesh": "workspace:*",
       },
@@ -83,6 +87,7 @@
       "name": "@paymesh/next",
       "version": "0.0.0",
       "devDependencies": {
+        "@paymesh/stripe": "workspace:*",
         "next": "^16",
         "paymesh": "workspace:*",
       },
@@ -94,6 +99,16 @@
     "packages/paymesh": {
       "name": "paymesh",
       "version": "0.0.0",
+    },
+    "packages/stripe": {
+      "name": "@paymesh/stripe",
+      "version": "0.0.0",
+      "devDependencies": {
+        "paymesh": "workspace:*",
+      },
+      "peerDependencies": {
+        "paymesh": ">=0.0.0",
+      },
     },
   },
   "packages": {
@@ -286,6 +301,8 @@
     "@paymesh/hono": ["@paymesh/hono@workspace:packages/hono"],
 
     "@paymesh/next": ["@paymesh/next@workspace:packages/next"],
+
+    "@paymesh/stripe": ["@paymesh/stripe@workspace:packages/stripe"],
 
     "@paymesh/web": ["@paymesh/web@workspace:apps/web"],
 

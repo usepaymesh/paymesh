@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
-import { createClient } from '../../paymesh/src';
-import { stripe } from '../../paymesh/src/providers/stripe';
+import { stripe } from '@paymesh/stripe';
+import { createClient } from 'paymesh';
 import { Webhooks } from '../src';
 
 describe('@paymesh/next Webhooks', () => {

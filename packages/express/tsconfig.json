@@ -4,7 +4,7 @@
 		"baseUrl": ".",
 		"paths": {
 			"paymesh": ["../paymesh/src/index.ts"],
-			"paymesh/stripe": ["../paymesh/src/providers/stripe.ts"]
+			"@paymesh/stripe": ["../stripe/src/index.ts"]
 		},
 		"types": ["bun"]
 	},

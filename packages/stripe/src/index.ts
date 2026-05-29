@@ -1,17 +1,18 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { withRaw } from '../shared/raw';
-import { request } from '../shared/request';
-import type {
-	CustomerCreateData,
-	CustomerUpdateData,
-	PaymentCreateData,
-	PaymentStatus,
-	PaymeshEvent,
-	PaymeshEventType,
-	ProviderCapabilities,
-	ProviderRequestOptions,
-	ProviderWebhookMapOptions,
-} from '../types/providers';
+import {
+	type CustomerCreateData,
+	type CustomerUpdateData,
+	defineProvider,
+	type PaymentCreateData,
+	type PaymentStatus,
+	type PaymeshEvent,
+	type PaymeshEventType,
+	type ProviderCapabilities,
+	type ProviderRequestOptions,
+	type ProviderWebhookMapOptions,
+	request,
+	withRaw,
+} from 'paymesh';
 import type {
 	StripeCheckoutSession,
 	StripeCustomer,
@@ -19,8 +20,9 @@ import type {
 	StripeEvent,
 	StripePaymentObject,
 	StripeProviderOptions,
-} from '../types/providers/stripe';
-import { defineProvider } from '.';
+} from './types';
+
+export type * from './types';
 
 const STRIPE_BASE_URL = 'https://api.stripe.com';
 

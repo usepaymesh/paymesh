@@ -1,4 +1,4 @@
-import type { RetryOptions } from '../../shared/request';
+import type { RetryOptions } from 'paymesh';
 
 export interface StripeProviderOptions {
 	secret?: string;

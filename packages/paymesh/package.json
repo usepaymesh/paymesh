@@ -18,16 +18,6 @@
 				"types": "./dist/index.d.cts",
 				"default": "./dist/index.cjs"
 			}
-		},
-		"./stripe": {
-			"import": {
-				"types": "./dist/providers/stripe.d.mts",
-				"default": "./dist/providers/stripe.mjs"
-			},
-			"require": {
-				"types": "./dist/providers/stripe.d.cts",
-				"default": "./dist/providers/stripe.cjs"
-			}
 		}
 	},
 	"main": "./dist/index.cjs",

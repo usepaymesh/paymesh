@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PaymeshError } from '../src';
-import { request } from '../src/shared/request';
+import { PaymeshError, request } from '../src';
 
 describe('request', () => {
 	test('combines baseUrl, path, query params, and json body', async () => {

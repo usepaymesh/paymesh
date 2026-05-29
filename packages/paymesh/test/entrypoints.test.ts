@@ -5,11 +5,9 @@ describe('package entrypoints', () => {
 		const mod = await import('../src/index');
 
 		expect(typeof mod).toBe('object');
-	});
-
-	test('loads the stripe entrypoint', async () => {
-		const mod = await import('../src/providers/stripe');
-
-		expect(typeof mod).toBe('object');
+		expect(typeof mod.createClient).toBe('function');
+		expect(typeof mod.defineProvider).toBe('function');
+		expect(typeof mod.request).toBe('function');
+		expect(typeof mod.withRaw).toBe('function');
 	});
 });

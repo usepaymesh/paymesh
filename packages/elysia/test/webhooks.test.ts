@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
+import { stripe } from '@paymesh/stripe';
 import type { Context } from 'elysia';
-import { createClient } from '../../paymesh/src';
-import { stripe } from '../../paymesh/src/providers/stripe';
+import { createClient } from 'paymesh';
 import { Webhooks } from '../src';
 
 describe('@paymesh/elysia Webhooks', () => {
