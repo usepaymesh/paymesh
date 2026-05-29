@@ -27,7 +27,7 @@ interface ProviderCard {
 
 const topLinks = [
 	{ label: 'README', href: '#readme', active: true },
-	{ label: 'DOCS', href: '#readme', active: false },
+	{ label: 'DOCS', href: '/docs/introduction', active: false },
 ];
 
 const trustedLogos = [
@@ -614,7 +614,7 @@ export default async function Home() {
 								<div className="pointer-events-auto flex flex-wrap items-center gap-2 pt-5 sm:gap-3">
 									<a
 										className="relative z-10 inline-flex min-h-10 items-center justify-center gap-1.5 bg-[#f5f5f5] px-5 py-2 text-sm font-medium text-[#050505] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.94)] transition-colors hover:bg-white"
-										href="#readme"
+										href="/docs/introduction"
 										style={{
 											WebkitTextFillColor: '#050505',
 											backgroundColor: '#f5f5f5',
