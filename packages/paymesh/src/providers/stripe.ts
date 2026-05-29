@@ -114,6 +114,7 @@ export const stripe = ({
 				const session = await request<StripeCheckoutSession>(
 					'/v1/checkout/sessions',
 					{
+						provider: 'stripe',
 						baseUrl: options?.baseUrl ?? baseUrl,
 						timeout: options?.timeout ?? timeout,
 						retry: options?.retry ?? retry,
@@ -173,6 +174,7 @@ export const stripe = ({
 				}
 
 				const customer = await request<StripeCustomer>('/v1/customers', {
+					provider: 'stripe',
 					baseUrl: options?.baseUrl ?? baseUrl,
 					timeout: options?.timeout ?? timeout,
 					retry: options?.retry ?? retry,
@@ -202,6 +204,7 @@ export const stripe = ({
 				const customer = await request<StripeCustomer>(
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
+						provider: 'stripe',
 						baseUrl: options?.baseUrl ?? baseUrl,
 						timeout: options?.timeout ?? timeout,
 						retry: options?.retry ?? retry,
@@ -241,6 +244,7 @@ export const stripe = ({
 				const customer = await request<StripeCustomer>(
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
+						provider: 'stripe',
 						baseUrl: options?.baseUrl ?? baseUrl,
 						timeout: options?.timeout ?? timeout,
 						retry: options?.retry ?? retry,
@@ -271,6 +275,7 @@ export const stripe = ({
 				const customer = await request<StripeDeletedCustomer>(
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
+						provider: 'stripe',
 						baseUrl: options?.baseUrl ?? baseUrl,
 						timeout: options?.timeout ?? timeout,
 						retry: options?.retry ?? retry,

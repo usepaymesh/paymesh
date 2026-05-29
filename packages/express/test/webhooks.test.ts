@@ -23,7 +23,7 @@ describe('@paymesh/express Webhooks', () => {
 		);
 
 		expect(response.statusCode).toBe(401);
-		expect(response.body).toEqual({ error: 'unauthorized' });
+		expect(response.body).toEqual({ error: 'invalid_webhook_signature' });
 	});
 });
 

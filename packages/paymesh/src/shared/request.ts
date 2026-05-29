@@ -10,6 +10,7 @@ interface RequestOptions {
 	body?: BodyInit | Record<string, unknown>;
 	query?: Record<string, unknown>;
 	method?: string;
+	provider?: string;
 	retry?: RetryOptions;
 	timeout?: number;
 	fetch?: typeof fetch;
@@ -32,7 +33,8 @@ export const request = async <Response>(
 			signal: AbortSignal.timeout(options.timeout ?? 10_000),
 		}).catch((error: unknown) => {
 			throw PaymeshError.wrap(error, {
-				type: 'request_error',
+				code: getRequestErrorCode(error),
+				provider: options.provider,
 				url: endpoint.toString(),
 			});
 		});
@@ -49,8 +51,9 @@ export const request = async <Response>(
 
 		if (!response.ok) {
 			throw new PaymeshError({
-				type: 'request_error',
+				code: 'provider_error',
 				message: getErrorMessage(body, response),
+				provider: options.provider,
 				status: response.status,
 				statusText: response.statusText,
 				url: endpoint.toString(),
@@ -136,4 +139,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRequestErrorCode(error: unknown) {
+	if (error instanceof DOMException && error.name === 'TimeoutError') {
+		return 'timeout' as const;
+	}
+
+	if (
+		error instanceof Error &&
+		(error.name === 'TimeoutError' || error.name === 'AbortError')
+	) {
+		return 'timeout' as const;
+	}
+
+	return 'network_error' as const;
 }
