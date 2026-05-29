@@ -1,10 +1,20 @@
 import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+
+const geistSans = Geist({
+	subsets: ['latin'],
+	variable: '--font-sans',
+});
+
+const geistMono = Geist_Mono({
+	subsets: ['latin'],
+	variable: '--font-mono',
+});
 
 export const metadata: Metadata = {
 	title: 'Paymesh',
-	description:
-		'Provider-agnostic payments infrastructure for TypeScript teams.',
+	description: 'Unified payment provider infrastructure for TypeScript teams.',
 };
 
 export default function RootLayout({
@@ -13,8 +23,10 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en">
-			<body>{children}</body>
+		<html className="dark" lang="en">
+			<body className={`${geistSans.variable} ${geistMono.variable}`}>
+				{children}
+			</body>
 		</html>
 	);
 }
