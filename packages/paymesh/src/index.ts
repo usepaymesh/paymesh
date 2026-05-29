@@ -1,5 +1,10 @@
+import { PaymeshError } from './errors';
 import type { ClientOptions } from './types/client';
-import type { Provider, ProviderRequestOptions } from './types/providers';
+import type {
+	Provider,
+	ProviderCapability,
+	ProviderRequestOptions,
+} from './types/providers';
 
 export type * from './errors';
 
@@ -15,6 +20,15 @@ export const createClient = <
 	provider,
 	...options
 }: ClientOptions<P, IncludeRaw>) => {
+	const assertCapability = (capability: ProviderCapability) => {
+		if (!provider.capabilities[capability])
+			throw new PaymeshError({
+				provider: provider.id,
+				code: 'unsupported_capability',
+				message: `Provider "${provider.id}" does not support "${capability}" capability`,
+			});
+	};
+
 	const mergeOptions = <CallIncludeRaw extends boolean = IncludeRaw>(
 		requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 	): ProviderRequestOptions<CallIncludeRaw> => ({
@@ -35,26 +49,50 @@ export const createClient = <
 			create: <CallIncludeRaw extends boolean = IncludeRaw>(
 				data: Parameters<P['payments']['create']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => provider.payments.create(data, mergeOptions(requestOptions)),
+			) => {
+				assertCapability('checkout');
+
+				return provider.payments.create(data, mergeOptions(requestOptions));
+			},
 		},
 		customers: {
 			create: <CallIncludeRaw extends boolean = IncludeRaw>(
 				data: Parameters<P['customers']['create']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => provider.customers.create(data, mergeOptions(requestOptions)),
+			) => {
+				assertCapability('customers');
+
+				return provider.customers.create(data, mergeOptions(requestOptions));
+			},
 			get: <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['get']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => provider.customers.get(id, mergeOptions(requestOptions)),
+			) => {
+				assertCapability('customers');
+
+				return provider.customers.get(id, mergeOptions(requestOptions));
+			},
 			update: <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['update']>[0],
 				data: Parameters<P['customers']['update']>[1],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => provider.customers.update(id, data, mergeOptions(requestOptions)),
+			) => {
+				assertCapability('customers');
+
+				return provider.customers.update(
+					id,
+					data,
+					mergeOptions(requestOptions),
+				);
+			},
 			delete: <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['delete']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => provider.customers.delete(id, mergeOptions(requestOptions)),
+			) => {
+				assertCapability('customers');
+
+				return provider.customers.delete(id, mergeOptions(requestOptions));
+			},
 		},
 		capabilities: provider.capabilities,
 	};
