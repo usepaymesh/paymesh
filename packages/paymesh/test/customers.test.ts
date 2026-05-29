@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createClient } from '../src';
+import { createClient, PaymeshError } from '../src';
+import { defineProvider } from '../src/providers';
 import { stripe } from '../src/providers/stripe';
 
 function expectType<T>(_value: T) {}
@@ -218,5 +219,94 @@ describe('customers', () => {
 		});
 
 		expect(payment.customer).toBeUndefined();
+	});
+
+	test('checks customer capability before calling the provider', () => {
+		const client = createClient({
+			provider: defineProvider({
+				id: 'stub',
+				capabilities: {
+					checkout: true,
+					customers: false,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+				},
+				customers: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+					get: async () => {
+						throw new Error('should not be called');
+					},
+					update: async () => {
+						throw new Error('should not be called');
+					},
+					delete: async () => {
+						throw new Error('should not be called');
+					},
+				},
+			}),
+		});
+
+		try {
+			client.customers.get('cus_test');
+			throw new Error('Expected unsupported_capability error');
+		} catch (error) {
+			expect(error).toBeInstanceOf(PaymeshError);
+			expect(error).toMatchObject({
+				code: 'unsupported_capability',
+				message: 'Provider "stub" does not support "customers" capability',
+				provider: 'stub',
+			});
+		}
+	});
+
+	test('checks checkout capability before calling the provider', () => {
+		const client = createClient({
+			provider: defineProvider({
+				id: 'stub',
+				capabilities: {
+					checkout: false,
+					customers: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+				},
+				customers: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+					get: async () => {
+						throw new Error('should not be called');
+					},
+					update: async () => {
+						throw new Error('should not be called');
+					},
+					delete: async () => {
+						throw new Error('should not be called');
+					},
+				},
+			}),
+		});
+
+		try {
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+			});
+			throw new Error('Expected unsupported_capability error');
+		} catch (error) {
+			expect(error).toBeInstanceOf(PaymeshError);
+			expect(error).toMatchObject({
+				code: 'unsupported_capability',
+				message: 'Provider "stub" does not support "checkout" capability',
+				provider: 'stub',
+			});
+		}
 	});
 });

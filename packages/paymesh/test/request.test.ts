@@ -54,6 +54,7 @@ describe('request', () => {
 	test('throws PaymeshError on http errors with the response body message', async () => {
 		const promise = request('/v1/fail', {
 			baseUrl: 'https://api.example.test',
+			provider: 'stripe',
 			fetch: (async () =>
 				Response.json(
 					{
@@ -71,8 +72,9 @@ describe('request', () => {
 
 		await expect(promise).rejects.toThrow(PaymeshError);
 		await expect(promise).rejects.toMatchObject({
-			type: 'request_error',
+			code: 'provider_error',
 			message: 'Invalid amount',
+			provider: 'stripe',
 			status: 400,
 			statusText: 'Bad Request',
 			url: 'https://api.example.test/v1/fail',
@@ -82,6 +84,22 @@ describe('request', () => {
 					code: 'amount_too_small',
 				},
 			},
+		});
+	});
+
+	test('classifies network timeouts as timeout errors', async () => {
+		const promise = request('/v1/timeout', {
+			baseUrl: 'https://api.example.test',
+			provider: 'stripe',
+			fetch: (async () => {
+				throw new DOMException('Timed out', 'TimeoutError');
+			}) as unknown as typeof fetch,
+		});
+
+		await expect(promise).rejects.toMatchObject({
+			code: 'timeout',
+			provider: 'stripe',
+			url: 'https://api.example.test/v1/timeout',
 		});
 	});
 });

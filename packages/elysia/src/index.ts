@@ -22,28 +22,41 @@ export function Webhooks<IncludeRaw extends boolean = false>({
 	if (!client.provider.webhooks || !client.provider.capabilities.webhooks)
 		throw new PaymeshError({
 			cause: client.provider,
-			type: 'unsupported_capacity',
-			message: `Provider "${client.provider.id}" does not support webhooks feature`,
+			code: 'unsupported_capability',
+			message: `Provider "${client.provider.id}" does not support webhooks capability`,
+			provider: client.provider.id,
 		});
 
 	return async ({ request, status }: Context) => {
 		const { webhooks } = client.provider;
 
-		if (!webhooks) return status(501, { error: 'unsupported' });
+		if (!webhooks) return status(501, { error: 'unsupported_capability' });
 
 		const isValid = await webhooks.verify({
 			request: request.clone(),
 		});
 
-		if (!isValid) return status(401, { error: 'unauthorized' });
+		if (!isValid) return status(401, { error: 'invalid_webhook_signature' });
 
-		const payload = await webhooks.parse(request);
+		let payload: Record<string, unknown>;
 
-		const event = await webhooks.map(payload, {
-			includeRaw: (includeRaw ?? client.includeRaw ?? false) as IncludeRaw,
-		});
+		try {
+			payload = await webhooks.parse(request);
+		} catch {
+			return status(400, { error: 'webhook_parse_error' });
+		}
 
-		const hookName = webhooks.hook(event);
+		let event: Awaited<ReturnType<typeof webhooks.map>>;
+
+		try {
+			event = (await webhooks.map(payload, {
+				includeRaw: (includeRaw ?? client.includeRaw ?? false) as IncludeRaw,
+			})) as Awaited<ReturnType<typeof webhooks.map>>;
+		} catch {
+			return status(400, { error: 'webhook_mapping_error' });
+		}
+
+		const hookName = webhooks.hook(event as never);
 
 		const hook = hookName
 			? (getHook(hooks, hookName) ?? getHook(client.hooks, hookName))

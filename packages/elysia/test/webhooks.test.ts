@@ -88,7 +88,7 @@ describe('@paymesh/elysia Webhooks', () => {
 
 		expect(response).toEqual({
 			statusCode: 401,
-			body: { error: 'unauthorized' },
+			body: { error: 'invalid_webhook_signature' },
 		});
 	});
 });
