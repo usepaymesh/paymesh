@@ -13,6 +13,7 @@ export interface StripeCheckoutSession {
 	id: string;
 	object: 'checkout.session';
 	amount_total?: number | null;
+	client_reference_id?: string | null;
 	currency?: string | null;
 	customer?: string | null;
 	customer_email?: string | null;

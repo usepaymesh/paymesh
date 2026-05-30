@@ -55,6 +55,9 @@ describe('provider webhooks', () => {
 						object: 'customer',
 						name: 'Ana',
 						email: 'ana@example.com',
+						metadata: {
+							externalId: 'user_ext_123',
+						},
 					},
 				},
 			},
@@ -66,6 +69,7 @@ describe('provider webhooks', () => {
 			type: 'customer.updated',
 			data: {
 				id: 'cus_raw',
+				externalId: 'user_ext_123',
 				name: 'Ana',
 				email: 'ana@example.com',
 				raw: {

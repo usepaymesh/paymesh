@@ -33,6 +33,7 @@ export type WithRaw<
 
 export interface PaymentCustomer {
 	id?: string;
+	externalId?: string;
 	name?: string;
 	email?: string;
 	document?: string;
@@ -42,6 +43,7 @@ export interface PaymentCustomer {
 export interface PaymentCreateData {
 	amount: number;
 	currency: string;
+	productIds?: string[];
 
 	customer?: PaymentCustomer;
 
@@ -76,6 +78,7 @@ export type Payment<IncludeRaw extends boolean = false> = WithRaw<
 export interface BaseCustomer {
 	id: string;
 	provider: string;
+	externalId?: string;
 
 	name?: string;
 	email?: string;
@@ -90,6 +93,7 @@ export type Customer<IncludeRaw extends boolean = false> = WithRaw<
 >;
 
 export interface CustomerCreateData {
+	externalId?: string;
 	name?: string;
 	email?: string;
 	phone?: string;

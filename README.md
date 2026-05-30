@@ -64,6 +64,8 @@ pnpm add paymesh @paymesh/stripe
 yarn add paymesh @paymesh/stripe
 ```
 
+Available providers currently include `@paymesh/stripe` and `@paymesh/polar`.
+
 ## Webhooks
 
 Paymesh maps provider-specific webhook payloads into normalized events and dispatches them to typed hooks.

@@ -105,9 +105,17 @@ export const stripe = ({
 
 				if (data.successUrl) body.set('success_url', data.successUrl);
 				if (data.cancelUrl) body.set('cancel_url', data.cancelUrl);
-				if (data.customer?.id) body.set('customer', data.customer.id);
-				else if (data.customer?.email)
-					body.set('customer_email', data.customer.email);
+
+				if (data.customer?.id) {
+					body.set('customer', data.customer.id);
+				} else {
+					if (data.customer?.externalId) {
+						body.set('client_reference_id', data.customer.externalId);
+					}
+					if (data.customer?.email) {
+						body.set('customer_email', data.customer.email);
+					}
+				}
 
 				for (const [key, value] of Object.entries(data.metadata ?? {})) {
 					if (value !== null) body.set(`metadata[${key}]`, String(value));
@@ -145,6 +153,7 @@ export const stripe = ({
 										typeof session.customer === 'string'
 											? session.customer
 											: undefined,
+									externalId: session.client_reference_id ?? undefined,
 									name: session.customer_details.name ?? undefined,
 									email:
 										session.customer_details.email ??
@@ -174,6 +183,7 @@ export const stripe = ({
 				for (const [key, value] of Object.entries(data.metadata ?? {})) {
 					if (value !== null) body.set(`metadata[${key}]`, String(value));
 				}
+				if (data.externalId) body.set('metadata[externalId]', data.externalId);
 
 				const customer = await request<StripeCustomer>('/v1/customers', {
 					provider: 'stripe',
@@ -190,6 +200,11 @@ export const stripe = ({
 					{
 						id: customer.id,
 						provider: 'stripe',
+						externalId:
+							typeof customer.metadata?.externalId === 'string' &&
+							customer.metadata.externalId.length > 0
+								? customer.metadata.externalId
+								: undefined,
 						name: customer.name ?? undefined,
 						email: customer.email ?? undefined,
 						phone: customer.phone ?? undefined,
@@ -219,6 +234,11 @@ export const stripe = ({
 					{
 						id: customer.id,
 						provider: 'stripe',
+						externalId:
+							typeof customer.metadata?.externalId === 'string' &&
+							customer.metadata.externalId.length > 0
+								? customer.metadata.externalId
+								: undefined,
 						name: customer.name ?? undefined,
 						email: customer.email ?? undefined,
 						phone: customer.phone ?? undefined,
@@ -261,6 +281,11 @@ export const stripe = ({
 					{
 						id: customer.id,
 						provider: 'stripe',
+						externalId:
+							typeof customer.metadata?.externalId === 'string' &&
+							customer.metadata.externalId.length > 0
+								? customer.metadata.externalId
+								: undefined,
 						name: customer.name ?? undefined,
 						email: customer.email ?? undefined,
 						phone: customer.phone ?? undefined,
@@ -360,6 +385,11 @@ export const stripe = ({
 							{
 								id: customer.id,
 								provider: 'stripe',
+								externalId:
+									typeof customer.metadata?.externalId === 'string' &&
+									customer.metadata.externalId.length > 0
+										? customer.metadata.externalId
+										: undefined,
 								name: customer.name ?? undefined,
 								email: customer.email ?? undefined,
 								phone: customer.phone ?? undefined,
@@ -399,6 +429,10 @@ export const stripe = ({
 												id:
 													typeof payment.customer === 'string'
 														? payment.customer
+														: undefined,
+												externalId:
+													'client_reference_id' in payment
+														? (payment.client_reference_id ?? undefined)
 														: undefined,
 												name: payment.customer_details?.name ?? undefined,
 												email:

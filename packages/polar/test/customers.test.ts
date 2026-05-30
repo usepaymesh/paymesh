@@ -1,28 +1,28 @@
 import { describe, expect, test } from 'bun:test';
 import { createClient, defineProvider, PaymeshError } from 'paymesh';
-import { stripe } from '../src';
+import { polar } from '../src';
 
 function expectType<T>(_value: T) {}
 
-describe('customers', () => {
-	test('manages Stripe customers through the client', async () => {
+describe('polar customers', () => {
+	test('manages Polar customers through the client', async () => {
 		const requests: Array<{
 			input: string;
 			method?: string;
-			body?: URLSearchParams;
+			body?: Record<string, unknown>;
 		}> = [];
-		const provider = stripe({
-			secret: 'sk_test_123',
+		const provider = polar({
+			accessToken: 'polar_oat_123',
 		});
 		const client = createClient({
 			provider,
-			baseUrl: 'https://stripe.customers.test',
+			baseUrl: 'https://polar.customers.test',
 			timeout: 1234,
 			fetch: (async (input, init) => {
 				requests.push({
 					input: String(input),
 					method: init?.method,
-					body: init?.body as URLSearchParams | undefined,
+					body: init?.body ? JSON.parse(String(init.body)) : undefined,
 				});
 
 				if (
@@ -31,48 +31,38 @@ describe('customers', () => {
 				) {
 					return Response.json({
 						id: 'cus_create',
-						object: 'customer',
-						name: 'Ana',
 						email: 'ana@example.com',
-						phone: '+5511999999999',
+						name: 'Ana',
+						external_id: 'user_ext_123',
 						metadata: {
-							externalId: 'user_ext_123',
 							plan: 'pro',
 						},
 					});
 				}
 
 				if (String(input).endsWith('/v1/customers/cus_create')) {
-					if (init?.method === 'POST') {
+					if (init?.method === 'PATCH') {
 						return Response.json({
 							id: 'cus_create',
-							object: 'customer',
-							name: 'Ana Silva',
 							email: 'ana@example.com',
-							phone: '+5511999999999',
+							name: 'Ana Silva',
+							external_id: 'user_ext_123',
 							metadata: {
-								externalId: 'user_ext_123',
 								plan: 'business',
 							},
 						});
 					}
 
 					if (init?.method === 'DELETE') {
-						return Response.json({
-							id: 'cus_create',
-							object: 'customer',
-							deleted: true,
-						});
+						return new Response(null, { status: 204 });
 					}
 
 					return Response.json({
 						id: 'cus_create',
-						object: 'customer',
-						name: 'Ana',
 						email: 'ana@example.com',
-						phone: '+5511999999999',
+						name: 'Ana',
+						external_id: 'user_ext_123',
 						metadata: {
-							externalId: 'user_ext_123',
 							plan: 'pro',
 						},
 					});
@@ -85,11 +75,10 @@ describe('customers', () => {
 		const created = await client.customers.create({
 			name: 'Ana',
 			email: 'ana@example.com',
-			phone: '+5511999999999',
+			externalId: 'user_ext_123',
 			metadata: {
 				plan: 'pro',
 			},
-			externalId: 'user_ext_123',
 		});
 		const found = await client.customers.get('cus_create');
 		const updated = await client.customers.update('cus_create', {
@@ -101,35 +90,42 @@ describe('customers', () => {
 		const deleted = await client.customers.delete('cus_create');
 
 		expect(requests[0]).toMatchObject({
-			input: 'https://stripe.customers.test/v1/customers',
+			input: 'https://polar.customers.test/v1/customers',
 			method: 'POST',
 		});
-		expect(requests[0]?.body?.get('name')).toBe('Ana');
-		expect(requests[0]?.body?.get('email')).toBe('ana@example.com');
-		expect(requests[0]?.body?.get('phone')).toBe('+5511999999999');
-		expect(requests[0]?.body?.get('metadata[externalId]')).toBe('user_ext_123');
-		expect(requests[0]?.body?.get('metadata[plan]')).toBe('pro');
+		expect(requests[0]?.body).toEqual({
+			email: 'ana@example.com',
+			name: 'Ana',
+			external_id: 'user_ext_123',
+			metadata: {
+				plan: 'pro',
+			},
+		});
 		expect(requests[1]).toMatchObject({
-			input: 'https://stripe.customers.test/v1/customers/cus_create',
+			input: 'https://polar.customers.test/v1/customers/cus_create',
 			method: undefined,
 		});
 		expect(requests[2]).toMatchObject({
-			input: 'https://stripe.customers.test/v1/customers/cus_create',
-			method: 'POST',
+			input: 'https://polar.customers.test/v1/customers/cus_create',
+			method: 'PATCH',
 		});
-		expect(requests[2]?.body?.get('name')).toBe('Ana Silva');
-		expect(requests[2]?.body?.get('metadata[plan]')).toBe('business');
+		expect(requests[2]?.body).toEqual({
+			email: undefined,
+			name: 'Ana Silva',
+			metadata: {
+				plan: 'business',
+			},
+		});
 		expect(requests[3]).toMatchObject({
-			input: 'https://stripe.customers.test/v1/customers/cus_create',
+			input: 'https://polar.customers.test/v1/customers/cus_create',
 			method: 'DELETE',
 		});
 		expect(created).toMatchObject({
 			id: 'cus_create',
-			provider: 'stripe',
+			provider: 'polar',
 			externalId: 'user_ext_123',
 			name: 'Ana',
 			email: 'ana@example.com',
-			phone: '+5511999999999',
 			metadata: {
 				plan: 'pro',
 			},
@@ -137,6 +133,7 @@ describe('customers', () => {
 		expect(found.id).toBe('cus_create');
 		expect(updated).toMatchObject({
 			id: 'cus_create',
+			externalId: 'user_ext_123',
 			name: 'Ana Silva',
 			metadata: {
 				plan: 'business',
@@ -144,25 +141,37 @@ describe('customers', () => {
 		});
 		expect(deleted).toEqual({
 			id: 'cus_create',
-			provider: 'stripe',
+			provider: 'polar',
 			deleted: true,
 			raw: null,
 		});
 	});
 
+	test('requires email when creating Polar customers', async () => {
+		const provider = polar({
+			accessToken: 'polar_oat_123',
+		});
+
+		await expect(
+			provider.customers.create({
+				name: 'Ana',
+			}),
+		).rejects.toMatchObject({
+			code: 'invalid_request',
+			message: 'Provider "polar" requires "email" when creating customers',
+		});
+	});
+
 	test('supports raw customer payloads globally and per call', async () => {
-		const provider = stripe({
-			secret: 'sk_test_123',
-			baseUrl: 'https://stripe.customers.test',
+		const provider = polar({
+			accessToken: 'polar_oat_123',
+			baseUrl: 'https://polar.customers.test',
 			fetch: (async () =>
 				Response.json({
 					id: 'cus_raw',
-					object: 'customer',
-					name: 'Ana',
 					email: 'ana@example.com',
-					metadata: {
-						externalId: 'user_ext_123',
-					},
+					name: 'Ana',
+					external_id: 'user_ext_123',
 				})) as unknown as typeof fetch,
 		});
 		const defaultClient = createClient({ provider });
@@ -185,52 +194,15 @@ describe('customers', () => {
 		expect(defaultCustomer.raw).toBeNull();
 		expect(callRawCustomer.raw).toMatchObject({
 			id: 'cus_raw',
-			object: 'customer',
 		});
 		expect(globalRawCustomer.raw).toMatchObject({
 			id: 'cus_raw',
-			object: 'customer',
 		});
 		expect(callNullCustomer.raw).toBeNull();
 		expect(defaultCustomer.externalId).toBe('user_ext_123');
 		expect(callRawCustomer.externalId).toBe('user_ext_123');
 		expect(globalRawCustomer.externalId).toBe('user_ext_123');
 		expect(callNullCustomer.externalId).toBe('user_ext_123');
-	});
-
-	test('uses Stripe customer id when creating checkout sessions', async () => {
-		const provider = stripe({
-			secret: 'sk_test_123',
-			baseUrl: 'https://stripe.test',
-			fetch: (async (_input, init) => {
-				const body = init?.body as URLSearchParams;
-
-				expect(body.get('customer')).toBe('cus_123');
-				expect(body.get('client_reference_id')).toBeNull();
-				expect(body.get('customer_email')).toBeNull();
-
-				return Response.json({
-					id: 'cs_test_customer',
-					object: 'checkout.session',
-					amount_total: 1000,
-					currency: 'usd',
-					customer: 'cus_123',
-					payment_status: 'paid',
-					status: 'complete',
-				});
-			}) as typeof fetch,
-		});
-
-		const payment = await provider.payments.create({
-			amount: 1000,
-			currency: 'USD',
-			customer: {
-				id: 'cus_123',
-				email: 'ana@example.com',
-			},
-		});
-
-		expect(payment.customer).toBeUndefined();
 	});
 
 	test('checks customer capability before calling the provider', () => {
@@ -271,52 +243,6 @@ describe('customers', () => {
 			expect(error).toMatchObject({
 				code: 'unsupported_capability',
 				message: 'Provider "stub" does not support "customers" capability',
-				provider: 'stub',
-			});
-		}
-	});
-
-	test('checks checkout capability before calling the provider', () => {
-		const client = createClient({
-			provider: defineProvider({
-				id: 'stub',
-				capabilities: {
-					checkout: false,
-					customers: true,
-				},
-				payments: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
-				},
-				customers: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
-					get: async () => {
-						throw new Error('should not be called');
-					},
-					update: async () => {
-						throw new Error('should not be called');
-					},
-					delete: async () => {
-						throw new Error('should not be called');
-					},
-				},
-			}),
-		});
-
-		try {
-			client.payments.create({
-				amount: 1000,
-				currency: 'USD',
-			});
-			throw new Error('Expected unsupported_capability error');
-		} catch (error) {
-			expect(error).toBeInstanceOf(PaymeshError);
-			expect(error).toMatchObject({
-				code: 'unsupported_capability',
-				message: 'Provider "stub" does not support "checkout" capability',
 				provider: 'stub',
 			});
 		}

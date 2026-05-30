@@ -25,12 +25,14 @@ describe('stripe provider', () => {
 					'Pro plan',
 				);
 				expect(body.get('customer_email')).toBe('ana@example.com');
+				expect(body.get('client_reference_id')).toBe('user_123');
 				expect(body.get('metadata[orderId]')).toBe('order_123');
 
 				return Response.json({
 					id: 'cs_test_123',
 					object: 'checkout.session',
 					amount_total: 4900,
+					client_reference_id: 'user_123',
 					currency: 'brl',
 					customer: 'cus_123',
 					customer_details: {
@@ -55,6 +57,7 @@ describe('stripe provider', () => {
 			cancelUrl: 'https://app.test/cancel',
 			customer: {
 				email: 'ana@example.com',
+				externalId: 'user_123',
 			},
 			metadata: {
 				orderId: 'order_123',
@@ -70,6 +73,7 @@ describe('stripe provider', () => {
 			checkoutUrl: 'https://checkout.stripe.test/session',
 			customer: {
 				id: 'cus_123',
+				externalId: 'user_123',
 				name: 'Ana',
 				email: 'ana@example.com',
 			},
@@ -181,6 +185,48 @@ describe('stripe provider', () => {
 		expect(callNullPayment.raw).toBeNull();
 	});
 
+	test('uses externalId as client reference when customer id is absent', async () => {
+		const provider = stripe({
+			secret: 'sk_test_123',
+			baseUrl: 'https://stripe.test',
+			fetch: (async (_input, init) => {
+				const body = init?.body as URLSearchParams;
+
+				expect(body.get('customer')).toBeNull();
+				expect(body.get('client_reference_id')).toBe('user_ext_123');
+				expect(body.get('customer_email')).toBe('ana@example.com');
+
+				return Response.json({
+					id: 'cs_test_external_id',
+					object: 'checkout.session',
+					amount_total: 1000,
+					client_reference_id: 'user_ext_123',
+					currency: 'usd',
+					customer_email: 'ana@example.com',
+					customer_details: {
+						email: 'ana@example.com',
+					},
+					payment_status: 'paid',
+					status: 'complete',
+				});
+			}) as typeof fetch,
+		});
+
+		const payment = await provider.payments.create({
+			amount: 1000,
+			currency: 'USD',
+			customer: {
+				email: 'ana@example.com',
+				externalId: 'user_ext_123',
+			},
+		});
+
+		expect(payment.customer).toMatchObject({
+			externalId: 'user_ext_123',
+			email: 'ana@example.com',
+		});
+	});
+
 	test('supports raw webhook payloads per map call', () => {
 		const provider = stripe({
 			secret: 'sk_test_123',
@@ -219,6 +265,46 @@ describe('stripe provider', () => {
 			id: 'pi_raw',
 			raw: {
 				id: 'pi_raw',
+			},
+		});
+	});
+
+	test('maps externalId from checkout session webhooks', () => {
+		const provider = stripe({
+			secret: 'sk_test_123',
+		});
+		const payload = {
+			id: 'evt_checkout_completed',
+			type: 'checkout.session.completed',
+			data: {
+				object: {
+					id: 'cs_completed',
+					object: 'checkout.session',
+					amount_total: 2200,
+					client_reference_id: 'user_ext_123',
+					currency: 'usd',
+					customer_details: {
+						email: 'ana@example.com',
+					},
+					payment_status: 'paid',
+					status: 'complete',
+				},
+			},
+		};
+
+		const event = provider.webhooks?.map(payload);
+
+		if (event instanceof Promise) {
+			throw new Error('Stripe webhook mapping should be synchronous');
+		}
+
+		expect(event).toMatchObject({
+			type: 'checkout.completed',
+			data: {
+				customer: {
+					externalId: 'user_ext_123',
+					email: 'ana@example.com',
+				},
 			},
 		});
 	});

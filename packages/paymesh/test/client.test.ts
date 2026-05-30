@@ -50,6 +50,7 @@ describe('client', () => {
 		await client.payments.create({
 			amount: 1000,
 			currency: 'USD',
+			productIds: ['prod_123'],
 		});
 
 		expect(calls).toHaveLength(1);
@@ -70,22 +71,26 @@ describe('client', () => {
 		const defaultPayment = await defaultClient.payments.create({
 			amount: 1200,
 			currency: 'USD',
+			productIds: ['prod_123'],
 		});
 		const callRawPayment = await defaultClient.payments.create(
 			{
 				amount: 1200,
 				currency: 'USD',
+				productIds: ['prod_123'],
 			},
 			{ includeRaw: true },
 		);
 		const globalRawPayment = await rawClient.payments.create({
 			amount: 1200,
 			currency: 'USD',
+			productIds: ['prod_123'],
 		});
 		const callNullPayment = await rawClient.payments.create(
 			{
 				amount: 1200,
 				currency: 'USD',
+				productIds: ['prod_123'],
 			},
 			{ includeRaw: false },
 		);
