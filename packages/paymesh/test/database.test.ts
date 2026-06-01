@@ -7,6 +7,7 @@ import {
 	resolveDatabaseSchema,
 	withRaw,
 } from '../src';
+import { getInternalRaw } from '../src/shared/raw';
 
 describe('database support', () => {
 	test('resolves schema prefix and custom table names', () => {
@@ -97,12 +98,7 @@ describe('database support', () => {
 			email: 'ada@example.com',
 		});
 
-		const customerWrite = database.calls.find((call) =>
-			call.sql.includes('"paymesh_customers"'),
-		);
-
-		expect(customerWrite).toBeDefined();
-		expect(customerWrite?.params).toContainEqual({ id: 'raw_customer_123' });
+		expect(database.customerWrites[0]?.raw).toEqual({ id: 'raw_customer_123' });
 	});
 
 	test('deduplicates webhook processing by provider event id', async () => {
@@ -384,61 +380,82 @@ function createMockDatabase({
 	persistRaw?: boolean;
 } = {}) {
 	const webhookEvents = new Map<string, { status: string }>();
-	const calls: CompiledQuery[] = [];
+	const customerWrites: Array<{ raw: unknown }> = [];
 
 	const database = defineDatabaseAdapter({
 		id: 'mock',
 		dialect: 'postgres',
 		persistRaw,
+		repositories: {
+			customers: {
+				async upsert(_schema, customer) {
+					customerWrites.push({
+						raw: persistRaw ? getInternalRaw(customer) : null,
+					});
+				},
+			},
+			checkouts: {
+				async upsert() {},
+			},
+			invoices: {
+				async upsert() {},
+			},
+			subscriptions: {
+				async upsert() {},
+			},
+			webhookEvents: {
+				async acquire(_schema, event, deliveryId) {
+					const key = `${event.provider}:${deliveryId}`;
+					const current = webhookEvents.get(key);
+
+					if (!current) {
+						webhookEvents.set(key, { status: 'processing' });
+						return { duplicate: false };
+					}
+
+					if (current.status === 'failed') {
+						webhookEvents.set(key, { status: 'processing' });
+						return { duplicate: false };
+					}
+
+					return { duplicate: true };
+				},
+				async markProcessed(_schema, event, deliveryId) {
+					webhookEvents.set(`${event.provider}:${deliveryId}`, {
+						status: 'processed',
+					});
+				},
+				async markFailed(_schema, event, deliveryId) {
+					webhookEvents.set(`${event.provider}:${deliveryId}`, {
+						status: 'failed',
+					});
+				},
+			},
+			products: {
+				async upsertMany() {},
+			},
+			prices: {
+				async upsertMany() {},
+			},
+			migrations: {
+				async ensureTable() {},
+				async listApplied() {
+					return [];
+				},
+				async recordApplied() {},
+			},
+		},
 		async query<Row = unknown>(query: CompiledQuery) {
-			calls.push(query);
-
-			if (
-				query.sql.startsWith('WITH inserted AS (') &&
-				query.sql.includes('"paymesh_webhook_events"')
-			) {
-				const key = `${query.params[0]}:${query.params[1]}`;
-				const current = webhookEvents.get(key);
-
-				if (!current) {
-					webhookEvents.set(key, { status: 'processing' });
-					return [{ inserted: true, retried: false }] as Row[];
-				}
-
-				if (current.status === 'failed') {
-					webhookEvents.set(key, { status: 'processing' });
-					return [{ inserted: false, retried: true }] as Row[];
-				}
-
-				return [{ inserted: false, retried: false }] as Row[];
-			}
-
+			void query;
 			return [] as Row[];
 		},
 		async execute(query) {
-			calls.push(query);
-
-			if (
-				query.sql.startsWith('UPDATE "paymesh_webhook_events"') &&
-				query.sql.includes("SET status = 'processed'")
-			) {
-				const key = `${query.params[0]}:${query.params[1]}`;
-				webhookEvents.set(key, { status: 'processed' });
-				return;
-			}
-
-			if (
-				query.sql.startsWith('UPDATE "paymesh_webhook_events"') &&
-				query.sql.includes("SET status = 'failed'")
-			) {
-				const key = `${query.params[0]}:${query.params[1]}`;
-				webhookEvents.set(key, { status: 'failed' });
-			}
+			void query;
 		},
 		async transaction(callback) {
 			return callback(database);
 		},
 	});
 
-	return Object.assign(database, { calls });
+	return Object.assign(database, { customerWrites });
 }

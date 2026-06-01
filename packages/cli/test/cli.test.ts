@@ -92,17 +92,55 @@ describe('cli helpers', () => {
 	});
 
 	test('pushes catalog through cli helper', async () => {
-		const calls: CompiledQuery[] = [];
+		const productWrites: Array<{ provider: string; count: number }> = [];
+		const priceWrites: Array<{ provider: string; count: number }> = [];
 		const database = defineDatabaseAdapter({
 			id: 'mock',
 			dialect: 'postgres',
 			persistRaw: false,
-			async query<Row = unknown>(query: CompiledQuery) {
-				calls.push(query);
+			repositories: {
+				customers: {
+					async upsert() {},
+				},
+				checkouts: {
+					async upsert() {},
+				},
+				invoices: {
+					async upsert() {},
+				},
+				subscriptions: {
+					async upsert() {},
+				},
+				webhookEvents: {
+					async acquire() {
+						return { duplicate: false };
+					},
+					async markProcessed() {},
+					async markFailed() {},
+				},
+				products: {
+					async upsertMany(_schema, provider, products) {
+						productWrites.push({ provider, count: products.length });
+					},
+				},
+				prices: {
+					async upsertMany(_schema, provider, prices) {
+						priceWrites.push({ provider, count: prices.length });
+					},
+				},
+				migrations: {
+					async ensureTable() {},
+					async listApplied() {
+						return [];
+					},
+					async recordApplied() {},
+				},
+			},
+			async query<Row = unknown>(_query: CompiledQuery) {
 				return [] as Row[];
 			},
 			async execute(query: CompiledQuery) {
-				calls.push(query);
+				void query;
 			},
 			async transaction(callback) {
 				return callback(database);
@@ -156,12 +194,8 @@ describe('cli helpers', () => {
 		const summary = await pushProviderCatalog(client);
 
 		expect(summary).toEqual({ products: 1, prices: 1 });
-		expect(calls.some((call) => call.sql.includes('"paymesh_products"'))).toBe(
-			true,
-		);
-		expect(calls.some((call) => call.sql.includes('"paymesh_prices"'))).toBe(
-			true,
-		);
+		expect(productWrites).toEqual([{ provider: 'stub', count: 1 }]);
+		expect(priceWrites).toEqual([{ provider: 'stub', count: 1 }]);
 	});
 });
 

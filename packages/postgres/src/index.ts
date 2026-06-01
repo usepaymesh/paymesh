@@ -5,6 +5,7 @@ import {
 	PaymeshError,
 } from 'paymesh';
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import { createRepositories } from './repositories';
 
 export interface PostgresDatabaseOptions {
 	persistRaw?: boolean;
@@ -20,20 +21,30 @@ export function postgres(
 			: connection;
 	const ownsPool = typeof connection === 'string';
 
+	const persistRaw = options?.persistRaw ?? false;
+	const query = <Row = unknown>(compiledQuery: CompiledQuery) =>
+		executeQuery<Row>(pool, compiledQuery.sql, compiledQuery.params);
+	const execute = (compiledQuery: CompiledQuery) =>
+		executeQuery(pool, compiledQuery.sql, compiledQuery.params).then(
+			() => undefined,
+		);
+
 	return defineDatabaseAdapter({
 		id: 'pg',
 		dialect: 'postgres',
-		persistRaw: options?.persistRaw ?? false,
-		query: <Row = unknown>(query: CompiledQuery) =>
-			executeQuery<Row>(pool, query.sql, query.params),
-		async execute(query) {
-			await executeQuery(pool, query.sql, query.params);
-		},
+		persistRaw,
+		repositories: createRepositories({
+			query,
+			execute,
+			persistRaw,
+		}),
+		query,
+		execute,
 		async transaction<T>(
 			callback: (database: PaymeshDatabaseDriver) => Promise<T>,
 		) {
 			const client = await pool.connect();
-			const tx = createTransactionDriver(client, options?.persistRaw ?? false);
+			const tx = createTransactionDriver(client, persistRaw);
 
 			try {
 				await client.query('BEGIN');
@@ -60,15 +71,23 @@ export function postgres(
 }
 
 function createTransactionDriver(client: PoolClient, persistRaw: boolean) {
+	const query = <Row = unknown>(compiledQuery: CompiledQuery) =>
+		executeQuery<Row>(client, compiledQuery.sql, compiledQuery.params);
+	const execute = (compiledQuery: CompiledQuery) =>
+		executeQuery(client, compiledQuery.sql, compiledQuery.params).then(
+			() => undefined,
+		);
 	const tx: PaymeshDatabaseDriver = defineDatabaseAdapter({
 		id: 'pg:tx',
 		dialect: 'postgres',
 		persistRaw,
-		query: <Row = unknown>(query: CompiledQuery) =>
-			executeQuery<Row>(client, query.sql, query.params),
-		async execute(query) {
-			await executeQuery(client, query.sql, query.params);
-		},
+		repositories: createRepositories({
+			query,
+			execute,
+			persistRaw,
+		}),
+		query,
+		execute,
 		transaction<T>(callback: (database: PaymeshDatabaseDriver) => Promise<T>) {
 			return callback(tx);
 		},

@@ -1,3 +1,12 @@
+import type {
+	BaseCustomer,
+	BaseCustomerDeleteResult,
+	BasePayment,
+	BasePaymeshEvent,
+	ProviderCatalogPrice,
+	ProviderCatalogProduct,
+} from './providers';
+
 export type DatabaseTableKey =
 	| 'customers'
 	| 'checkouts'
@@ -45,10 +54,86 @@ export interface CompiledQuery {
 	params: SqlValue[];
 }
 
+export interface PaymeshCustomersRepository {
+	upsert(
+		schema: ResolvedDatabaseSchema,
+		customer: BaseCustomer | BaseCustomerDeleteResult,
+		options?: { deleted?: boolean },
+	): Promise<void>;
+}
+
+export interface PaymeshCheckoutsRepository {
+	upsert(schema: ResolvedDatabaseSchema, payment: BasePayment): Promise<void>;
+}
+
+export interface PaymeshInvoicesRepository {
+	upsert(schema: ResolvedDatabaseSchema, payment: BasePayment): Promise<void>;
+}
+
+export interface PaymeshSubscriptionsRepository {
+	upsert(
+		schema: ResolvedDatabaseSchema,
+		event: BasePaymeshEvent<unknown>,
+	): Promise<void>;
+}
+
+export interface PaymeshWebhookEventsRepository {
+	acquire(
+		schema: ResolvedDatabaseSchema,
+		event: BasePaymeshEvent<unknown>,
+		deliveryId: string,
+	): Promise<{ duplicate: boolean }>;
+	markProcessed(
+		schema: ResolvedDatabaseSchema,
+		event: BasePaymeshEvent<unknown>,
+		deliveryId: string,
+	): Promise<void>;
+	markFailed(
+		schema: ResolvedDatabaseSchema,
+		event: BasePaymeshEvent<unknown>,
+		deliveryId: string,
+		error: unknown,
+	): Promise<void>;
+}
+
+export interface PaymeshProductsRepository {
+	upsertMany(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		products: ProviderCatalogProduct[],
+	): Promise<void>;
+}
+
+export interface PaymeshPricesRepository {
+	upsertMany(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		prices: ProviderCatalogPrice[],
+	): Promise<void>;
+}
+
+export interface PaymeshMigrationsRepository {
+	ensureTable(schema: ResolvedDatabaseSchema): Promise<void>;
+	listApplied(schema: ResolvedDatabaseSchema): Promise<string[]>;
+	recordApplied(schema: ResolvedDatabaseSchema, name: string): Promise<void>;
+}
+
+export interface PaymeshDatabaseRepositories {
+	customers: PaymeshCustomersRepository;
+	checkouts: PaymeshCheckoutsRepository;
+	invoices: PaymeshInvoicesRepository;
+	subscriptions: PaymeshSubscriptionsRepository;
+	webhookEvents: PaymeshWebhookEventsRepository;
+	products: PaymeshProductsRepository;
+	prices: PaymeshPricesRepository;
+	migrations: PaymeshMigrationsRepository;
+}
+
 export interface PaymeshDatabaseDriverDefinition {
 	id: string;
 	dialect: 'postgres';
 	persistRaw?: boolean;
+	repositories: PaymeshDatabaseRepositories;
 	query<Row = unknown>(query: CompiledQuery): Promise<Row[]>;
 	execute(query: CompiledQuery): Promise<void>;
 	transaction<T>(

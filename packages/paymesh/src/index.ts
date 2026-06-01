@@ -1,5 +1,4 @@
 import { defineDatabaseAdapter } from './database/adapter';
-import { upsertCheckout, upsertCustomer } from './database/persistence';
 import { resolveDatabaseSchema } from './database/schema';
 import { handleClientWebhook } from './database/webhooks';
 import { PaymeshError } from './errors';
@@ -76,7 +75,9 @@ export const createClient = <
 					mergeOptions(requestOptions),
 				);
 
-				if (database) await upsertCheckout(database, schema, payment);
+				if (database) {
+					await database.repositories.checkouts.upsert(schema, payment);
+				}
 
 				return payment;
 			},
@@ -93,7 +94,9 @@ export const createClient = <
 					mergeOptions(requestOptions),
 				);
 
-				if (database) await upsertCustomer(database, schema, customer);
+				if (database) {
+					await database.repositories.customers.upsert(schema, customer);
+				}
 
 				return customer;
 			},
@@ -108,7 +111,9 @@ export const createClient = <
 					mergeOptions(requestOptions),
 				);
 
-				if (database) await upsertCustomer(database, schema, customer);
+				if (database) {
+					await database.repositories.customers.upsert(schema, customer);
+				}
 
 				return customer;
 			},
@@ -125,7 +130,9 @@ export const createClient = <
 					mergeOptions(requestOptions),
 				);
 
-				if (database) await upsertCustomer(database, schema, customer);
+				if (database) {
+					await database.repositories.customers.upsert(schema, customer);
+				}
 
 				return customer;
 			},
@@ -140,7 +147,11 @@ export const createClient = <
 					mergeOptions(requestOptions),
 				);
 
-				if (database) await upsertCustomer(database, schema, result, true);
+				if (database) {
+					await database.repositories.customers.upsert(schema, result, {
+						deleted: true,
+					});
+				}
 
 				return result;
 			},

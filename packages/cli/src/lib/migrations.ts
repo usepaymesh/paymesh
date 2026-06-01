@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { PaymeshDatabaseDriver, ResolvedDatabaseSchema } from 'paymesh';
-import { compileQuery, tableName } from './sql';
+import { tableName } from './sql';
 
 export interface PaymeshMigrationFile {
 	name: string;
@@ -26,35 +26,11 @@ export function getPaymeshMigrationFiles(
 	];
 }
 
-export async function ensurePaymeshMigrationsTable(
-	database: PaymeshDatabaseDriver,
-	schema: ResolvedDatabaseSchema,
-) {
-	await database.execute(compileQuery(createMigrationsTableSql(schema)));
-}
-
 export async function getAppliedPaymeshMigrations(
 	database: PaymeshDatabaseDriver,
 	schema: ResolvedDatabaseSchema,
 ) {
-	await ensurePaymeshMigrationsTable(database, schema);
-
-	const rows = await database.query<{ name: string }>(
-		compileQuery(
-			`SELECT name FROM ${table(schema, 'migrations')} ORDER BY name ASC`,
-		),
-	);
-
-	return rows.map((row) => row.name);
-}
-
-export async function recordPaymeshMigration(
-	database: PaymeshDatabaseDriver,
-	schema: ResolvedDatabaseSchema,
-	name: string,
-) {
-	await ensurePaymeshMigrationsTable(database, schema);
-	await database.execute(createRecordPaymeshMigrationQuery(schema, name));
+	return database.repositories.migrations.listApplied(schema);
 }
 
 export async function writeMigrationFiles(
@@ -91,16 +67,6 @@ export async function getExpectedMigrationNames(
 	const files = await readMigrationFiles(directory);
 	if (files.length > 0) return files.map((file) => file.name);
 	return getPaymeshMigrationFiles(clientSchema).map((file) => file.name);
-}
-
-export function createRecordPaymeshMigrationQuery(
-	schema: ResolvedDatabaseSchema,
-	name: string,
-) {
-	return compileQuery(
-		`INSERT INTO ${table(schema, 'migrations')} (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
-		[name],
-	);
 }
 
 function createInitialMigrationSql(schema: ResolvedDatabaseSchema) {

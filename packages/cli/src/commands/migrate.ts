@@ -1,7 +1,6 @@
 import type { Command } from 'commander';
 import { loadClient } from '../lib/client';
 import {
-	createRecordPaymeshMigrationQuery,
 	getAppliedPaymeshMigrations,
 	getPaymeshMigrationFiles,
 	readMigrationFiles,
@@ -43,8 +42,9 @@ export function registerMigrateCommand(program: Command) {
 				for (const file of pending) {
 					await client.database.transaction(async (tx) => {
 						await tx.execute(compileQuery(file.sql));
-						await tx.execute(
-							createRecordPaymeshMigrationQuery(client.schema, file.name),
+						await tx.repositories.migrations.recordApplied(
+							client.schema,
+							file.name,
 						);
 					});
 					console.log(`Applied ${file.name}`);

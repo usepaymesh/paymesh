@@ -4,6 +4,7 @@ import {
 	type PaymeshDatabaseDriver,
 	PaymeshError,
 } from 'paymesh';
+import { createRepositories } from './repositories';
 
 export interface DrizzleDatabaseOptions {
 	persistRaw?: boolean;
@@ -48,6 +49,18 @@ export function drizzle(
 		persistRaw,
 		id: 'drizzle',
 		dialect: 'postgres',
+		repositories: createRepositories({
+			query: <Row = unknown>(query: CompiledQuery) =>
+				run(query).then((result) =>
+					Array.isArray(result)
+						? (result as Row[])
+						: 'rows' in Object(result)
+							? ((result as { rows: Row[] }).rows ?? [])
+							: [],
+				),
+			execute: (query: CompiledQuery) => run(query).then(() => undefined),
+			persistRaw,
+		}),
 		query: <Row = unknown>(query: CompiledQuery) =>
 			run(query).then((result) =>
 				Array.isArray(result)

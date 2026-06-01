@@ -13,7 +13,6 @@ export {
 	getPaymeshMigrationFiles,
 	type PaymeshMigrationFile,
 	readMigrationFiles,
-	recordPaymeshMigration,
 	writeMigrationFiles,
 } from './lib/migrations';
 

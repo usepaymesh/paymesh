@@ -4,6 +4,7 @@ import {
 	type PaymeshDatabaseDriver,
 	PaymeshError,
 } from 'paymesh';
+import { createRepositories } from './repositories';
 
 export interface PrismaDatabaseOptions {
 	persistRaw?: boolean;
@@ -33,6 +34,15 @@ export function prisma(
 		persistRaw,
 		id: 'prisma',
 		dialect: 'postgres',
+		repositories: createRepositories({
+			query: <Row = unknown>(query: CompiledQuery) =>
+				database.$queryRawUnsafe<Row>(query.sql, ...query.params),
+			execute: (query: CompiledQuery) =>
+				database
+					.$executeRawUnsafe(query.sql, ...query.params)
+					.then(() => undefined),
+			persistRaw,
+		}),
 		query: <Row = unknown>(query: CompiledQuery) =>
 			database
 				.$queryRawUnsafe<Row>(query.sql, ...query.params)
