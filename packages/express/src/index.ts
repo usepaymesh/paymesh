@@ -1,16 +1,9 @@
 import type { Request, Response } from 'express';
-import {
-	type PaymeshClient,
-	PaymeshError,
-	type PaymeshHook,
-	type PaymeshHooks,
-} from 'paymesh';
+import type { PaymeshClient, PaymeshHooks } from 'paymesh';
 
 interface ExpressRequestWithRawBody extends Request {
 	rawBody?: unknown;
 }
-
-type AnyHook = (event: unknown) => void | Promise<void>;
 
 export interface WebhooksOptions<IncludeRaw extends boolean = false>
 	extends PaymeshHooks<IncludeRaw> {
@@ -23,20 +16,7 @@ export function Webhooks<IncludeRaw extends boolean = false>({
 	includeRaw,
 	...hooks
 }: WebhooksOptions<IncludeRaw>) {
-	if (!client.provider.webhooks || !client.provider.capabilities.webhooks)
-		throw new PaymeshError({
-			cause: client.provider,
-			code: 'unsupported_capability',
-			message: `Provider "${client.provider.id}" does not support webhooks capability`,
-			provider: client.provider.id,
-		});
-
 	return async (request: ExpressRequestWithRawBody, response: Response) => {
-		const { webhooks } = client.provider;
-
-		if (!webhooks)
-			return response.status(501).json({ error: 'unsupported_capability' });
-
 		const headers = new Headers();
 
 		for (const [key, value] of Object.entries(request.headers)) {
@@ -130,52 +110,12 @@ export function Webhooks<IncludeRaw extends boolean = false>({
 			},
 		);
 
-		const isValid = await webhooks.verify({
-			request: webhookRequest.clone(),
+		const result = await client.webhooks.handle({
+			request: webhookRequest,
+			includeRaw,
+			hooks,
 		});
 
-		if (!isValid)
-			return response.status(401).json({ error: 'invalid_webhook_signature' });
-
-		let payload: Record<string, unknown>;
-
-		try {
-			payload = await webhooks.parse(webhookRequest);
-		} catch {
-			return response.status(400).json({ error: 'webhook_parse_error' });
-		}
-
-		let event: Awaited<ReturnType<typeof webhooks.map>>;
-
-		try {
-			event = (await webhooks.map(payload, {
-				includeRaw: (includeRaw ?? client.includeRaw ?? false) as IncludeRaw,
-			})) as Awaited<ReturnType<typeof webhooks.map>>;
-		} catch {
-			return response.status(400).json({ error: 'webhook_mapping_error' });
-		}
-
-		const hookName = webhooks.hook(event as never);
-
-		const hook = hookName
-			? (getHook(hooks, hookName) ?? getHook(client.hooks, hookName))
-			: undefined;
-
-		try {
-			await hook?.(event);
-		} catch {
-			return response.status(500).json({ error: 'hook_error' });
-		}
-
-		return response.status(200).json({ received: true });
+		return response.status(result.status).json(result.body);
 	};
-}
-
-function getHook<IncludeRaw extends boolean>(
-	hooks: PaymeshHooks<IncludeRaw> | undefined,
-	name: string,
-): AnyHook | undefined {
-	return (hooks as Record<string, PaymeshHook | undefined> | undefined)?.[
-		name
-	] as AnyHook | undefined;
 }
