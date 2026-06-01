@@ -11,7 +11,8 @@ import {
 	type PaymeshEventType,
 	type ProviderCapabilities,
 	type ProviderRequestOptions,
-	type ProviderWebhookMapOptions,
+	type ProviderWebhookHandleOptions,
+	type ProviderWebhookHandleResult,
 	request,
 	withRaw,
 } from 'paymesh';
@@ -19,6 +20,8 @@ import type {
 	PolarCheckout,
 	PolarCustomer,
 	PolarOrder,
+	PolarProduct,
+	PolarProductListResponse,
 	PolarProviderOptions,
 	PolarSubscription,
 	PolarWebhookEvent,
@@ -276,6 +279,57 @@ export const polar = ({
 				);
 			},
 		},
+		catalog: {
+			async list() {
+				const response = await request<PolarProductListResponse>(
+					'/v1/products',
+					{
+						provider: 'polar',
+						baseUrl,
+						timeout,
+						retry,
+						fetch,
+						headers,
+						query: {
+							limit: 100,
+						},
+					},
+				);
+				const products = readPolarProducts(response);
+
+				return {
+					products: products.map((product) => ({
+						id: product.id,
+						name: product.name,
+						description: product.description ?? undefined,
+						active: !product.is_archived,
+						metadata: product.metadata ?? undefined,
+						version: readVersion(product.metadata),
+						raw: product,
+					})),
+					prices: products.flatMap((product) =>
+						(product.prices ?? []).map((price) => ({
+							id: price.id,
+							productId: product.id,
+							active: !product.is_archived,
+							type:
+								price.type ?? (product.is_recurring ? 'recurring' : 'one_time'),
+							currency: price.price_currency ?? undefined,
+							amount: price.price_amount ?? undefined,
+							interval: product.recurring_interval ?? undefined,
+							intervalCount: product.recurring_interval_count ?? undefined,
+							metadata: price.metadata ?? undefined,
+							version:
+								readVersion(price.metadata) ?? readVersion(product.metadata),
+							raw: {
+								product,
+								price,
+							},
+						})),
+					),
+				};
+			},
+		},
 		webhooks: {
 			async verify({ request }) {
 				if (!webhookSecret) return false;
@@ -307,19 +361,18 @@ export const polar = ({
 
 				return false;
 			},
-			async parse(request) {
+			async handle<IncludeRaw extends boolean = false>(
+				options: ProviderWebhookHandleOptions<IncludeRaw>,
+			): Promise<ProviderWebhookHandleResult<IncludeRaw>> {
+				const { request, includeRaw } = options;
 				const payload = await request.json();
+				const webhookId = request.headers.get('webhook-id');
 
 				if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
 					throw new TypeError('Polar webhook payload must be a JSON object.');
 				}
 
-				return payload as Record<string, unknown>;
-			},
-			map<IncludeRaw extends boolean = false>(
-				body: Record<string, unknown>,
-				options?: ProviderWebhookMapOptions<IncludeRaw>,
-			): PaymeshEvent<unknown, IncludeRaw> {
+				const body = payload as Record<string, unknown>;
 				const event = body as unknown as PolarWebhookEvent;
 				let type: PaymeshEventType = 'payment.created';
 
@@ -412,7 +465,7 @@ export const polar = ({
 								metadata: checkout.metadata ?? undefined,
 							},
 							checkout,
-							options?.includeRaw,
+							includeRaw,
 						);
 					} else {
 						const order = event.data as PolarOrder;
@@ -447,7 +500,7 @@ export const polar = ({
 								metadata: order.metadata ?? undefined,
 							},
 							order,
-							options?.includeRaw,
+							includeRaw,
 						);
 					}
 				} else if (type === 'customer.created' || type === 'customer.updated') {
@@ -463,7 +516,7 @@ export const polar = ({
 							metadata: customer.metadata ?? undefined,
 						},
 						customer,
-						options?.includeRaw,
+						includeRaw,
 					);
 				} else if (type === 'customer.deleted') {
 					const customer = event.data as PolarCustomer;
@@ -475,7 +528,7 @@ export const polar = ({
 							deleted: true,
 						},
 						customer,
-						options?.includeRaw,
+						includeRaw,
 					);
 				} else if (
 					type === 'subscription.created' ||
@@ -483,7 +536,7 @@ export const polar = ({
 					type === 'subscription.canceled'
 				) {
 					const subscription = event.data as PolarSubscription;
-					data = withRaw(subscription, subscription, options?.includeRaw);
+					data = withRaw(subscription, subscription, includeRaw);
 				}
 
 				let id = `${event.type}:${event.timestamp}`;
@@ -496,45 +549,74 @@ export const polar = ({
 					id = event.data.id;
 				}
 
-				return withRaw(
-					{
-						id,
-						type,
-						provider: 'polar',
-						data,
-					},
-					body,
-					options?.includeRaw,
-				);
-			},
-			hook(event) {
-				switch (event.type) {
+				let hook: string | undefined;
+
+				switch (type) {
 					case 'payment.created':
-						return 'onPaymentCreated';
+						hook = 'onPaymentCreated';
+						break;
 					case 'payment.succeeded':
-						return 'onPaymentSucceeded';
-					case 'payment.failed':
-						return 'onPaymentFailed';
+						hook = 'onPaymentSucceeded';
+						break;
 					case 'payment.canceled':
-						return 'onPaymentCanceled';
+						hook = 'onPaymentCanceled';
+						break;
 					case 'payment.refunded':
-						return 'onPaymentRefunded';
+						hook = 'onPaymentRefunded';
+						break;
 					case 'customer.created':
-						return 'onCustomerCreated';
+						hook = 'onCustomerCreated';
+						break;
 					case 'customer.updated':
-						return 'onCustomerUpdated';
+						hook = 'onCustomerUpdated';
+						break;
 					case 'customer.deleted':
-						return 'onCustomerDeleted';
+						hook = 'onCustomerDeleted';
+						break;
 					case 'subscription.created':
-						return 'onSubscriptionCreated';
+						hook = 'onSubscriptionCreated';
+						break;
 					case 'subscription.updated':
-						return 'onSubscriptionUpdated';
+						hook = 'onSubscriptionUpdated';
+						break;
 					case 'subscription.canceled':
-						return 'onSubscriptionCanceled';
+						hook = 'onSubscriptionCanceled';
+						break;
 					case 'checkout.completed':
-						return 'onCheckoutCompleted';
+						hook = 'onCheckoutCompleted';
+						break;
 				}
+
+				return {
+					deliveryId: webhookId ?? undefined,
+					hook,
+					event: withRaw(
+						{
+							id,
+							type,
+							provider: 'polar',
+							data,
+						},
+						body,
+						includeRaw,
+					) as PaymeshEvent<unknown, IncludeRaw>,
+				};
 			},
 		},
 	});
 };
+
+function readPolarProducts(response: PolarProductListResponse) {
+	if (Array.isArray(response)) return response;
+	if (Array.isArray(response.items)) return response.items;
+	if (Array.isArray(response.data)) return response.data;
+	if (Array.isArray(response.result)) return response.result;
+	return [];
+}
+
+function readVersion(metadata: PolarProduct['metadata']) {
+	const version = metadata?.version;
+	return typeof version === 'string' && version.length > 0
+		? version
+		: undefined;
+}

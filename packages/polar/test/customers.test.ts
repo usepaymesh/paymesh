@@ -205,7 +205,7 @@ describe('polar customers', () => {
 		expect(callNullCustomer.externalId).toBe('user_ext_123');
 	});
 
-	test('checks customer capability before calling the provider', () => {
+	test('checks customer capability before calling the provider', async () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
@@ -235,16 +235,13 @@ describe('polar customers', () => {
 			}),
 		});
 
-		try {
-			client.customers.get('cus_test');
-			throw new Error('Expected unsupported_capability error');
-		} catch (error) {
-			expect(error).toBeInstanceOf(PaymeshError);
-			expect(error).toMatchObject({
-				code: 'unsupported_capability',
-				message: 'Provider "stub" does not support "customers" capability',
-				provider: 'stub',
-			});
-		}
+		await expect(client.customers.get('cus_test')).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support "customers" capability',
+			provider: 'stub',
+		});
+		await expect(client.customers.get('cus_test')).rejects.toBeInstanceOf(
+			PaymeshError,
+		);
 	});
 });

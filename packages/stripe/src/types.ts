@@ -79,3 +79,33 @@ export type StripePaymentObject =
 	| StripeCheckoutSession
 	| StripePaymentIntent
 	| StripeCharge;
+
+export interface StripeListResponse<T> {
+	object: 'list' | 'search_result';
+	data: T[];
+	has_more: boolean;
+}
+
+export interface StripeProduct {
+	id: string;
+	object: 'product';
+	active?: boolean;
+	description?: string | null;
+	metadata?: Record<string, string> | null;
+	name: string;
+}
+
+export interface StripePrice {
+	id: string;
+	object: 'price';
+	active?: boolean;
+	currency?: string | null;
+	metadata?: Record<string, string> | null;
+	product?: string | null;
+	recurring?: {
+		interval?: string | null;
+		interval_count?: number | null;
+	} | null;
+	type?: 'one_time' | 'recurring' | null;
+	unit_amount?: number | null;
+}

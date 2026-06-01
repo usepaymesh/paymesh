@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 import { polar } from '../src';
 
 describe('polar webhooks', () => {
-	test('Polar verifies, parses, maps, and resolves hook names', async () => {
+	test('Polar verifies, handles, and resolves hook names', async () => {
 		const provider = polar({ webhookSecret: 'polar_secret_test' });
 		const request = polarWebhookRequest(
 			{
@@ -28,8 +28,8 @@ describe('polar webhooks', () => {
 		const valid = await provider.webhooks?.verify({
 			request: request.clone(),
 		});
-		const payload = await provider.webhooks?.parse(request);
-		const event = await provider.webhooks?.map(payload ?? {});
+		const handled = await provider.webhooks?.handle({ request });
+		const event = handled?.event;
 
 		expect(valid).toBe(true);
 		expect(event).toMatchObject({
@@ -47,24 +47,31 @@ describe('polar webhooks', () => {
 			},
 			raw: null,
 		});
-		expect(event && provider.webhooks?.hook(event)).toBe('onPaymentSucceeded');
+		expect(handled?.hook).toBe('onPaymentSucceeded');
 	});
 
 	test('Polar maps customer webhook events', async () => {
 		const provider = polar({ webhookSecret: 'polar_secret_test' });
-		const event = await provider.webhooks?.map(
-			{
-				type: 'customer.updated',
-				timestamp: '2026-05-30T12:00:00Z',
-				data: {
-					id: 'cus_raw',
-					email: 'ana@example.com',
-					name: 'Ana',
-					external_id: 'user_ext_123',
+		const handled = await provider.webhooks?.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
 				},
-			},
-			{ includeRaw: true },
-		);
+				body: JSON.stringify({
+					type: 'customer.updated',
+					timestamp: '2026-05-30T12:00:00Z',
+					data: {
+						id: 'cus_raw',
+						email: 'ana@example.com',
+						name: 'Ana',
+						external_id: 'user_ext_123',
+					},
+				}),
+			}),
+			includeRaw: true,
+		});
+		const event = handled?.event;
 
 		expect(event).toMatchObject({
 			id: 'cus_raw',
@@ -82,9 +89,7 @@ describe('polar webhooks', () => {
 				type: 'customer.updated',
 			},
 		});
-		expect(event && provider.webhooks?.hook<true>(event)).toBe(
-			'onCustomerUpdated',
-		);
+		expect(handled?.hook).toBe('onCustomerUpdated');
 	});
 
 	test('Polar rejects invalid signatures', async () => {
@@ -106,16 +111,25 @@ describe('polar webhooks', () => {
 
 	test('maps canceled subscriptions from update events', async () => {
 		const provider = polar({ webhookSecret: 'polar_secret_test' });
-		const event = await provider.webhooks?.map({
-			type: 'subscription.updated',
-			timestamp: '2026-05-30T12:00:00Z',
-			data: {
-				id: 'sub_123',
-				amount: 1200,
-				currency: 'usd',
-				canceled_at: '2026-05-30T12:00:00Z',
-			},
+		const handled = await provider.webhooks?.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					type: 'subscription.updated',
+					timestamp: '2026-05-30T12:00:00Z',
+					data: {
+						id: 'sub_123',
+						amount: 1200,
+						currency: 'usd',
+						canceled_at: '2026-05-30T12:00:00Z',
+					},
+				}),
+			}),
 		});
+		const event = handled?.event;
 
 		expect(event).toMatchObject({
 			id: 'sub_123',
@@ -125,9 +139,7 @@ describe('polar webhooks', () => {
 				raw: null,
 			},
 		});
-		expect(event && provider.webhooks?.hook(event)).toBe(
-			'onSubscriptionCanceled',
-		);
+		expect(handled?.hook).toBe('onSubscriptionCanceled');
 	});
 });
 

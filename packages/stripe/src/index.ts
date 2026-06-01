@@ -9,7 +9,8 @@ import {
 	type PaymeshEventType,
 	type ProviderCapabilities,
 	type ProviderRequestOptions,
-	type ProviderWebhookMapOptions,
+	type ProviderWebhookHandleOptions,
+	type ProviderWebhookHandleResult,
 	request,
 	withRaw,
 } from 'paymesh';
@@ -18,7 +19,10 @@ import type {
 	StripeCustomer,
 	StripeDeletedCustomer,
 	StripeEvent,
+	StripeListResponse,
 	StripePaymentObject,
+	StripePrice,
+	StripeProduct,
 	StripeProviderOptions,
 } from './types';
 
@@ -323,6 +327,60 @@ export const stripe = ({
 				);
 			},
 		},
+		catalog: {
+			async list() {
+				const [products, prices] = await Promise.all([
+					request<StripeListResponse<StripeProduct>>('/v1/products', {
+						provider: 'stripe',
+						baseUrl,
+						timeout,
+						retry,
+						fetch,
+						headers,
+						query: {
+							limit: 100,
+						},
+					}),
+					request<StripeListResponse<StripePrice>>('/v1/prices', {
+						provider: 'stripe',
+						baseUrl,
+						timeout,
+						retry,
+						fetch,
+						headers,
+						query: {
+							limit: 100,
+						},
+					}),
+				]);
+
+				return {
+					products: products.data.map((product) => ({
+						id: product.id,
+						name: product.name,
+						description: product.description ?? undefined,
+						active: product.active ?? true,
+						metadata: product.metadata ?? undefined,
+						version: product.metadata?.version ?? undefined,
+						raw: product,
+					})),
+					prices: prices.data.map((price) => ({
+						id: price.id,
+						productId:
+							typeof price.product === 'string' ? price.product : undefined,
+						active: price.active ?? true,
+						type: price.type ?? undefined,
+						currency: price.currency ?? undefined,
+						amount: price.unit_amount ?? undefined,
+						interval: price.recurring?.interval ?? undefined,
+						intervalCount: price.recurring?.interval_count ?? undefined,
+						metadata: price.metadata ?? undefined,
+						version: price.metadata?.version ?? undefined,
+						raw: price,
+					})),
+				};
+			},
+		},
 		webhooks: {
 			async verify({ request }) {
 				if (!webhookSecret) return false;
@@ -344,19 +402,17 @@ export const stripe = ({
 					timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
 				);
 			},
-			async parse(request) {
+			async handle<IncludeRaw extends boolean = false>(
+				options: ProviderWebhookHandleOptions<IncludeRaw>,
+			): Promise<ProviderWebhookHandleResult<IncludeRaw>> {
+				const { request, includeRaw } = options;
 				const payload = await request.json();
 
 				if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
 					throw new TypeError('Stripe webhook payload must be a JSON object.');
 				}
 
-				return payload as Record<string, unknown>;
-			},
-			map<IncludeRaw extends boolean = false>(
-				body: Record<string, unknown>,
-				options?: ProviderWebhookMapOptions<IncludeRaw>,
-			): PaymeshEvent<unknown, IncludeRaw> {
+				const body = payload as Record<string, unknown>;
 				const event = body as unknown as StripeEvent;
 				const object = event.data?.object;
 				const type = STRIPE_EVENTS[event.type] ?? 'payment.created';
@@ -373,7 +429,7 @@ export const stripe = ({
 								deleted: customer.deleted,
 							},
 							customer,
-							options?.includeRaw,
+							includeRaw,
 						);
 					} else if (
 						type === 'customer.created' ||
@@ -396,7 +452,7 @@ export const stripe = ({
 								metadata: customer.metadata ?? undefined,
 							},
 							customer,
-							options?.includeRaw,
+							includeRaw,
 						);
 					} else {
 						const payment = object as StripePaymentObject;
@@ -445,24 +501,25 @@ export const stripe = ({
 								metadata: payment.metadata ?? undefined,
 							},
 							payment,
-							options?.includeRaw,
+							includeRaw,
 						);
 					}
 				}
 
-				return withRaw(
-					{
-						id: event.id,
-						type,
-						provider: 'stripe',
-						data,
-					},
-					body,
-					options?.includeRaw,
-				);
-			},
-			hook(event) {
-				return STRIPE_HOOKS[event.type];
+				return {
+					deliveryId: event.id,
+					hook: STRIPE_HOOKS[type],
+					event: withRaw(
+						{
+							id: event.id,
+							type,
+							provider: 'stripe',
+							data,
+						},
+						body,
+						includeRaw,
+					) as PaymeshEvent<unknown, IncludeRaw>,
+				};
 			},
 		},
 	});

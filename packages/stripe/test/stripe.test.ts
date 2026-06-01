@@ -227,7 +227,7 @@ describe('stripe provider', () => {
 		});
 	});
 
-	test('supports raw webhook payloads per map call', () => {
+	test('supports raw webhook payloads per handle call', async () => {
 		const provider = stripe({
 			secret: 'sk_test_123',
 		});
@@ -245,18 +245,35 @@ describe('stripe provider', () => {
 			},
 		};
 
-		const defaultEvent = provider.webhooks?.map(payload);
-		const rawEvent = provider.webhooks?.map(payload, { includeRaw: true });
-
-		if (defaultEvent instanceof Promise || rawEvent instanceof Promise) {
-			throw new Error('Stripe webhook mapping should be synchronous');
-		}
+		const defaultEvent = (
+			await provider.webhooks?.handle({
+				request: new Request('https://app.test/webhooks', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify(payload),
+				}),
+			})
+		)?.event;
+		const rawEvent = (
+			await provider.webhooks?.handle({
+				request: new Request('https://app.test/webhooks', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify(payload),
+				}),
+				includeRaw: true,
+			})
+		)?.event;
 
 		expectType<null>(defaultEvent?.raw ?? null);
 		expectType<unknown>(rawEvent?.raw);
 
 		expect(defaultEvent?.raw).toBeNull();
-		expect(rawEvent?.raw).toBe(payload);
+		expect(rawEvent?.raw).toEqual(payload);
 		expect(defaultEvent?.data).toMatchObject({
 			id: 'pi_raw',
 			raw: null,
@@ -269,7 +286,7 @@ describe('stripe provider', () => {
 		});
 	});
 
-	test('maps externalId from checkout session webhooks', () => {
+	test('maps externalId from checkout session webhooks', async () => {
 		const provider = stripe({
 			secret: 'sk_test_123',
 		});
@@ -292,11 +309,17 @@ describe('stripe provider', () => {
 			},
 		};
 
-		const event = provider.webhooks?.map(payload);
-
-		if (event instanceof Promise) {
-			throw new Error('Stripe webhook mapping should be synchronous');
-		}
+		const event = (
+			await provider.webhooks?.handle({
+				request: new Request('https://app.test/webhooks', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify(payload),
+				}),
+			})
+		)?.event;
 
 		expect(event).toMatchObject({
 			type: 'checkout.completed',

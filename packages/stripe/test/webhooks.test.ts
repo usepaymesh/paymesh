@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 import { stripe } from '../src';
 
 describe('provider webhooks', () => {
-	test('Stripe verifies, parses, maps, and resolves hook names', async () => {
+	test('Stripe verifies, handles, and resolves hook names', async () => {
 		const provider = stripe({ webhookSecret: 'whsec_test' });
 		const request = stripeWebhookRequest(
 			{
@@ -25,8 +25,8 @@ describe('provider webhooks', () => {
 		const valid = await provider.webhooks?.verify({
 			request: request.clone(),
 		});
-		const payload = await provider.webhooks?.parse(request);
-		const event = await provider.webhooks?.map(payload ?? {});
+		const handled = await provider.webhooks?.handle({ request });
+		const event = handled?.event;
 
 		expect(valid).toBe(true);
 		expect(event).toMatchObject({
@@ -40,29 +40,36 @@ describe('provider webhooks', () => {
 			},
 			raw: null,
 		});
-		expect(event && provider.webhooks?.hook(event)).toBe('onPaymentFailed');
+		expect(handled?.hook).toBe('onPaymentFailed');
 	});
 
 	test('Stripe maps customer webhook events', async () => {
 		const provider = stripe({ webhookSecret: 'whsec_test' });
-		const event = await provider.webhooks?.map(
-			{
-				id: 'evt_customer_updated',
-				type: 'customer.updated',
-				data: {
-					object: {
-						id: 'cus_raw',
-						object: 'customer',
-						name: 'Ana',
-						email: 'ana@example.com',
-						metadata: {
-							externalId: 'user_ext_123',
+		const handled = await provider.webhooks?.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					id: 'evt_customer_updated',
+					type: 'customer.updated',
+					data: {
+						object: {
+							id: 'cus_raw',
+							object: 'customer',
+							name: 'Ana',
+							email: 'ana@example.com',
+							metadata: {
+								externalId: 'user_ext_123',
+							},
 						},
 					},
-				},
-			},
-			{ includeRaw: true },
-		);
+				}),
+			}),
+			includeRaw: true,
+		});
+		const event = handled?.event;
 
 		expect(event).toMatchObject({
 			id: 'evt_customer_updated',
@@ -80,9 +87,7 @@ describe('provider webhooks', () => {
 				id: 'evt_customer_updated',
 			},
 		});
-		expect(event && provider.webhooks?.hook<true>(event)).toBe(
-			'onCustomerUpdated',
-		);
+		expect(handled?.hook).toBe('onCustomerUpdated');
 	});
 
 	test('Stripe rejects invalid signatures', async () => {
