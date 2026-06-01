@@ -68,24 +68,15 @@ console.log(payment.checkoutUrl);
 Install the core package, a provider, and a database adapter:
 
 ```bash
-bun add paymesh @paymesh/stripe @paymesh/postgres
-# or, if you already use Drizzle
-bun add paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
-```
-
-You can also use your preferred package manager:
-
-```bash
 npm install paymesh @paymesh/stripe @paymesh/postgres
+# or, if you already use Drizzle
 npm install paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
-pnpm add paymesh @paymesh/stripe @paymesh/postgres
-pnpm add paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
-yarn add paymesh @paymesh/stripe @paymesh/postgres
-yarn add paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
+# or, if you already use Prisma
+npm install paymesh @paymesh/stripe @paymesh/prisma @prisma/client
 ```
 
 Available providers currently include `@paymesh/stripe` and `@paymesh/polar`.
-Available database adapters currently include `@paymesh/postgres` and `@paymesh/drizzle`.
+Available database adapters currently include `@paymesh/postgres`, `@paymesh/drizzle`, and `@paymesh/prisma`.
 
 ## Database and CLI
 
@@ -111,6 +102,20 @@ const db = drizzle(process.env.DATABASE_URL!);
 const paymesh = createClient({
   provider: stripe(),
   database: drizzleAdapter(db),
+});
+```
+
+Or adapt an existing Prisma client:
+
+```ts
+import { prisma } from "@paymesh/prisma";
+import { PrismaClient } from "@prisma/client";
+
+const db = new PrismaClient();
+
+const paymesh = createClient({
+  provider: stripe(),
+  database: prisma(db),
 });
 ```
 
