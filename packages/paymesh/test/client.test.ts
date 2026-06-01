@@ -114,7 +114,7 @@ describe('client', () => {
 		expect(callRawCustomer.raw).toMatchObject({ id: 'raw_cus_123' });
 	});
 
-	test('checks customer capability before calling the provider', () => {
+	test('checks customer capability before calling the provider', async () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
@@ -144,20 +144,17 @@ describe('client', () => {
 			}),
 		});
 
-		try {
-			client.customers.get('cus_test');
-			throw new Error('Expected unsupported_capability error');
-		} catch (error) {
-			expect(error).toBeInstanceOf(PaymeshError);
-			expect(error).toMatchObject({
-				code: 'unsupported_capability',
-				message: 'Provider "stub" does not support "customers" capability',
-				provider: 'stub',
-			});
-		}
+		await expect(client.customers.get('cus_test')).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support "customers" capability',
+			provider: 'stub',
+		});
+		await expect(client.customers.get('cus_test')).rejects.toBeInstanceOf(
+			PaymeshError,
+		);
 	});
 
-	test('checks checkout capability before calling the provider', () => {
+	test('checks checkout capability before calling the provider', async () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
@@ -187,20 +184,22 @@ describe('client', () => {
 			}),
 		});
 
-		try {
+		await expect(
 			client.payments.create({
 				amount: 1000,
 				currency: 'USD',
-			});
-			throw new Error('Expected unsupported_capability error');
-		} catch (error) {
-			expect(error).toBeInstanceOf(PaymeshError);
-			expect(error).toMatchObject({
-				code: 'unsupported_capability',
-				message: 'Provider "stub" does not support "checkout" capability',
-				provider: 'stub',
-			});
-		}
+			}),
+		).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support "checkout" capability',
+			provider: 'stub',
+		});
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+			}),
+		).rejects.toBeInstanceOf(PaymeshError);
 	});
 });
 

@@ -1,5 +1,10 @@
 import type { RetryOptions } from '../shared/request';
 import type {
+	DatabaseSchemaOptions,
+	PaymeshDatabaseDriver,
+	ResolvedDatabaseSchema,
+} from './database';
+import type {
 	Customer,
 	CustomerDeleteResult,
 	Payment,
@@ -61,10 +66,32 @@ export interface PaymeshHooks<IncludeRaw extends boolean = false> {
 	>;
 }
 
+export interface HandleWebhookOptions<IncludeRaw extends boolean = false> {
+	request: Request;
+	hooks?: PaymeshHooks<IncludeRaw>;
+	includeRaw?: IncludeRaw;
+	skipVerify?: boolean;
+}
+
+export interface HandleWebhookResult<IncludeRaw extends boolean = false> {
+	status: 200 | 400 | 401 | 500 | 501;
+	body: { received?: boolean; duplicate?: boolean; error?: string };
+	event?: PaymeshEvent<unknown, IncludeRaw>;
+}
+
+export interface PaymeshWebhookHandler<IncludeRaw extends boolean = false> {
+	handle(
+		options: HandleWebhookOptions<IncludeRaw>,
+	): Promise<HandleWebhookResult<IncludeRaw>>;
+}
+
 export interface PaymeshClient<IncludeRaw extends boolean = false> {
 	provider: Provider<string>;
 	hooks?: PaymeshHooks<IncludeRaw>;
 	includeRaw?: IncludeRaw;
+	database?: PaymeshDatabaseDriver;
+	schema: ResolvedDatabaseSchema;
+	webhooks: PaymeshWebhookHandler<IncludeRaw>;
 }
 
 export interface ClientOptions<
@@ -72,6 +99,8 @@ export interface ClientOptions<
 	IncludeRaw extends boolean = false,
 > {
 	provider: P;
+	database?: PaymeshDatabaseDriver;
+	schema?: DatabaseSchemaOptions;
 	baseUrl?: string;
 	timeout?: number;
 	retry?: RetryOptions;

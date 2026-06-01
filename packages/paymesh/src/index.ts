@@ -1,5 +1,13 @@
+import { defineDatabaseAdapter } from './database/adapter';
+import { upsertCheckout, upsertCustomer } from './database/persistence';
+import { resolveDatabaseSchema } from './database/schema';
+import { handleClientWebhook } from './database/webhooks';
 import { PaymeshError } from './errors';
-import type { ClientOptions } from './types/client';
+import type {
+	ClientOptions,
+	HandleWebhookOptions,
+	PaymeshHooks,
+} from './types/client';
 import type {
 	Provider,
 	ProviderCapability,
@@ -7,14 +15,15 @@ import type {
 } from './types/providers';
 
 export type * from './errors';
-
 export { PaymeshError } from './errors';
 export { defineProvider } from './providers';
 export { withRaw } from './shared/raw';
 export type { RetryOptions } from './shared/request';
 export { request } from './shared/request';
 export type * from './types/client';
+export type * from './types/database';
 export type * from './types/providers';
+export { defineDatabaseAdapter, resolveDatabaseSchema };
 
 export const createClient = <
 	P extends Provider<string>,
@@ -23,6 +32,9 @@ export const createClient = <
 	provider,
 	...options
 }: ClientOptions<P, IncludeRaw>) => {
+	const database = options.database;
+	const schema = resolveDatabaseSchema(options.schema);
+
 	const assertCapability = (capability: ProviderCapability) => {
 		if (!provider.capabilities[capability])
 			throw new PaymeshError({
@@ -43,59 +55,116 @@ export const createClient = <
 			options.includeRaw ??
 			false) as CallIncludeRaw,
 	});
+	const baseHooks = options.hooks;
+	const baseIncludeRaw = options.includeRaw;
 
 	return {
 		provider,
+		database,
+		schema,
 		hooks: options.hooks,
 		includeRaw: options.includeRaw,
 		payments: {
-			create: <CallIncludeRaw extends boolean = IncludeRaw>(
+			create: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				data: Parameters<P['payments']['create']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('checkout');
 
-				return provider.payments.create(data, mergeOptions(requestOptions));
+				const payment = await provider.payments.create(
+					data,
+					mergeOptions(requestOptions),
+				);
+
+				if (database) await upsertCheckout(database, schema, payment);
+
+				return payment;
 			},
 		},
 		customers: {
-			create: <CallIncludeRaw extends boolean = IncludeRaw>(
+			create: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				data: Parameters<P['customers']['create']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
 
-				return provider.customers.create(data, mergeOptions(requestOptions));
+				const customer = await provider.customers.create(
+					data,
+					mergeOptions(requestOptions),
+				);
+
+				if (database) await upsertCustomer(database, schema, customer);
+
+				return customer;
 			},
-			get: <CallIncludeRaw extends boolean = IncludeRaw>(
+			get: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['get']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
 
-				return provider.customers.get(id, mergeOptions(requestOptions));
+				const customer = await provider.customers.get(
+					id,
+					mergeOptions(requestOptions),
+				);
+
+				if (database) await upsertCustomer(database, schema, customer);
+
+				return customer;
 			},
-			update: <CallIncludeRaw extends boolean = IncludeRaw>(
+			update: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['update']>[0],
 				data: Parameters<P['customers']['update']>[1],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
 
-				return provider.customers.update(
+				const customer = await provider.customers.update(
 					id,
 					data,
 					mergeOptions(requestOptions),
 				);
+
+				if (database) await upsertCustomer(database, schema, customer);
+
+				return customer;
 			},
-			delete: <CallIncludeRaw extends boolean = IncludeRaw>(
+			delete: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['delete']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
 
-				return provider.customers.delete(id, mergeOptions(requestOptions));
+				const result = await provider.customers.delete(
+					id,
+					mergeOptions(requestOptions),
+				);
+
+				if (database) await upsertCustomer(database, schema, result, true);
+
+				return result;
 			},
+		},
+		webhooks: {
+			handle: <CallIncludeRaw extends boolean = IncludeRaw>(
+				webhookOptions: HandleWebhookOptions<CallIncludeRaw>,
+			) =>
+				handleClientWebhook({
+					provider,
+					database,
+					schema,
+					request: webhookOptions.request,
+					hooks: {
+						...(baseHooks as PaymeshHooks<CallIncludeRaw> | undefined),
+						...(webhookOptions.hooks as
+							| PaymeshHooks<CallIncludeRaw>
+							| undefined),
+					},
+					includeRaw: (webhookOptions.includeRaw ??
+						baseIncludeRaw ??
+						false) as CallIncludeRaw,
+					skipVerify: webhookOptions.skipVerify ?? false,
+				}),
 		},
 		capabilities: provider.capabilities,
 	};

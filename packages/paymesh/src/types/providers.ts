@@ -126,6 +126,39 @@ export interface ProviderRequestOptions<IncludeRaw extends boolean = false> {
 	includeRaw?: IncludeRaw;
 }
 
+export interface ProviderCatalogProduct {
+	id: string;
+	name?: string;
+	description?: string;
+	active?: boolean;
+	metadata?: Record<string, unknown>;
+	version?: string;
+	raw?: unknown;
+}
+
+export interface ProviderCatalogPrice {
+	id: string;
+	productId?: string;
+	active?: boolean;
+	type?: string;
+	currency?: string;
+	amount?: number;
+	interval?: string;
+	intervalCount?: number;
+	metadata?: Record<string, unknown>;
+	version?: string;
+	raw?: unknown;
+}
+
+export interface ProviderCatalogSnapshot {
+	products: ProviderCatalogProduct[];
+	prices: ProviderCatalogPrice[];
+}
+
+export interface ProviderCatalog {
+	list(): Promise<ProviderCatalogSnapshot>;
+}
+
 export interface ProviderPayments {
 	create<IncludeRaw extends boolean = false>(
 		data: PaymentCreateData,
@@ -185,8 +218,19 @@ export type PaymeshEvent<
 	IncludeRaw extends boolean = false,
 > = WithRaw<BasePaymeshEvent<Data>, IncludeRaw>;
 
-export interface ProviderWebhookMapOptions<IncludeRaw extends boolean = false> {
+export interface ProviderWebhookHandleOptions<
+	IncludeRaw extends boolean = false,
+> {
+	request: Request;
 	includeRaw?: IncludeRaw;
+}
+
+export interface ProviderWebhookHandleResult<
+	IncludeRaw extends boolean = false,
+> {
+	event: PaymeshEvent<unknown, IncludeRaw>;
+	deliveryId?: string;
+	hook?: string;
 }
 
 export interface ProviderWebhooks {
@@ -196,30 +240,14 @@ export interface ProviderWebhooks {
 	verify(context: ProviderVerifyWebhookContext): boolean | Promise<boolean>;
 
 	/**
-	 * Parse the provider-specific webhook request
-	 * into the payload used by map().
+	 * Handle the provider-specific webhook request
+	 * and return a normalized Paymesh event plus metadata.
 	 */
-	parse(
-		request: Request,
-	): Record<string, unknown> | Promise<Record<string, unknown>>;
-
-	/**
-	 * Map the provider-specific webhook payload
-	 * into a normalized Paymesh event.
-	 */
-	map<IncludeRaw extends boolean = false>(
-		payload: Record<string, unknown>,
-		options?: ProviderWebhookMapOptions<IncludeRaw>,
+	handle<IncludeRaw extends boolean = false>(
+		options: ProviderWebhookHandleOptions<IncludeRaw>,
 	):
-		| PaymeshEvent<unknown, IncludeRaw>
-		| Promise<PaymeshEvent<unknown, IncludeRaw>>;
-
-	/**
-	 * Return the hook key for a normalized Paymesh event.
-	 */
-	hook<IncludeRaw extends boolean = false>(
-		event: PaymeshEvent<unknown, IncludeRaw>,
-	): string | undefined;
+		| ProviderWebhookHandleResult<IncludeRaw>
+		| Promise<ProviderWebhookHandleResult<IncludeRaw>>;
 }
 
 export interface ProviderDefinition<Name extends string = string> {
@@ -230,6 +258,8 @@ export interface ProviderDefinition<Name extends string = string> {
 	customers: ProviderCustomers;
 
 	webhooks?: ProviderWebhooks;
+
+	catalog?: ProviderCatalog;
 
 	capabilities: ProviderCapabilities;
 }
