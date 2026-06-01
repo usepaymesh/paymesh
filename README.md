@@ -24,16 +24,19 @@ Paymesh is a provider-agnostic payments toolkit for TypeScript applications. It 
 The core package exposes the client and provider contracts. Provider packages implement those contracts, and framework adapters make webhook handling feel native in your HTTP framework.
 
 ```ts
-import { postgres } from "@paymesh/postgres";
+import { drizzle as paymeshDrizzle } from "@paymesh/drizzle";
 import { stripe } from "@paymesh/stripe";
 import { createClient } from "paymesh";
+import { drizzle } from "drizzle-orm/node-postgres";
+
+const db = drizzle(process.env.DATABASE_URL!);
 
 export const paymesh = createClient({
   provider: stripe({
     secret: process.env.STRIPE_API_KEY!,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
   }),
-  database: postgres(process.env.DATABASE_URL!, {
+  database: paymeshDrizzle(db, {
     persistRaw: true,
   }),
   schema: {
@@ -62,21 +65,27 @@ console.log(payment.checkoutUrl);
 
 ## Getting Started
 
-Install the core package, a provider, and the Postgres adapter:
+Install the core package, a provider, and a database adapter:
 
 ```bash
 bun add paymesh @paymesh/stripe @paymesh/postgres
+# or, if you already use Drizzle
+bun add paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
 ```
 
 You can also use your preferred package manager:
 
 ```bash
 npm install paymesh @paymesh/stripe @paymesh/postgres
+npm install paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
 pnpm add paymesh @paymesh/stripe @paymesh/postgres
+pnpm add paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
 yarn add paymesh @paymesh/stripe @paymesh/postgres
+yarn add paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
 ```
 
 Available providers currently include `@paymesh/stripe` and `@paymesh/polar`.
+Available database adapters currently include `@paymesh/postgres` and `@paymesh/drizzle`.
 
 ## Database and CLI
 
@@ -88,6 +97,20 @@ You can pass a database adapter instance directly:
 const paymesh = createClient({
   provider: stripe(),
   database: postgres(process.env.DATABASE_URL!),
+});
+```
+
+Or adapt an existing Drizzle database instance:
+
+```ts
+import { drizzle as drizzleAdapter } from "@paymesh/drizzle";
+import { drizzle } from "drizzle-orm/node-postgres";
+
+const db = drizzle(process.env.DATABASE_URL!);
+
+const paymesh = createClient({
+  provider: stripe(),
+  database: drizzleAdapter(db),
 });
 ```
 
