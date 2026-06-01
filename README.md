@@ -24,6 +24,7 @@ Paymesh is a provider-agnostic payments toolkit for TypeScript applications. It 
 The core package exposes the client and provider contracts. Provider packages implement those contracts, and framework adapters make webhook handling feel native in your HTTP framework.
 
 ```ts
+import { postgres } from "@paymesh/postgres";
 import { stripe } from "@paymesh/stripe";
 import { createClient } from "paymesh";
 
@@ -32,6 +33,17 @@ export const paymesh = createClient({
     secret: process.env.STRIPE_API_KEY!,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
   }),
+  database: postgres(process.env.DATABASE_URL!, {
+    persistRaw: true,
+  }),
+  schema: {
+    prefix: "paymesh_",
+    tables: {
+      customers: {
+        name: "paymesh_customers",
+      },
+    },
+  },
 });
 
 const payment = await paymesh.payments.create({
@@ -50,21 +62,43 @@ console.log(payment.checkoutUrl);
 
 ## Getting Started
 
-Install the core package and a provider:
+Install the core package, a provider, and the Postgres adapter:
 
 ```bash
-bun add paymesh @paymesh/stripe
+bun add paymesh @paymesh/stripe @paymesh/postgres
 ```
 
 You can also use your preferred package manager:
 
 ```bash
-npm install paymesh @paymesh/stripe
-pnpm add paymesh @paymesh/stripe
-yarn add paymesh @paymesh/stripe
+npm install paymesh @paymesh/stripe @paymesh/postgres
+pnpm add paymesh @paymesh/stripe @paymesh/postgres
+yarn add paymesh @paymesh/stripe @paymesh/postgres
 ```
 
 Available providers currently include `@paymesh/stripe` and `@paymesh/polar`.
+
+## Database and CLI
+
+Paymesh can persist normalized relational data for customers, checkouts, invoices, subscriptions, webhook events, products, and prices.
+
+You can pass a database adapter instance directly:
+
+```ts
+const paymesh = createClient({
+  provider: stripe(),
+  database: postgres(process.env.DATABASE_URL!),
+});
+```
+
+The CLI reads the same client module used by your app. Point it at the module with `--client`, `PAYMESH_PATH`, or `package.json.paymesh.path`.
+
+```bash
+paymesh generate --client ./src/lib/paymesh.ts
+paymesh migrate --client ./src/lib/paymesh.ts
+paymesh push --client ./src/lib/paymesh.ts
+paymesh status --client ./src/lib/paymesh.ts
+```
 
 ## Webhooks
 
