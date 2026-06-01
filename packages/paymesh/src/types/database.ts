@@ -3,6 +3,7 @@ import type {
 	BaseCustomerDeleteResult,
 	BasePayment,
 	BasePaymeshEvent,
+	Customer,
 	ProviderCatalogPrice,
 	ProviderCatalogProduct,
 } from './providers';
@@ -54,23 +55,50 @@ export interface CompiledQuery {
 	params: SqlValue[];
 }
 
+export interface PaymeshRepositoryReadOptions<
+	IncludeRaw extends boolean = false,
+> {
+	includeRaw?: IncludeRaw;
+}
+
 export interface PaymeshCustomersRepository {
-	upsert(
+	findByProviderId<IncludeRaw extends boolean = false>(
 		schema: ResolvedDatabaseSchema,
-		customer: BaseCustomer | BaseCustomerDeleteResult,
-		options?: { deleted?: boolean },
+		provider: string,
+		id: string,
+		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
+	): Promise<Customer<IncludeRaw> | null>;
+	upsert(schema: ResolvedDatabaseSchema, customer: BaseCustomer): Promise<void>;
+	markDeleted(
+		schema: ResolvedDatabaseSchema,
+		customer: BaseCustomerDeleteResult,
 	): Promise<void>;
 }
 
 export interface PaymeshCheckoutsRepository {
+	findByProviderId(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		id: string,
+	): Promise<BasePayment | null>;
 	upsert(schema: ResolvedDatabaseSchema, payment: BasePayment): Promise<void>;
 }
 
 export interface PaymeshInvoicesRepository {
+	findByProviderId(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		id: string,
+	): Promise<BasePayment | null>;
 	upsert(schema: ResolvedDatabaseSchema, payment: BasePayment): Promise<void>;
 }
 
 export interface PaymeshSubscriptionsRepository {
+	findByProviderId(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		id: string,
+	): Promise<Record<string, unknown> | null>;
 	upsert(
 		schema: ResolvedDatabaseSchema,
 		event: BasePaymeshEvent<unknown>,

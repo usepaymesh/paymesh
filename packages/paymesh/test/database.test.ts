@@ -49,16 +49,6 @@ describe('database support', () => {
 						),
 				},
 				customers: {
-					create: async (_data, options) =>
-						withRaw(
-							{
-								id: 'cus_123',
-								provider: 'stub',
-								email: 'ada@example.com',
-							},
-							{ id: 'raw_customer_123' },
-							options?.includeRaw,
-						),
 					get: async (_id, options) =>
 						withRaw(
 							{
@@ -69,7 +59,7 @@ describe('database support', () => {
 							{ id: 'raw_customer_123' },
 							options?.includeRaw,
 						),
-					update: async (_id, _data, options) =>
+					upsert: async (_data, options) =>
 						withRaw(
 							{
 								id: 'cus_123',
@@ -94,11 +84,74 @@ describe('database support', () => {
 			database,
 		});
 
-		await client.customers.create({
+		await client.customers.upsert({
 			email: 'ada@example.com',
 		});
 
 		expect(database.customerWrites[0]?.raw).toEqual({ id: 'raw_customer_123' });
+	});
+
+	test('reads customers from the local database without calling the provider', async () => {
+		const database = createMockDatabase({ persistRaw: true });
+		let providerReads = 0;
+		await database.repositories.customers.upsert(resolveDatabaseSchema(), {
+			id: 'cus_local',
+			provider: 'stub',
+			email: 'ada@example.com',
+		});
+		const client = createClient({
+			provider: defineProvider({
+				id: 'stub',
+				capabilities: {
+					checkout: true,
+					customers: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+				},
+				customers: {
+					get: async () => {
+						providerReads += 1;
+						throw new Error('should not be called');
+					},
+					upsert: async (_data, options) =>
+						withRaw(
+							{
+								id: 'cus_local',
+								provider: 'stub',
+								email: 'ada@example.com',
+							},
+							{ id: 'raw_customer_local' },
+							options?.includeRaw,
+						),
+					delete: async (_id, options) =>
+						withRaw(
+							{
+								id: 'cus_local',
+								provider: 'stub',
+								deleted: true,
+							},
+							{ id: 'raw_customer_local' },
+							options?.includeRaw,
+						),
+				},
+			}),
+			database,
+			includeRaw: true,
+		});
+
+		const customer = await client.customers.get('cus_local');
+
+		expect(customer).toMatchObject({
+			id: 'cus_local',
+			provider: 'stub',
+			email: 'ada@example.com',
+		});
+		expect(customer.raw).toBeNull();
+		expect(providerReads).toBe(0);
+		expect(database.customerWrites).toHaveLength(1);
 	});
 
 	test('deduplicates webhook processing by provider event id', async () => {
@@ -126,15 +179,6 @@ describe('database support', () => {
 					),
 			},
 			customers: {
-				create: async (_data, options) =>
-					withRaw(
-						{
-							id: 'cus_123',
-							provider: 'stub',
-						},
-						{ id: 'raw_customer' },
-						options?.includeRaw,
-					),
 				get: async (_id, options) =>
 					withRaw(
 						{
@@ -144,7 +188,7 @@ describe('database support', () => {
 						{ id: 'raw_customer' },
 						options?.includeRaw,
 					),
-				update: async (_id, _data, options) =>
+				upsert: async (_data, options) =>
 					withRaw(
 						{
 							id: 'cus_123',
@@ -257,15 +301,6 @@ describe('database support', () => {
 					),
 			},
 			customers: {
-				create: async (_data, options) =>
-					withRaw(
-						{
-							id: 'cus_123',
-							provider: 'stub',
-						},
-						{ id: 'raw_customer' },
-						options?.includeRaw,
-					),
 				get: async (_id, options) =>
 					withRaw(
 						{
@@ -275,7 +310,7 @@ describe('database support', () => {
 						{ id: 'raw_customer' },
 						options?.includeRaw,
 					),
-				update: async (_id, _data, options) =>
+				upsert: async (_data, options) =>
 					withRaw(
 						{
 							id: 'cus_123',
@@ -380,6 +415,20 @@ function createMockDatabase({
 	persistRaw?: boolean;
 } = {}) {
 	const webhookEvents = new Map<string, { status: string }>();
+	const customers = new Map<
+		string,
+		{
+			id: string;
+			provider: string;
+			email?: string;
+			name?: string;
+			phone?: string;
+			externalId?: string;
+			metadata?: Record<string, unknown>;
+			deleted?: boolean;
+			raw: unknown;
+		}
+	>();
 	const customerWrites: Array<{ raw: unknown }> = [];
 
 	const database = defineDatabaseAdapter({
@@ -388,19 +437,64 @@ function createMockDatabase({
 		persistRaw,
 		repositories: {
 			customers: {
+				async findByProviderId(_schema, provider, id, options) {
+					const customer = customers.get(`${provider}:${id}`);
+					if (!customer || customer.deleted) return null;
+
+					return withRaw(
+						{
+							id: customer.id,
+							provider: customer.provider,
+							email: customer.email,
+							name: customer.name,
+							phone: customer.phone,
+							externalId: customer.externalId,
+							metadata: customer.metadata,
+						},
+						customer.raw,
+						options?.includeRaw,
+					);
+				},
 				async upsert(_schema, customer) {
 					customerWrites.push({
+						raw: persistRaw ? getInternalRaw(customer) : null,
+					});
+					customers.set(`${customer.provider}:${customer.id}`, {
+						id: customer.id,
+						provider: customer.provider,
+						email: customer.email,
+						name: customer.name,
+						phone: customer.phone,
+						externalId: customer.externalId,
+						metadata: customer.metadata,
+						raw: persistRaw ? getInternalRaw(customer) : null,
+					});
+				},
+				async markDeleted(_schema, customer) {
+					customers.set(`${customer.provider}:${customer.id}`, {
+						id: customer.id,
+						provider: customer.provider,
+						deleted: true,
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
 				},
 			},
 			checkouts: {
+				async findByProviderId() {
+					return null;
+				},
 				async upsert() {},
 			},
 			invoices: {
+				async findByProviderId() {
+					return null;
+				},
 				async upsert() {},
 			},
 			subscriptions: {
+				async findByProviderId() {
+					return null;
+				},
 				async upsert() {},
 			},
 			webhookEvents: {

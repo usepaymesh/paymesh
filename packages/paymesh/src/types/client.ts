@@ -7,10 +7,14 @@ import type {
 import type {
 	Customer,
 	CustomerDeleteResult,
+	CustomerUpsertData,
 	Payment,
+	PaymentCreateData,
 	PaymeshEvent,
 	PaymeshEventType,
 	Provider,
+	ProviderCapabilities,
+	ProviderRequestOptions,
 } from './providers';
 
 export type PaymeshHook<Event = PaymeshEvent> = (
@@ -85,13 +89,38 @@ export interface PaymeshWebhookHandler<IncludeRaw extends boolean = false> {
 	): Promise<HandleWebhookResult<IncludeRaw>>;
 }
 
+export interface PaymeshPaymentsClient<IncludeRaw extends boolean = false> {
+	create<CallIncludeRaw extends boolean = IncludeRaw>(
+		data: PaymentCreateData,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<Payment<CallIncludeRaw>>;
+}
+
+export interface PaymeshCustomersClient<IncludeRaw extends boolean = false> {
+	upsert<CallIncludeRaw extends boolean = IncludeRaw>(
+		data: CustomerUpsertData,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<Customer<CallIncludeRaw>>;
+	get<CallIncludeRaw extends boolean = IncludeRaw>(
+		id: string,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<Customer<CallIncludeRaw>>;
+	delete<CallIncludeRaw extends boolean = IncludeRaw>(
+		id: string,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<CustomerDeleteResult<CallIncludeRaw>>;
+}
+
 export interface PaymeshClient<IncludeRaw extends boolean = false> {
 	provider: Provider<string>;
 	hooks?: PaymeshHooks<IncludeRaw>;
 	includeRaw?: IncludeRaw;
 	database?: PaymeshDatabaseDriver;
 	schema: ResolvedDatabaseSchema;
+	payments: PaymeshPaymentsClient<IncludeRaw>;
+	customers: PaymeshCustomersClient<IncludeRaw>;
 	webhooks: PaymeshWebhookHandler<IncludeRaw>;
+	capabilities: ProviderCapabilities;
 }
 
 export interface ClientOptions<

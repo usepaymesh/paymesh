@@ -83,13 +83,13 @@ export const createClient = <
 			},
 		},
 		customers: {
-			create: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				data: Parameters<P['customers']['create']>[0],
+			upsert: async <CallIncludeRaw extends boolean = IncludeRaw>(
+				data: Parameters<P['customers']['upsert']>[0],
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
 
-				const customer = await provider.customers.create(
+				const customer = await provider.customers.upsert(
 					data,
 					mergeOptions(requestOptions),
 				);
@@ -106,35 +106,29 @@ export const createClient = <
 			) => {
 				assertCapability('customers');
 
-				const customer = await provider.customers.get(
-					id,
-					mergeOptions(requestOptions),
-				);
+				const mergedOptions = mergeOptions(requestOptions);
 
 				if (database) {
-					await database.repositories.customers.upsert(schema, customer);
+					const customer =
+						await database.repositories.customers.findByProviderId(
+							schema,
+							provider.id,
+							id,
+							{
+								includeRaw: mergedOptions.includeRaw,
+							},
+						);
+
+					if (customer) return customer;
+
+					throw new PaymeshError({
+						code: 'provider_not_found',
+						message: `Customer "${id}" was not found in the configured database`,
+						provider: provider.id,
+					});
 				}
 
-				return customer;
-			},
-			update: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				id: Parameters<P['customers']['update']>[0],
-				data: Parameters<P['customers']['update']>[1],
-				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => {
-				assertCapability('customers');
-
-				const customer = await provider.customers.update(
-					id,
-					data,
-					mergeOptions(requestOptions),
-				);
-
-				if (database) {
-					await database.repositories.customers.upsert(schema, customer);
-				}
-
-				return customer;
+				return provider.customers.get(id, mergedOptions);
 			},
 			delete: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['delete']>[0],
@@ -148,9 +142,7 @@ export const createClient = <
 				);
 
 				if (database) {
-					await database.repositories.customers.upsert(schema, result, {
-						deleted: true,
-					});
+					await database.repositories.customers.markDeleted(schema, result);
 				}
 
 				return result;

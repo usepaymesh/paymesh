@@ -92,15 +92,9 @@ export type Customer<IncludeRaw extends boolean = false> = WithRaw<
 	IncludeRaw
 >;
 
-export interface CustomerCreateData {
+export interface CustomerUpsertData {
+	id?: string;
 	externalId?: string;
-	name?: string;
-	email?: string;
-	phone?: string;
-	metadata?: Record<string, string | number | boolean | null>;
-}
-
-export interface CustomerUpdateData {
 	name?: string;
 	email?: string;
 	phone?: string;
@@ -167,17 +161,12 @@ export interface ProviderPayments {
 }
 
 export interface ProviderCustomers {
-	create<IncludeRaw extends boolean = false>(
-		data: CustomerCreateData,
-		options?: ProviderRequestOptions<IncludeRaw>,
-	): Promise<Customer<IncludeRaw>>;
 	get<IncludeRaw extends boolean = false>(
 		id: string,
 		options?: ProviderRequestOptions<IncludeRaw>,
 	): Promise<Customer<IncludeRaw>>;
-	update<IncludeRaw extends boolean = false>(
-		id: string,
-		data: CustomerUpdateData,
+	upsert<IncludeRaw extends boolean = false>(
+		data: CustomerUpsertData,
 		options?: ProviderRequestOptions<IncludeRaw>,
 	): Promise<Customer<IncludeRaw>>;
 	delete<IncludeRaw extends boolean = false>(

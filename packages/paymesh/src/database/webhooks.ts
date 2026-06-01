@@ -134,17 +134,22 @@ async function persistEvent(
 	schema: ResolvedDatabaseSchema,
 	event: PaymeshEvent<unknown, boolean>,
 ) {
-	if (
-		event.type === 'customer.created' ||
-		event.type === 'customer.updated' ||
-		event.type === 'customer.deleted'
-	) {
+	if (event.type === 'customer.created' || event.type === 'customer.updated') {
 		await database.repositories.customers.upsert(
 			schema,
 			event.data as Parameters<
 				PaymeshDatabaseDriver['repositories']['customers']['upsert']
 			>[1],
-			{ deleted: event.type === 'customer.deleted' },
+		);
+		return;
+	}
+
+	if (event.type === 'customer.deleted') {
+		await database.repositories.customers.markDeleted(
+			schema,
+			event.data as Parameters<
+				PaymeshDatabaseDriver['repositories']['customers']['markDeleted']
+			>[1],
 		);
 		return;
 	}

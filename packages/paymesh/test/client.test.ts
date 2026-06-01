@@ -128,13 +128,10 @@ describe('client', () => {
 					},
 				},
 				customers: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
 					get: async () => {
 						throw new Error('should not be called');
 					},
-					update: async () => {
+					upsert: async () => {
 						throw new Error('should not be called');
 					},
 					delete: async () => {
@@ -168,13 +165,10 @@ describe('client', () => {
 					},
 				},
 				customers: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
 					get: async () => {
 						throw new Error('should not be called');
 					},
-					update: async () => {
+					upsert: async () => {
 						throw new Error('should not be called');
 					},
 					delete: async () => {
@@ -236,17 +230,6 @@ function createStubProvider({
 						),
 		},
 		customers: {
-			create: async (_data, options) =>
-				withRaw(
-					{
-						id: 'cus_123',
-						provider: 'stub',
-					},
-					{
-						id: 'raw_cus_123',
-					},
-					options?.includeRaw,
-				),
 			get: async (_id, options) =>
 				withRaw(
 					{
@@ -258,7 +241,7 @@ function createStubProvider({
 					},
 					options?.includeRaw,
 				),
-			update: async (_id, _data, options) =>
+			upsert: async (_data, options) =>
 				withRaw(
 					{
 						id: 'cus_123',
