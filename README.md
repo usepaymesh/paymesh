@@ -81,6 +81,7 @@ Available database adapters currently include `@paymesh/postgres`, `@paymesh/dri
 ## Database and CLI
 
 Paymesh can persist normalized relational data for customers, checkouts, invoices, subscriptions, webhook events, products, and prices.
+When a database is configured, `paymesh.customers.get(id)` reads from the local database instead of calling the provider API.
 
 You can pass a database adapter instance directly:
 
@@ -126,6 +127,22 @@ paymesh generate --client ./src/lib/paymesh.ts
 paymesh migrate --client ./src/lib/paymesh.ts
 paymesh push --client ./src/lib/paymesh.ts
 paymesh status --client ./src/lib/paymesh.ts
+```
+
+`paymesh generate` writes both `paymesh/history.json` and `paymesh/migrations/*.sql`. The history file is the schema manifest used by `migrate` and `status`.
+
+Customer writes go through a single upsert entrypoint:
+
+```ts
+await paymesh.customers.upsert({
+  email: "ada@example.com",
+  externalId: "user_123",
+});
+
+await paymesh.customers.upsert({
+  id: "cus_123",
+  name: "Ada Lovelace",
+});
 ```
 
 ## Webhooks
