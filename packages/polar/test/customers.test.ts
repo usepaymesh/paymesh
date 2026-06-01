@@ -72,7 +72,7 @@ describe('polar customers', () => {
 			}) as typeof fetch,
 		});
 
-		const created = await client.customers.create({
+		const created = await client.customers.upsert({
 			name: 'Ana',
 			email: 'ana@example.com',
 			externalId: 'user_ext_123',
@@ -81,7 +81,8 @@ describe('polar customers', () => {
 			},
 		});
 		const found = await client.customers.get('cus_create');
-		const updated = await client.customers.update('cus_create', {
+		const updated = await client.customers.upsert({
+			id: 'cus_create',
 			name: 'Ana Silva',
 			metadata: {
 				plan: 'business',
@@ -153,7 +154,7 @@ describe('polar customers', () => {
 		});
 
 		await expect(
-			provider.customers.create({
+			provider.customers.upsert({
 				name: 'Ana',
 			}),
 		).rejects.toMatchObject({
@@ -219,13 +220,10 @@ describe('polar customers', () => {
 					},
 				},
 				customers: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
 					get: async () => {
 						throw new Error('should not be called');
 					},
-					update: async () => {
+					upsert: async () => {
 						throw new Error('should not be called');
 					},
 					delete: async () => {

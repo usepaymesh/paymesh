@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
-	type CustomerCreateData,
-	type CustomerUpdateData,
+	type CustomerUpsertData,
 	defineProvider,
 	type Payment,
 	type PaymentCreateData,
@@ -41,6 +40,17 @@ const POLAR_CAPABILITIES = {
 	customerPortal: true,
 	customers: true,
 } satisfies ProviderCapabilities;
+
+function mapPolarCustomer(customer: PolarCustomer) {
+	return {
+		id: customer.id,
+		provider: 'polar' as const,
+		externalId: customer.external_id ?? undefined,
+		name: customer.name ?? undefined,
+		email: customer.email ?? undefined,
+		metadata: customer.metadata ?? undefined,
+	};
+}
 
 export const polar = ({
 	accessToken = process.env.POLAR_ACCESS_TOKEN,
@@ -133,11 +143,11 @@ export const polar = ({
 			},
 		},
 		customers: {
-			async create<IncludeRaw extends boolean = false>(
-				data: CustomerCreateData,
+			async upsert<IncludeRaw extends boolean = false>(
+				data: CustomerUpsertData,
 				options?: ProviderRequestOptions<IncludeRaw>,
 			) {
-				if (!data.email) {
+				if (!data.id && !data.email) {
 					throw new PaymeshError({
 						code: 'invalid_request',
 						message:
@@ -152,31 +162,37 @@ export const polar = ({
 					),
 				);
 
-				const customer = await request<PolarCustomer>('/v1/customers', {
-					provider: 'polar',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
-					method: 'POST',
-					headers,
-					body: {
-						email: data.email,
-						name: data.name,
-						external_id: data.externalId,
-						metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+				const customer = await request<PolarCustomer>(
+					data.id
+						? `/v1/customers/${encodeURIComponent(data.id)}`
+						: '/v1/customers',
+					{
+						provider: 'polar',
+						baseUrl: options?.baseUrl ?? baseUrl,
+						timeout: options?.timeout ?? timeout,
+						retry: options?.retry ?? retry,
+						fetch: options?.fetch ?? fetch,
+						method: data.id ? 'PATCH' : 'POST',
+						headers,
+						body: data.id
+							? {
+									email: data.email,
+									name: data.name,
+									metadata:
+										Object.keys(metadata).length > 0 ? metadata : undefined,
+								}
+							: {
+									email: data.email,
+									name: data.name,
+									external_id: data.externalId,
+									metadata:
+										Object.keys(metadata).length > 0 ? metadata : undefined,
+								},
 					},
-				});
+				);
 
 				return withRaw(
-					{
-						id: customer.id,
-						provider: 'polar',
-						externalId: customer.external_id ?? undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
+					mapPolarCustomer(customer),
 					customer,
 					options?.includeRaw,
 				);
@@ -198,56 +214,7 @@ export const polar = ({
 				);
 
 				return withRaw(
-					{
-						id: customer.id,
-						provider: 'polar',
-						externalId: customer.external_id ?? undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
-					customer,
-					options?.includeRaw,
-				);
-			},
-			async update<IncludeRaw extends boolean = false>(
-				id: string,
-				data: CustomerUpdateData,
-				options?: ProviderRequestOptions<IncludeRaw>,
-			) {
-				const metadata = Object.fromEntries(
-					Object.entries(data.metadata ?? {}).filter(
-						([, value]) => value !== null,
-					),
-				);
-
-				const customer = await request<PolarCustomer>(
-					`/v1/customers/${encodeURIComponent(id)}`,
-					{
-						provider: 'polar',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
-						method: 'PATCH',
-						headers,
-						body: {
-							email: data.email,
-							name: data.name,
-							metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-						},
-					},
-				);
-
-				return withRaw(
-					{
-						id: customer.id,
-						provider: 'polar',
-						externalId: customer.external_id ?? undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
+					mapPolarCustomer(customer),
 					customer,
 					options?.includeRaw,
 				);

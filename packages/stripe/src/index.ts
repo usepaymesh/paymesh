@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
-	type CustomerCreateData,
-	type CustomerUpdateData,
+	type CustomerUpsertData,
 	defineProvider,
 	type PaymentCreateData,
 	type PaymentStatus,
@@ -76,6 +75,22 @@ const STRIPE_PAYMENT_STATUSES: Record<string, PaymentStatus> = {
 	failed: 'failed',
 	canceled: 'canceled',
 };
+
+function mapStripeCustomer(customer: StripeCustomer) {
+	return {
+		id: customer.id,
+		provider: 'stripe' as const,
+		externalId:
+			typeof customer.metadata?.externalId === 'string' &&
+			customer.metadata.externalId.length > 0
+				? customer.metadata.externalId
+				: undefined,
+		name: customer.name ?? undefined,
+		email: customer.email ?? undefined,
+		phone: customer.phone ?? undefined,
+		metadata: customer.metadata ?? undefined,
+	};
+}
 
 export const stripe = ({
 	secret = process.env.STRIPE_API_KEY,
@@ -174,8 +189,8 @@ export const stripe = ({
 			},
 		},
 		customers: {
-			async create<IncludeRaw extends boolean = false>(
-				data: CustomerCreateData,
+			async upsert<IncludeRaw extends boolean = false>(
+				data: CustomerUpsertData,
 				options?: ProviderRequestOptions<IncludeRaw>,
 			) {
 				const body = new URLSearchParams();
@@ -189,31 +204,24 @@ export const stripe = ({
 				}
 				if (data.externalId) body.set('metadata[externalId]', data.externalId);
 
-				const customer = await request<StripeCustomer>('/v1/customers', {
-					provider: 'stripe',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
-					method: 'POST',
-					headers,
-					body,
-				});
+				const customer = await request<StripeCustomer>(
+					data.id
+						? `/v1/customers/${encodeURIComponent(data.id)}`
+						: '/v1/customers',
+					{
+						provider: 'stripe',
+						baseUrl: options?.baseUrl ?? baseUrl,
+						timeout: options?.timeout ?? timeout,
+						retry: options?.retry ?? retry,
+						fetch: options?.fetch ?? fetch,
+						method: 'POST',
+						headers,
+						body,
+					},
+				);
 
 				return withRaw(
-					{
-						id: customer.id,
-						provider: 'stripe',
-						externalId:
-							typeof customer.metadata?.externalId === 'string' &&
-							customer.metadata.externalId.length > 0
-								? customer.metadata.externalId
-								: undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						phone: customer.phone ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
+					mapStripeCustomer(customer),
 					customer,
 					options?.includeRaw,
 				);
@@ -235,66 +243,7 @@ export const stripe = ({
 				);
 
 				return withRaw(
-					{
-						id: customer.id,
-						provider: 'stripe',
-						externalId:
-							typeof customer.metadata?.externalId === 'string' &&
-							customer.metadata.externalId.length > 0
-								? customer.metadata.externalId
-								: undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						phone: customer.phone ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
-					customer,
-					options?.includeRaw,
-				);
-			},
-			async update<IncludeRaw extends boolean = false>(
-				id: string,
-				data: CustomerUpdateData,
-				options?: ProviderRequestOptions<IncludeRaw>,
-			) {
-				const body = new URLSearchParams();
-
-				if (data.name !== undefined) body.set('name', data.name);
-				if (data.email !== undefined) body.set('email', data.email);
-				if (data.phone !== undefined) body.set('phone', data.phone);
-
-				for (const [key, value] of Object.entries(data.metadata ?? {})) {
-					if (value !== null) body.set(`metadata[${key}]`, String(value));
-				}
-
-				const customer = await request<StripeCustomer>(
-					`/v1/customers/${encodeURIComponent(id)}`,
-					{
-						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
-						method: 'POST',
-						headers,
-						body,
-					},
-				);
-
-				return withRaw(
-					{
-						id: customer.id,
-						provider: 'stripe',
-						externalId:
-							typeof customer.metadata?.externalId === 'string' &&
-							customer.metadata.externalId.length > 0
-								? customer.metadata.externalId
-								: undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						phone: customer.phone ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
+					mapStripeCustomer(customer),
 					customer,
 					options?.includeRaw,
 				);

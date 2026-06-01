@@ -1,9 +1,11 @@
-import type {
-	CompiledQuery,
-	DatabaseTableKey,
-	PaymeshDatabaseRepositories,
-	ResolvedDatabaseSchema,
-	SqlValue,
+import {
+	type BasePayment,
+	type CompiledQuery,
+	type DatabaseTableKey,
+	type PaymeshDatabaseRepositories,
+	type ResolvedDatabaseSchema,
+	type SqlValue,
+	withRaw,
 } from 'paymesh';
 
 interface SqlExecutor {
@@ -17,161 +19,148 @@ export function createRepositories(
 ): PaymeshDatabaseRepositories {
 	const repositories: PaymeshDatabaseRepositories = {
 		customers: {
-			upsert: (schema, customer, options) =>
-				upsertByProviderId(
-					executor,
-					schema,
-					'customers',
+			async findByProviderId(schema, provider, id, options) {
+				const [row] = await executor.query<{
+					provider: string;
+					provider_id: string;
+					external_id: string | null;
+					name: string | null;
+					email: string | null;
+					phone: string | null;
+					metadata: Record<string, unknown> | null;
+					raw: unknown;
+				}>({
+					sql: `SELECT provider, provider_id, external_id, name, email, phone, metadata, raw
+						FROM ${tableName(schema, 'customers')}
+						WHERE provider = $1 AND provider_id = $2 AND deleted_at IS NULL
+						LIMIT 1`,
+					params: [provider, id],
+				});
+
+				if (!row) return null;
+
+				return withRaw(
 					{
-						provider: customer.provider,
-						provider_id: customer.id,
-						version: getVersion(customer, getInternalRaw(customer)),
-						external_id:
-							'externalId' in customer ? (customer.externalId ?? null) : null,
-						name: 'name' in customer ? (customer.name ?? null) : null,
-						email: 'email' in customer ? (customer.email ?? null) : null,
-						phone: 'phone' in customer ? (customer.phone ?? null) : null,
-						metadata:
-							'metadata' in customer ? (customer.metadata ?? null) : null,
-						data: customer,
-						raw: getPersistableRaw(executor, customer),
-						deleted_at: options?.deleted ? new Date().toISOString() : null,
-						updated_at: new Date().toISOString(),
+						id: row.provider_id,
+						provider: row.provider,
+						externalId: row.external_id ?? undefined,
+						name: row.name ?? undefined,
+						email: row.email ?? undefined,
+						phone: row.phone ?? undefined,
+						metadata: row.metadata ?? undefined,
 					},
-					[
-						'external_id',
-						'name',
-						'email',
-						'phone',
-						'metadata',
-						'data',
-						'raw',
-						'deleted_at',
-						'updated_at',
-						'version',
-					],
-				),
+					row.raw,
+					options?.includeRaw,
+				);
+			},
+			upsert: (schema, customer) =>
+				upsertByProviderId(executor, schema, 'customers', {
+					provider: customer.provider,
+					provider_id: customer.id,
+					version: getVersion(customer, getInternalRaw(customer)),
+					external_id: customer.externalId ?? null,
+					name: customer.name ?? null,
+					email: customer.email ?? null,
+					phone: customer.phone ?? null,
+					metadata: customer.metadata ?? null,
+					data: withoutRaw(customer),
+					raw: getPersistableRaw(executor, customer),
+					deleted_at: null,
+					updated_at: new Date().toISOString(),
+				}),
+			markDeleted: (schema, customer) =>
+				upsertByProviderId(executor, schema, 'customers', {
+					provider: customer.provider,
+					provider_id: customer.id,
+					version: getVersion(customer, getInternalRaw(customer)),
+					external_id: null,
+					name: null,
+					email: null,
+					phone: null,
+					metadata: null,
+					data: withoutRaw(customer),
+					raw: getPersistableRaw(executor, customer),
+					deleted_at: new Date().toISOString(),
+					updated_at: new Date().toISOString(),
+				}),
 		},
 		checkouts: {
-			upsert: (schema, payment) =>
-				upsertByProviderId(
-					executor,
-					schema,
-					'checkouts',
-					{
-						provider: payment.provider,
-						provider_id: payment.id,
-						version: getVersion(payment, getInternalRaw(payment)),
-						customer_provider_id: payment.customer?.id ?? null,
-						amount: payment.amount,
-						currency: payment.currency,
-						status: payment.status,
-						checkout_url: payment.checkoutUrl ?? null,
-						metadata: payment.metadata ?? null,
-						data: payment,
-						raw: getPersistableRaw(executor, payment),
-						updated_at: new Date().toISOString(),
-					},
-					[
-						'customer_provider_id',
-						'amount',
-						'currency',
-						'status',
-						'checkout_url',
-						'metadata',
-						'data',
-						'raw',
-						'updated_at',
-						'version',
-					],
+			findByProviderId: (schema, provider, id) =>
+				findDataByProviderId(executor, schema, 'checkouts', provider, id).then(
+					(data) => data as BasePayment | null,
 				),
+			upsert: (schema, payment) =>
+				upsertByProviderId(executor, schema, 'checkouts', {
+					provider: payment.provider,
+					provider_id: payment.id,
+					version: getVersion(payment, getInternalRaw(payment)),
+					customer_provider_id: payment.customer?.id ?? null,
+					amount: payment.amount,
+					currency: payment.currency,
+					status: payment.status,
+					checkout_url: payment.checkoutUrl ?? null,
+					metadata: payment.metadata ?? null,
+					data: withoutRaw(payment),
+					raw: getPersistableRaw(executor, payment),
+					updated_at: new Date().toISOString(),
+				}),
 		},
 		invoices: {
-			upsert: (schema, payment) =>
-				upsertByProviderId(
-					executor,
-					schema,
-					'invoices',
-					{
-						provider: payment.provider,
-						provider_id: payment.id,
-						version: getVersion(payment, getInternalRaw(payment)),
-						customer_provider_id: payment.customer?.id ?? null,
-						checkout_provider_id: payment.checkoutUrl ? payment.id : null,
-						subscription_provider_id: null,
-						amount: payment.amount,
-						currency: payment.currency,
-						status: payment.status,
-						metadata: payment.metadata ?? null,
-						data: payment,
-						raw: getPersistableRaw(executor, payment),
-						updated_at: new Date().toISOString(),
-					},
-					[
-						'customer_provider_id',
-						'checkout_provider_id',
-						'subscription_provider_id',
-						'amount',
-						'currency',
-						'status',
-						'metadata',
-						'data',
-						'raw',
-						'updated_at',
-						'version',
-					],
+			findByProviderId: (schema, provider, id) =>
+				findDataByProviderId(executor, schema, 'invoices', provider, id).then(
+					(data) => data as BasePayment | null,
 				),
+			upsert: (schema, payment) =>
+				upsertByProviderId(executor, schema, 'invoices', {
+					provider: payment.provider,
+					provider_id: payment.id,
+					version: getVersion(payment, getInternalRaw(payment)),
+					customer_provider_id: payment.customer?.id ?? null,
+					checkout_provider_id: payment.checkoutUrl ? payment.id : null,
+					subscription_provider_id: null,
+					amount: payment.amount,
+					currency: payment.currency,
+					status: payment.status,
+					metadata: payment.metadata ?? null,
+					data: withoutRaw(payment),
+					raw: getPersistableRaw(executor, payment),
+					updated_at: new Date().toISOString(),
+				}),
 		},
 		subscriptions: {
+			findByProviderId: (schema, provider, id) =>
+				findDataByProviderId(executor, schema, 'subscriptions', provider, id),
 			upsert: (schema, event) => {
 				const data = asRecord(event.data);
-				return upsertByProviderId(
-					executor,
-					schema,
-					'subscriptions',
-					{
-						provider: event.provider,
-						provider_id:
-							typeof data.id === 'string' && data.id.length > 0
-								? data.id
-								: event.id,
-						version: getVersion(data, getInternalRaw(event.data)),
-						customer_provider_id:
-							typeof data.customer_id === 'string' ? data.customer_id : null,
-						product_provider_id:
-							typeof data.product_id === 'string' ? data.product_id : null,
-						price_provider_id:
-							typeof data.price_id === 'string' ? data.price_id : null,
-						status:
-							event.type === 'subscription.canceled'
-								? 'canceled'
-								: typeof data.status === 'string'
-									? data.status
-									: 'active',
-						amount: typeof data.amount === 'number' ? data.amount : null,
-						currency: typeof data.currency === 'string' ? data.currency : null,
-						cancel_at_period_end:
-							typeof data.cancel_at_period_end === 'boolean'
-								? data.cancel_at_period_end
-								: null,
-						data,
-						raw: getPersistableRaw(executor, event.data),
-						updated_at: new Date().toISOString(),
-					},
-					[
-						'customer_provider_id',
-						'product_provider_id',
-						'price_provider_id',
-						'status',
-						'amount',
-						'currency',
-						'cancel_at_period_end',
-						'data',
-						'raw',
-						'updated_at',
-						'version',
-					],
-				);
+				return upsertByProviderId(executor, schema, 'subscriptions', {
+					provider: event.provider,
+					provider_id:
+						typeof data.id === 'string' && data.id.length > 0
+							? data.id
+							: event.id,
+					version: getVersion(data, getInternalRaw(event.data)),
+					customer_provider_id:
+						typeof data.customer_id === 'string' ? data.customer_id : null,
+					product_provider_id:
+						typeof data.product_id === 'string' ? data.product_id : null,
+					price_provider_id:
+						typeof data.price_id === 'string' ? data.price_id : null,
+					status:
+						event.type === 'subscription.canceled'
+							? 'canceled'
+							: typeof data.status === 'string'
+								? data.status
+								: 'active',
+					amount: typeof data.amount === 'number' ? data.amount : null,
+					currency: typeof data.currency === 'string' ? data.currency : null,
+					cancel_at_period_end:
+						typeof data.cancel_at_period_end === 'boolean'
+							? data.cancel_at_period_end
+							: null,
+					data,
+					raw: getPersistableRaw(executor, event.data),
+					updated_at: new Date().toISOString(),
+				});
 			},
 		},
 		webhookEvents: {
@@ -200,7 +189,7 @@ export function createRepositories(
 						deliveryId,
 						getVersion(event, getInternalRaw(event)),
 						event.type,
-						event,
+						withoutRaw(event),
 						getPersistableRaw(executor, event),
 					],
 				});
@@ -212,15 +201,15 @@ export function createRepositories(
 			markProcessed: (schema, event, deliveryId) =>
 				executor.execute({
 					sql: `UPDATE ${tableName(schema, 'webhookEvents')}
-					 SET status = 'processed', processed_at = NOW(), updated_at = NOW(), last_error = NULL
-					 WHERE provider = $1 AND provider_id = $2`,
+						SET status = 'processed', processed_at = NOW(), updated_at = NOW(), last_error = NULL
+						WHERE provider = $1 AND provider_id = $2`,
 					params: [event.provider, deliveryId],
 				}),
 			markFailed: (schema, event, deliveryId, error) =>
 				executor.execute({
 					sql: `UPDATE ${tableName(schema, 'webhookEvents')}
-					 SET status = 'failed', last_error = $3, updated_at = NOW()
-					 WHERE provider = $1 AND provider_id = $2`,
+						SET status = 'failed', last_error = $3, updated_at = NOW()
+						WHERE provider = $1 AND provider_id = $2`,
 					params: [
 						event.provider,
 						deliveryId,
@@ -242,20 +231,10 @@ export function createRepositories(
 						description: product.description ?? null,
 						active: product.active ?? null,
 						metadata: product.metadata ?? null,
-						data: product,
+						data: withoutRaw(product),
 						raw: getPersistableCatalogRaw(executor, product.raw),
 						updated_at: new Date().toISOString(),
 					})),
-					[
-						'name',
-						'description',
-						'active',
-						'metadata',
-						'data',
-						'raw',
-						'updated_at',
-						'version',
-					],
 				),
 		},
 		prices: {
@@ -276,24 +255,10 @@ export function createRepositories(
 						interval: price.interval ?? null,
 						interval_count: price.intervalCount ?? null,
 						metadata: price.metadata ?? null,
-						data: price,
+						data: withoutRaw(price),
 						raw: getPersistableCatalogRaw(executor, price.raw),
 						updated_at: new Date().toISOString(),
 					})),
-					[
-						'product_provider_id',
-						'active',
-						'type',
-						'currency',
-						'amount',
-						'interval',
-						'interval_count',
-						'metadata',
-						'data',
-						'raw',
-						'updated_at',
-						'version',
-					],
 				),
 		},
 		migrations: {
@@ -327,27 +292,43 @@ export function createRepositories(
 	return repositories;
 }
 
+function findDataByProviderId(
+	executor: SqlExecutor,
+	schema: ResolvedDatabaseSchema,
+	tableKey: DatabaseTableKey,
+	provider: string,
+	id: string,
+) {
+	return executor
+		.query<{ data: Record<string, unknown> | null }>({
+			sql: `SELECT data
+				FROM ${tableName(schema, tableKey)}
+				WHERE provider = $1 AND provider_id = $2
+				LIMIT 1`,
+			params: [provider, id],
+		})
+		.then(([row]) => row?.data ?? null);
+}
+
 function upsertByProviderId(
 	executor: SqlExecutor,
 	schema: ResolvedDatabaseSchema,
 	tableKey: DatabaseTableKey,
 	row: Record<string, SqlValue>,
-	updateColumns: string[],
 ) {
 	const entries = Object.entries(row);
-	const columns = entries.map(([key]) => quoteIdentifier(key));
-	const params = entries.map(([, value]) => value);
-	const placeholders = params.map((_, index) => `$${index + 1}`);
-	const updates = updateColumns.map(
-		(column) =>
-			`${quoteIdentifier(column)} = EXCLUDED.${quoteIdentifier(column)}`,
-	);
+	const updates = entries
+		.filter(([column]) => column !== 'provider' && column !== 'provider_id')
+		.map(
+			([column]) =>
+				`${quoteIdentifier(column)} = EXCLUDED.${quoteIdentifier(column)}`,
+		);
 
 	return executor.execute({
-		sql: `INSERT INTO ${tableName(schema, tableKey)} (${columns.join(', ')})
-		 VALUES (${placeholders.join(', ')})
-		 ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
-		params,
+		sql: `INSERT INTO ${tableName(schema, tableKey)} (${entries.map(([column]) => quoteIdentifier(column)).join(', ')})
+			VALUES (${entries.map((_, index) => `$${index + 1}`).join(', ')})
+			ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
+		params: entries.map(([, value]) => value),
 	});
 }
 
@@ -356,7 +337,6 @@ function upsertManyByProviderId(
 	schema: ResolvedDatabaseSchema,
 	tableKey: DatabaseTableKey,
 	rows: Array<Record<string, SqlValue>>,
-	updateColumns: string[],
 ) {
 	if (rows.length === 0) return Promise.resolve();
 
@@ -370,31 +350,42 @@ function upsertManyByProviderId(
 
 		return `(${placeholders.join(', ')})`;
 	});
-	const updates = updateColumns.map(
-		(column) =>
-			`${quoteIdentifier(column)} = EXCLUDED.${quoteIdentifier(column)}`,
-	);
+	const updates = columns
+		.filter((column) => column !== 'provider' && column !== 'provider_id')
+		.map(
+			(column) =>
+				`${quoteIdentifier(column)} = EXCLUDED.${quoteIdentifier(column)}`,
+		);
 
 	return executor.execute({
 		sql: `INSERT INTO ${tableName(schema, tableKey)} (${columns.map((column) => quoteIdentifier(column)).join(', ')})
-		 VALUES ${values.join(', ')}
-		 ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
+			VALUES ${values.join(', ')}
+			ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
 		params,
 	});
+}
+
+function withoutRaw(value: unknown) {
+	if (typeof value !== 'object' || value === null) return {};
+
+	const { raw: _raw, ...data } = value as Record<string, unknown>;
+	return data;
 }
 
 function getPersistableRaw(
 	executor: Pick<SqlExecutor, 'persistRaw'>,
 	value: unknown,
 ) {
-	return executor.persistRaw ? getInternalRaw(value) : null;
+	return executor.persistRaw
+		? ((getInternalRaw(value) ?? null) as SqlValue)
+		: null;
 }
 
 function getPersistableCatalogRaw(
 	executor: Pick<SqlExecutor, 'persistRaw'>,
 	value: unknown,
 ) {
-	return executor.persistRaw ? (value ?? null) : null;
+	return executor.persistRaw ? ((value ?? null) as SqlValue) : null;
 }
 
 function getVersion(value: unknown, raw: unknown) {
