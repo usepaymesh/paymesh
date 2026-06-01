@@ -2,8 +2,8 @@ import type { Command } from 'commander';
 import { loadClient } from '../lib/client';
 import {
 	getAppliedPaymeshMigrations,
-	getPaymeshMigrationFiles,
-	readMigrationFiles,
+	getExpectedMigrations,
+	resolveHistoryPath,
 	resolveMigrationsDir,
 } from '../lib/migrations';
 import { compileQuery } from '../lib/sql';
@@ -29,25 +29,24 @@ export function registerMigrateCommand(program: Command) {
 
 			try {
 				const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);
+				const historyPath = resolveHistoryPath(process.cwd());
 				const [localFiles, applied] = await Promise.all([
-					readMigrationFiles(migrationsDir),
+					getExpectedMigrations(migrationsDir, historyPath, client.schema),
 					getAppliedPaymeshMigrations(client.database, client.schema),
 				]);
-				const files =
-					localFiles.length > 0
-						? localFiles
-						: getPaymeshMigrationFiles(client.schema);
-				const pending = files.filter((file) => !applied.includes(file.name));
+				const pending = localFiles.filter(
+					(file) => !applied.includes(file.file),
+				);
 
 				for (const file of pending) {
 					await client.database.transaction(async (tx) => {
 						await tx.execute(compileQuery(file.sql));
 						await tx.repositories.migrations.recordApplied(
 							client.schema,
-							file.name,
+							file.file,
 						);
 					});
-					console.log(`Applied ${file.name}`);
+					console.log(`Applied ${file.file}`);
 				}
 
 				if (pending.length === 0) {

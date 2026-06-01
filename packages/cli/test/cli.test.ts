@@ -9,13 +9,18 @@ import {
 	resolveDatabaseSchema,
 } from 'paymesh';
 import {
+	createMigrationHistory,
 	getExpectedMigrationNames,
+	getMigrationHistoryStatus,
 	getPaymeshMigrationFiles,
 	loadClient,
 	pushProviderCatalog,
 	readMigrationFiles,
+	readMigrationHistory,
 	resolveClientPath,
+	resolveHistoryPath,
 	writeMigrationFiles,
+	writeMigrationHistory,
 } from '../src/index';
 
 const tempDirectories: string[] = [];
@@ -77,18 +82,34 @@ describe('cli helpers', () => {
 		const schema = resolveDatabaseSchema();
 		const files = getPaymeshMigrationFiles(schema);
 		const migrationsDir = path.join(directory, 'paymesh', 'migrations');
+		const historyPath = resolveHistoryPath(directory);
 
 		await writeMigrationFiles(migrationsDir, files);
+		await writeMigrationHistory(historyPath, createMigrationHistory(files));
 		const readBack = await readMigrationFiles(migrationsDir);
+		const history = await readMigrationHistory(historyPath);
 		const expected = await getExpectedMigrationNames(
 			migrationsDir,
 			resolveDatabaseSchema(),
+			historyPath,
+		);
+		const historyStatus = await getMigrationHistoryStatus(
+			migrationsDir,
+			historyPath,
+			resolveDatabaseSchema(),
 		);
 
-		expect(readBack.map((file) => file.name)).toEqual(
-			files.map((file) => file.name),
+		expect(readBack.map((file) => file.file)).toEqual(
+			files.map((file) => file.file),
 		);
-		expect(expected).toEqual(files.map((file) => file.name));
+		expect(history?.migrations.map((migration) => migration.file)).toEqual(
+			files.map((file) => file.file),
+		);
+		expect(expected).toEqual(files.map((file) => file.file));
+		expect(historyStatus).toMatchObject({
+			exists: true,
+			valid: true,
+		});
 	});
 
 	test('pushes catalog through cli helper', async () => {
@@ -100,15 +121,28 @@ describe('cli helpers', () => {
 			persistRaw: false,
 			repositories: {
 				customers: {
+					async findByProviderId() {
+						return null;
+					},
 					async upsert() {},
+					async markDeleted() {},
 				},
 				checkouts: {
+					async findByProviderId() {
+						return null;
+					},
 					async upsert() {},
 				},
 				invoices: {
+					async findByProviderId() {
+						return null;
+					},
 					async upsert() {},
 				},
 				subscriptions: {
+					async findByProviderId() {
+						return null;
+					},
 					async upsert() {},
 				},
 				webhookEvents: {
@@ -159,13 +193,10 @@ describe('cli helpers', () => {
 					},
 				},
 				customers: {
-					create: async () => {
-						throw new Error('not used');
-					},
 					get: async () => {
 						throw new Error('not used');
 					},
-					update: async () => {
+					upsert: async () => {
 						throw new Error('not used');
 					},
 					delete: async () => {

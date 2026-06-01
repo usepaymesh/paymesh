@@ -2,7 +2,8 @@ import type { Command } from 'commander';
 import { loadClient } from '../lib/client';
 import {
 	getAppliedPaymeshMigrations,
-	getExpectedMigrationNames,
+	getMigrationHistoryStatus,
+	resolveHistoryPath,
 	resolveMigrationsDir,
 } from '../lib/migrations';
 import { getPaymeshStatus } from '../lib/status';
@@ -26,17 +27,27 @@ export function registerStatusCommand(program: Command) {
 
 			try {
 				const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);
-				const [expected, applied] = await Promise.all([
-					getExpectedMigrationNames(migrationsDir, client.schema),
+				const historyPath = resolveHistoryPath(process.cwd());
+				const [history, applied] = await Promise.all([
+					getMigrationHistoryStatus(migrationsDir, historyPath, client.schema),
 					client.database == null
 						? Promise.resolve<string[]>([])
 						: getAppliedPaymeshMigrations(client.database, client.schema),
 				]);
-				const status = await getPaymeshStatus(client, applied, expected);
+				const expected = history.migrations;
+				const status = await getPaymeshStatus(
+					client,
+					applied,
+					expected,
+					history,
+				);
 
 				console.log(`Provider: ${status.provider.id}`);
 				console.log(
 					`Database: ${status.database.configured ? (status.database.connected ? 'connected' : 'configured') : 'not configured'}`,
+				);
+				console.log(
+					`History: ${status.history.exists ? (status.history.valid ? 'valid' : 'invalid') : 'missing'}`,
 				);
 				console.log(
 					`Migrations: ${status.migrations.upToDate ? 'up to date' : `${status.migrations.pending.length} pending`}`,

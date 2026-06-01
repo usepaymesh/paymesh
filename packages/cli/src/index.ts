@@ -7,13 +7,23 @@ import { registerStatusCommand } from './commands/status';
 export { pushProviderCatalog } from './lib/catalog';
 export { loadClient, resolveClientPath } from './lib/client';
 export {
+	createMigrationHistory,
+	DEFAULT_HISTORY_FILE,
 	DEFAULT_MIGRATIONS_DIR,
 	getAppliedPaymeshMigrations,
 	getExpectedMigrationNames,
+	getExpectedMigrations,
+	getMigrationHistoryStatus,
 	getPaymeshMigrationFiles,
 	type PaymeshMigrationFile,
+	type PaymeshMigrationHistory,
+	type PaymeshMigrationHistoryEntry,
+	type PaymeshMigrationHistoryStatus,
 	readMigrationFiles,
+	readMigrationHistory,
+	resolveHistoryPath,
 	writeMigrationFiles,
+	writeMigrationHistory,
 } from './lib/migrations';
 
 import packageJson from 'package.json';

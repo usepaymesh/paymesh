@@ -2,9 +2,12 @@ import path from 'node:path';
 import type { Command } from 'commander';
 import { loadClient } from '../lib/client';
 import {
+	createMigrationHistory,
 	getPaymeshMigrationFiles,
+	resolveHistoryPath,
 	resolveMigrationsDir,
 	writeMigrationFiles,
+	writeMigrationHistory,
 } from '../lib/migrations';
 
 export function registerGenerateCommand(program: Command) {
@@ -22,14 +25,19 @@ export function registerGenerateCommand(program: Command) {
 				explicitPath: options.client,
 			});
 			const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);
+			const historyPath = resolveHistoryPath(process.cwd());
 			const files = getPaymeshMigrationFiles(client.schema);
 
-			await writeMigrationFiles(migrationsDir, files);
+			await Promise.all([
+				writeMigrationFiles(migrationsDir, files),
+				writeMigrationHistory(historyPath, createMigrationHistory(files)),
+			]);
 
 			for (const file of files) {
 				console.log(
-					path.relative(process.cwd(), path.join(migrationsDir, file.name)),
+					path.relative(process.cwd(), path.join(migrationsDir, file.file)),
 				);
 			}
+			console.log(path.relative(process.cwd(), historyPath));
 		});
 }

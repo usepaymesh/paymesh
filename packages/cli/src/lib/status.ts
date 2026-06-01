@@ -1,4 +1,5 @@
 import type { PaymeshClient } from 'paymesh';
+import type { PaymeshMigrationHistoryStatus } from './migrations';
 import { compileQuery, tableName } from './sql';
 
 export interface CliStatus {
@@ -17,6 +18,7 @@ export interface CliStatus {
 		pending: string[];
 		upToDate: boolean;
 	};
+	history: PaymeshMigrationHistoryStatus;
 	catalog: {
 		supported: boolean;
 		productCount?: number;
@@ -33,6 +35,7 @@ export async function getPaymeshStatus(
 	client: Pick<PaymeshClient<boolean>, 'provider' | 'database' | 'schema'>,
 	appliedMigrations: string[],
 	expectedMigrations: string[],
+	history: PaymeshMigrationHistoryStatus,
 ) {
 	const pending = expectedMigrations.filter(
 		(name) => !appliedMigrations.includes(name),
@@ -56,6 +59,7 @@ export async function getPaymeshStatus(
 			pending,
 			upToDate: pending.length === 0,
 		},
+		history,
 		catalog: {
 			supported: Boolean(client.provider.catalog),
 		},
