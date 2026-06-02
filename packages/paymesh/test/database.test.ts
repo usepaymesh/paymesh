@@ -154,6 +154,71 @@ describe('database support', () => {
 		expect(database.customerWrites).toHaveLength(1);
 	});
 
+	test('persists and reads schema extra fields on customers', async () => {
+		const database = createMockDatabase({ persistRaw: true });
+		const client = createClient({
+			provider: defineProvider({
+				id: 'stub',
+				capabilities: {
+					checkout: true,
+					customers: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+				},
+				customers: {
+					get: async () => {
+						throw new Error('should not be called');
+					},
+					upsert: async (_data, options) =>
+						withRaw(
+							{
+								id: 'cus_extra',
+								provider: 'stub',
+								email: 'ada@example.com',
+							},
+							{ id: 'raw_customer_extra' },
+							options?.includeRaw,
+						),
+					delete: async (_id, options) =>
+						withRaw(
+							{
+								id: 'cus_extra',
+								provider: 'stub',
+								deleted: true,
+							},
+							{ id: 'raw_customer_extra' },
+							options?.includeRaw,
+						),
+				},
+			}),
+			database,
+			schema: {
+				tables: {
+					customers: {
+						fields: {
+							first_and_last_name: {
+								type: 'string',
+								required: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		const created = await client.customers.upsert({
+			email: 'ada@example.com',
+			first_and_last_name: 'Ada Lovelace',
+		});
+		const stored = await client.customers.get('cus_extra');
+
+		expect(created.first_and_last_name).toBe('Ada Lovelace');
+		expect(stored.first_and_last_name).toBe('Ada Lovelace');
+	});
+
 	test('deduplicates webhook processing by provider event id', async () => {
 		const database = createMockDatabase();
 		let deliveries = 0;
@@ -417,14 +482,9 @@ function createMockDatabase({
 	const webhookEvents = new Map<string, { status: string }>();
 	const customers = new Map<
 		string,
-		{
+		Record<string, unknown> & {
 			id: string;
 			provider: string;
-			email?: string;
-			name?: string;
-			phone?: string;
-			externalId?: string;
-			metadata?: Record<string, unknown>;
 			deleted?: boolean;
 			raw: unknown;
 		}
@@ -443,17 +503,11 @@ function createMockDatabase({
 
 					return withRaw(
 						{
-							id: customer.id,
-							provider: customer.provider,
-							email: customer.email,
-							name: customer.name,
-							phone: customer.phone,
-							externalId: customer.externalId,
-							metadata: customer.metadata,
+							...(customer as Record<string, unknown>),
 						},
 						customer.raw,
 						options?.includeRaw,
-					);
+					) as never;
 				},
 				async upsert(_schema, customer) {
 					customerWrites.push({
@@ -462,11 +516,7 @@ function createMockDatabase({
 					customers.set(`${customer.provider}:${customer.id}`, {
 						id: customer.id,
 						provider: customer.provider,
-						email: customer.email,
-						name: customer.name,
-						phone: customer.phone,
-						externalId: customer.externalId,
-						metadata: customer.metadata,
+						...(customer as Record<string, unknown>),
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
 				},

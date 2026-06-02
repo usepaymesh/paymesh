@@ -1,6 +1,9 @@
 import type {
+	DatabaseExtraTableFieldOptions,
+	DatabaseExtraTableFields,
 	DatabaseSchemaOptions,
 	DatabaseTableKey,
+	ResolvedDatabaseExtraTableFields,
 	ResolvedDatabaseSchema,
 } from '../types/database';
 
@@ -39,8 +42,42 @@ export function resolveDatabaseSchema(
 					name:
 						schema.tables?.[key]?.name ??
 						`${prefix}${PAYMESH_DATABASE_TABLE_NAMES[key]}`,
+					fields: resolveTableFields(schema.tables?.[key]?.fields),
 				},
 			]),
 		) as ResolvedDatabaseSchema['tables'],
 	};
+}
+
+function resolveTableFields(fields?: DatabaseExtraTableFields) {
+	if (!fields) return {};
+
+	return Object.fromEntries(
+		Object.entries(fields).map(([key, field]) => {
+			validateField(key, field);
+
+			return [
+				key,
+				{
+					...field,
+					key,
+					column: field.column ?? key,
+				},
+			];
+		}),
+	) as ResolvedDatabaseExtraTableFields;
+}
+
+function validateField(key: string, field: DatabaseExtraTableFieldOptions) {
+	if (field.required && field.default !== undefined) {
+		throw new Error(
+			`Database field "${key}" cannot be required and define a default value at the same time.`,
+		);
+	}
+
+	if (field.type === 'enum' && (!field.enum || field.enum.length === 0)) {
+		throw new Error(
+			`Database field "${key}" must define at least one enum value.`,
+		);
+	}
 }

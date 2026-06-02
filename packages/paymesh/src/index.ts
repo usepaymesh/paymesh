@@ -5,8 +5,17 @@ import { PaymeshError } from './errors';
 import type {
 	ClientOptions,
 	HandleWebhookOptions,
+	PaymeshClient,
+	PaymeshCustomer,
+	PaymeshCustomerUpsertData,
 	PaymeshHooks,
+	PaymeshPayment,
+	PaymeshPaymentCreateData,
 } from './types/client';
+import type {
+	DatabaseSchemaOptions,
+	ResolvedDatabaseExtraTableFields,
+} from './types/database';
 import type {
 	Provider,
 	ProviderCapability,
@@ -25,12 +34,13 @@ export type * from './types/providers';
 export { defineDatabaseAdapter, resolveDatabaseSchema };
 
 export const createClient = <
-	P extends Provider<string>,
+	const Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+	P extends Provider<string> = Provider<string>,
 	IncludeRaw extends boolean = false,
 >({
 	provider,
 	...options
-}: ClientOptions<P, IncludeRaw>) => {
+}: ClientOptions<P, IncludeRaw, Schema>): PaymeshClient<IncludeRaw, Schema> => {
 	const database = options.database;
 	const schema = resolveDatabaseSchema(options.schema);
 
@@ -65,40 +75,59 @@ export const createClient = <
 		includeRaw: options.includeRaw,
 		payments: {
 			create: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				data: Parameters<P['payments']['create']>[0],
+				data: PaymeshPaymentCreateData<Schema>,
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('checkout');
-
-				const payment = await provider.payments.create(
+				const { input, extra } = splitExtraFields(
 					data,
-					mergeOptions(requestOptions),
+					schema.tables.checkouts.fields,
 				);
 
+				const payment = await provider.payments.create(
+					input as Parameters<P['payments']['create']>[0],
+					mergeOptions(requestOptions),
+				);
+				const resolvedPayment = Object.assign(payment, extra) as PaymeshPayment<
+					CallIncludeRaw,
+					Schema
+				>;
+
 				if (database) {
-					await database.repositories.checkouts.upsert(schema, payment);
+					await database.repositories.checkouts.upsert(schema, resolvedPayment);
 				}
 
-				return payment;
+				return resolvedPayment;
 			},
 		},
 		customers: {
 			upsert: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				data: Parameters<P['customers']['upsert']>[0],
+				data: PaymeshCustomerUpsertData<Schema>,
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
-
-				const customer = await provider.customers.upsert(
+				const { input, extra } = splitExtraFields(
 					data,
-					mergeOptions(requestOptions),
+					schema.tables.customers.fields,
 				);
 
+				const customer = await provider.customers.upsert(
+					input as Parameters<P['customers']['upsert']>[0],
+					mergeOptions(requestOptions),
+				);
+				const resolvedCustomer = Object.assign(
+					customer,
+					extra,
+				) as PaymeshCustomer<CallIncludeRaw, Schema>;
+
 				if (database) {
-					await database.repositories.customers.upsert(schema, customer);
+					await database.repositories.customers.upsert(
+						schema,
+						resolvedCustomer,
+					);
 				}
 
-				return customer;
+				return resolvedCustomer;
 			},
 			get: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['get']>[0],
@@ -119,7 +148,9 @@ export const createClient = <
 							},
 						);
 
-					if (customer) return customer;
+					if (customer) {
+						return customer as PaymeshCustomer<CallIncludeRaw, Schema>;
+					}
 
 					throw new PaymeshError({
 						code: 'provider_not_found',
@@ -128,7 +159,9 @@ export const createClient = <
 					});
 				}
 
-				return provider.customers.get(id, mergedOptions);
+				return provider.customers.get(id, mergedOptions) as Promise<
+					PaymeshCustomer<CallIncludeRaw, Schema>
+				>;
 			},
 			delete: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['delete']>[0],
@@ -172,3 +205,23 @@ export const createClient = <
 		capabilities: provider.capabilities,
 	};
 };
+
+function splitExtraFields(
+	value: unknown,
+	fields: ResolvedDatabaseExtraTableFields,
+) {
+	const extra: Record<string, unknown> = {};
+	if (typeof value !== 'object' || value === null) {
+		return { input: value, extra };
+	}
+
+	const input = { ...(value as Record<string, unknown>) };
+
+	for (const key of Object.keys(fields)) {
+		if (!Object.hasOwn(input, key)) continue;
+		extra[key] = input[key];
+		delete input[key];
+	}
+
+	return { input, extra };
+}

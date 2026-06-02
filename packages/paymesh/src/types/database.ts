@@ -23,6 +23,30 @@ export type DatabaseTableKey =
 
 export interface DatabaseTableConfig {
 	name?: string;
+	fields?: DatabaseExtraTableFields;
+}
+
+export type DatabaseExtraTableFields = Record<
+	string,
+	DatabaseExtraTableFieldOptions
+>;
+
+export interface DatabaseExtraTableFieldOptions {
+	type:
+		| 'string'
+		| 'number'
+		| 'bigint'
+		| 'boolean'
+		| 'date'
+		| 'json'
+		| 'decimal'
+		| 'enum';
+	required?: boolean;
+	default?: unknown;
+	column?: string;
+	index?: boolean;
+	unique?: boolean;
+	enum?: readonly string[];
 }
 
 export interface DatabaseSchemaOptions {
@@ -33,6 +57,7 @@ export interface DatabaseSchemaOptions {
 export interface ResolvedDatabaseTable {
 	key: DatabaseTableKey;
 	name: string;
+	fields: ResolvedDatabaseExtraTableFields;
 }
 
 export interface ResolvedDatabaseSchema {
@@ -43,12 +68,130 @@ export interface ResolvedDatabaseSchema {
 export type SqlValue =
 	| string
 	| number
+	| bigint
 	| boolean
 	| Date
 	| null
 	| object
 	| Record<string, unknown>
 	| unknown[];
+
+export interface ResolvedDatabaseExtraTableField
+	extends Omit<DatabaseExtraTableFieldOptions, 'column'> {
+	key: string;
+	column: string;
+}
+
+export type ResolvedDatabaseExtraTableFields = Record<
+	string,
+	ResolvedDatabaseExtraTableField
+>;
+
+type DatabaseSchemaTableConfig<
+	Schema,
+	TableKey extends DatabaseTableKey,
+> = Schema extends {
+	tables?: infer Tables;
+}
+	? Tables extends Partial<Record<DatabaseTableKey, DatabaseTableConfig>>
+		? NonNullable<Tables[TableKey]>
+		: never
+	: never;
+
+type DatabaseSchemaTableFields<Schema, TableKey extends DatabaseTableKey> =
+	DatabaseSchemaTableConfig<Schema, TableKey> extends {
+		fields?: infer Fields;
+	}
+		? Fields extends DatabaseExtraTableFields
+			? string extends keyof Fields
+				? {}
+				: Fields
+			: {}
+		: {};
+
+type DatabaseExtraFieldValue<Field extends DatabaseExtraTableFieldOptions> =
+	Field['type'] extends 'string'
+		? string
+		: Field['type'] extends 'number'
+			? number
+			: Field['type'] extends 'bigint'
+				? bigint | number | string
+				: Field['type'] extends 'boolean'
+					? boolean
+					: Field['type'] extends 'date'
+						? Date | string
+						: Field['type'] extends 'json'
+							? Record<string, unknown> | unknown[]
+							: Field['type'] extends 'decimal'
+								? number | string
+								: Field['type'] extends 'enum'
+									? Field['enum'] extends readonly (infer Value extends
+											string)[]
+										? Value
+										: string
+									: never;
+
+type DatabaseFieldHasDefault<Field extends DatabaseExtraTableFieldOptions> =
+	Field extends {
+		default: unknown;
+	}
+		? true
+		: false;
+
+type DatabaseRequiredExtraFieldKeys<Fields extends DatabaseExtraTableFields> = {
+	[K in keyof Fields]-?: Fields[K] extends {
+		required: true;
+	}
+		? DatabaseFieldHasDefault<Fields[K]> extends true
+			? never
+			: K
+		: never;
+}[keyof Fields];
+
+type DatabaseOptionalExtraFieldKeys<Fields extends DatabaseExtraTableFields> =
+	Exclude<keyof Fields, DatabaseRequiredExtraFieldKeys<Fields>>;
+
+type Simplify<T> = {
+	[K in keyof T]: T[K];
+} & {};
+
+export type DatabaseTableInputExtraFields<
+	Schema,
+	TableKey extends DatabaseTableKey,
+	Fields extends DatabaseExtraTableFields = DatabaseSchemaTableFields<
+		Schema,
+		TableKey
+	>,
+> = Simplify<
+	{
+		[K in DatabaseRequiredExtraFieldKeys<Fields>]: DatabaseExtraFieldValue<
+			Fields[K]
+		>;
+	} & {
+		[K in DatabaseOptionalExtraFieldKeys<Fields>]?: DatabaseExtraFieldValue<
+			Fields[K]
+		>;
+	}
+>;
+
+export type DatabaseTableOutputExtraFields<
+	Schema,
+	TableKey extends DatabaseTableKey,
+	Fields extends DatabaseExtraTableFields = DatabaseSchemaTableFields<
+		Schema,
+		TableKey
+	>,
+> = Simplify<
+	{
+		[K in DatabaseRequiredExtraFieldKeys<Fields>]: DatabaseExtraFieldValue<
+			Fields[K]
+		>;
+	} & {
+		[K in DatabaseOptionalExtraFieldKeys<Fields>]?: DatabaseExtraFieldValue<
+			Fields[K]
+		>;
+	}
+>;
 
 export interface CompiledQuery {
 	sql: string;
@@ -62,13 +205,19 @@ export interface PaymeshRepositoryReadOptions<
 }
 
 export interface PaymeshCustomersRepository {
-	findByProviderId<IncludeRaw extends boolean = false>(
+	findByProviderId<
+		IncludeRaw extends boolean = false,
+		TCustomer extends Customer<IncludeRaw> = Customer<IncludeRaw>,
+	>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
 		id: string,
 		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
-	): Promise<Customer<IncludeRaw> | null>;
-	upsert(schema: ResolvedDatabaseSchema, customer: BaseCustomer): Promise<void>;
+	): Promise<TCustomer | null>;
+	upsert<TCustomer extends BaseCustomer = BaseCustomer>(
+		schema: ResolvedDatabaseSchema,
+		customer: TCustomer,
+	): Promise<void>;
 	markDeleted(
 		schema: ResolvedDatabaseSchema,
 		customer: BaseCustomerDeleteResult,
@@ -76,21 +225,27 @@ export interface PaymeshCustomersRepository {
 }
 
 export interface PaymeshCheckoutsRepository {
-	findByProviderId(
+	findByProviderId<TPayment extends BasePayment = BasePayment>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
 		id: string,
-	): Promise<BasePayment | null>;
-	upsert(schema: ResolvedDatabaseSchema, payment: BasePayment): Promise<void>;
+	): Promise<TPayment | null>;
+	upsert<TPayment extends BasePayment = BasePayment>(
+		schema: ResolvedDatabaseSchema,
+		payment: TPayment,
+	): Promise<void>;
 }
 
 export interface PaymeshInvoicesRepository {
-	findByProviderId(
+	findByProviderId<TPayment extends BasePayment = BasePayment>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
 		id: string,
-	): Promise<BasePayment | null>;
-	upsert(schema: ResolvedDatabaseSchema, payment: BasePayment): Promise<void>;
+	): Promise<TPayment | null>;
+	upsert<TPayment extends BasePayment = BasePayment>(
+		schema: ResolvedDatabaseSchema,
+		payment: TPayment,
+	): Promise<void>;
 }
 
 export interface PaymeshSubscriptionsRepository {

@@ -112,6 +112,39 @@ describe('cli helpers', () => {
 		});
 	});
 
+	test('includes schema extra fields in generated migrations', () => {
+		const files = getPaymeshMigrationFiles(
+			resolveDatabaseSchema({
+				tables: {
+					customers: {
+						fields: {
+							first_and_last_name: {
+								type: 'string',
+								required: true,
+								column: 'full_name',
+								index: true,
+							},
+							lifecycle_stage: {
+								type: 'enum',
+								enum: ['lead', 'customer'],
+								default: 'lead',
+								unique: true,
+							},
+						},
+					},
+				},
+			}),
+		);
+		const initial = files.find((file) => file.version === 1);
+		const incremental = files.find((file) => file.version === 2);
+
+		expect(initial?.sql).toContain('"full_name" TEXT NOT NULL');
+		expect(initial?.sql).toContain('"lifecycle_stage" TEXT DEFAULT \'lead\'');
+		expect(incremental?.sql).toContain('full_name');
+		expect(incremental?.sql).toContain('lifecycle_stage');
+		expect(incremental?.sql).toContain('customer');
+	});
+
 	test('pushes catalog through cli helper', async () => {
 		const productWrites: Array<{ provider: string; count: number }> = [];
 		const priceWrites: Array<{ provider: string; count: number }> = [];

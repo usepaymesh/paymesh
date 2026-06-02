@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { PaymeshDatabaseDriver, ResolvedDatabaseSchema } from 'paymesh';
+import type {
+	PaymeshDatabaseDriver,
+	ResolvedDatabaseExtraTableField,
+	ResolvedDatabaseSchema,
+} from 'paymesh';
 import { tableName } from './sql';
 
 export interface PaymeshMigrationFile {
@@ -349,6 +353,7 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 			'quantity_valid',
 			'quantity IS NULL OR quantity >= 0',
 		),
+		...createExtraFieldIndexesAndConstraintsSql(schema),
 	].join('\n\n');
 }
 
@@ -376,6 +381,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'customers')} (
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
 	deleted_at TIMESTAMPTZ,
+${extraTableColumnsSql(schema, 'customers')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -397,6 +403,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'checkouts')} (
 	metadata JSONB,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'checkouts')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -419,6 +426,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'invoices')} (
 	metadata JSONB,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'invoices')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -440,6 +448,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'paymentMethods')} (
 	expiry_year INTEGER,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'paymentMethods')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -458,6 +467,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'entitlements')} (
 	value JSONB,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'entitlements')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -478,6 +488,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'usage')} (
 	window_end TIMESTAMPTZ,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'usage')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -498,6 +509,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'webhookEvents')} (
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
 	processed_at TIMESTAMPTZ,
+${extraTableColumnsSql(schema, 'webhookEvents')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -520,6 +532,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'subscriptions')} (
 	cancel_at_period_end BOOLEAN,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'subscriptions')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -539,6 +552,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'products')} (
 	metadata JSONB,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'products')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -562,6 +576,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'prices')} (
 	metadata JSONB,
 	data JSONB NOT NULL DEFAULT '{}'::jsonb,
 	raw JSONB,
+${extraTableColumnsSql(schema, 'prices')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)
@@ -574,6 +589,15 @@ function createIndexSql(
 	columns: string[],
 ) {
 	return `CREATE INDEX IF NOT EXISTS ${quoteIdentifier(objectName(schema.tables[key].name, `idx_${columns.join('_')}`))}
+ON ${table(schema, key)} (${columns.map(quoteIdentifier).join(', ')});`;
+}
+
+function createUniqueIndexSql(
+	schema: ResolvedDatabaseSchema,
+	key: keyof ResolvedDatabaseSchema['tables'],
+	columns: string[],
+) {
+	return `CREATE UNIQUE INDEX IF NOT EXISTS ${quoteIdentifier(objectName(schema.tables[key].name, `uniq_${columns.join('_')}`))}
 ON ${table(schema, key)} (${columns.map(quoteIdentifier).join(', ')});`;
 }
 
@@ -614,4 +638,104 @@ function table(
 
 function quoteIdentifier(identifier: string) {
 	return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+function extraTableColumnsSql(
+	schema: ResolvedDatabaseSchema,
+	key: keyof ResolvedDatabaseSchema['tables'],
+) {
+	const columns = Object.values(schema.tables[key].fields).map((field) =>
+		createExtraTableColumnSql(field),
+	);
+
+	return columns.length === 0 ? '' : `\t${columns.join(',\n\t')},\n`;
+}
+
+function createExtraTableColumnSql(field: ResolvedDatabaseExtraTableField) {
+	return `${quoteIdentifier(field.column)} ${postgresType(field)}${field.required ? ' NOT NULL' : ''}${defaultSql(field)}`;
+}
+
+function createExtraFieldIndexesAndConstraintsSql(
+	schema: ResolvedDatabaseSchema,
+) {
+	return Object.entries(schema.tables).flatMap(([key, table]) =>
+		Object.values(table.fields).flatMap((field) => {
+			const queries: string[] = [];
+
+			if (field.unique) {
+				queries.push(
+					createUniqueIndexSql(
+						schema,
+						key as keyof ResolvedDatabaseSchema['tables'],
+						[field.column],
+					),
+				);
+			} else if (field.index) {
+				queries.push(
+					createIndexSql(
+						schema,
+						key as keyof ResolvedDatabaseSchema['tables'],
+						[field.column],
+					),
+				);
+			}
+
+			if (field.type === 'enum' && field.enum) {
+				queries.push(
+					createCheckConstraintSql(
+						schema,
+						key as keyof ResolvedDatabaseSchema['tables'],
+						`${field.column}_enum`,
+						enumCheckSql(field),
+					),
+				);
+			}
+
+			return queries;
+		}),
+	);
+}
+
+function postgresType(field: ResolvedDatabaseExtraTableField) {
+	switch (field.type) {
+		case 'string':
+		case 'enum':
+			return 'TEXT';
+		case 'number':
+			return 'DOUBLE PRECISION';
+		case 'bigint':
+			return 'BIGINT';
+		case 'boolean':
+			return 'BOOLEAN';
+		case 'date':
+			return 'TIMESTAMPTZ';
+		case 'json':
+			return 'JSONB';
+		case 'decimal':
+			return 'NUMERIC';
+	}
+}
+
+function defaultSql(field: ResolvedDatabaseExtraTableField) {
+	if (field.default === undefined) return '';
+
+	return ` DEFAULT ${serializeDefault(field.default)}`;
+}
+
+function serializeDefault(value: unknown): string {
+	if (value === null) return 'NULL';
+	if (typeof value === 'number' || typeof value === 'bigint') return `${value}`;
+	if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+	if (value instanceof Date) return `'${value.toISOString()}'`;
+	if (typeof value === 'string') return `'${value.replaceAll("'", "''")}'`;
+
+	return `'${JSON.stringify(value).replaceAll("'", "''")}'::jsonb`;
+}
+
+function enumCheckSql(field: ResolvedDatabaseExtraTableField) {
+	const values = field.enum?.map((value) => `'${value.replaceAll("'", "''")}'`);
+	const nullable = field.required
+		? ''
+		: ` OR ${quoteIdentifier(field.column)} IS NULL`;
+	return `${quoteIdentifier(field.column)} IN (${values?.join(', ')})${nullable}`;
 }

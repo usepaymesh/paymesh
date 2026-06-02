@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+	type Customer,
 	createClient,
 	defineProvider,
 	type Payment,
@@ -195,15 +196,107 @@ describe('client', () => {
 			}),
 		).rejects.toBeInstanceOf(PaymeshError);
 	});
+
+	test('infers schema extra fields and strips them from provider calls', async () => {
+		let paymentInput: Record<string, unknown> | undefined;
+		let customerInput: Record<string, unknown> | undefined;
+		const schema = {
+			tables: {
+				customers: {
+					fields: {
+						first_and_last_name: {
+							type: 'string',
+							required: true,
+						},
+					},
+				},
+				checkouts: {
+					fields: {
+						campaign: {
+							type: 'string',
+						},
+					},
+				},
+			},
+		} as const;
+		const client = createClient({
+			provider: createStubProvider({
+				onPaymentCreate(data, options) {
+					paymentInput = data as Record<string, unknown>;
+					return Promise.resolve(
+						withRaw(
+							{
+								id: 'pay_extra',
+								provider: 'stub',
+								amount: 1200,
+								currency: 'usd',
+								status: 'paid' as const,
+							},
+							{ id: 'raw_pay_extra' },
+							options?.includeRaw,
+						),
+					);
+				},
+				onCustomerUpsert(data, options) {
+					customerInput = data as Record<string, unknown>;
+					return Promise.resolve(
+						withRaw(
+							{
+								id: 'cus_extra',
+								provider: 'stub',
+								email: 'ada@example.com',
+							},
+							{ id: 'raw_cus_extra' },
+							options?.includeRaw,
+						),
+					);
+				},
+			}),
+			schema,
+		});
+		type CustomerUpsertInput = Parameters<typeof client.customers.upsert>[0];
+		const validInput: CustomerUpsertInput = {
+			email: 'ada@example.com',
+			first_and_last_name: 'Ada Lovelace',
+		};
+		void validInput;
+		// @ts-expect-error first_and_last_name is required by schema
+		const invalidInput: CustomerUpsertInput = {
+			email: 'ada@example.com',
+		};
+		void invalidInput;
+
+		const payment = await client.payments.create({
+			amount: 1200,
+			currency: 'USD',
+			campaign: 'summer-launch',
+		});
+		const customer = await client.customers.upsert({
+			email: 'ada@example.com',
+			first_and_last_name: 'Ada Lovelace',
+		});
+
+		expectType<string | undefined>(payment.campaign);
+		expectType<string>(customer.first_and_last_name);
+		expect(payment.campaign).toBe('summer-launch');
+		expect(customer.first_and_last_name).toBe('Ada Lovelace');
+		expect(paymentInput?.campaign).toBeUndefined();
+		expect(customerInput?.first_and_last_name).toBeUndefined();
+	});
 });
 
 function createStubProvider({
 	onPaymentCreate,
+	onCustomerUpsert,
 }: {
 	onPaymentCreate?: <IncludeRaw extends boolean = false>(
 		data: { amount: number; currency: string },
 		options?: ProviderRequestOptions<IncludeRaw>,
 	) => Promise<Payment<IncludeRaw>>;
+	onCustomerUpsert?: <IncludeRaw extends boolean = false>(
+		data: Record<string, unknown>,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => Promise<Customer<IncludeRaw>>;
 } = {}) {
 	return defineProvider({
 		id: 'stub',
@@ -241,17 +334,19 @@ function createStubProvider({
 					},
 					options?.includeRaw,
 				),
-			upsert: async (_data, options) =>
-				withRaw(
-					{
-						id: 'cus_123',
-						provider: 'stub',
-					},
-					{
-						id: 'raw_cus_123',
-					},
-					options?.includeRaw,
-				),
+			upsert: onCustomerUpsert
+				? onCustomerUpsert
+				: async (_data, options) =>
+						withRaw(
+							{
+								id: 'cus_123',
+								provider: 'stub',
+							},
+							{
+								id: 'raw_cus_123',
+							},
+							options?.includeRaw,
+						),
 			delete: async (_id, options) =>
 				withRaw(
 					{

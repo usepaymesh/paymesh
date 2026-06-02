@@ -1,5 +1,4 @@
 import {
-	type BasePayment,
 	type CompiledQuery,
 	type DatabaseTableKey,
 	type PaymeshDatabaseRepositories,
@@ -17,20 +16,19 @@ interface SqlExecutor {
 export function createRepositories(
 	executor: SqlExecutor,
 ): PaymeshDatabaseRepositories {
-	const repositories: PaymeshDatabaseRepositories = {
+	return {
 		customers: {
 			async findByProviderId(schema, provider, id, options) {
-				const [row] = await executor.query<{
-					provider: string;
-					provider_id: string;
-					external_id: string | null;
-					name: string | null;
-					email: string | null;
-					phone: string | null;
-					metadata: Record<string, unknown> | null;
-					raw: unknown;
-				}>({
-					sql: `SELECT provider, provider_id, external_id, name, email, phone, metadata, raw
+				const fields = Object.values(schema.tables.customers.fields);
+				const [row] = await executor.query<
+					{
+						provider: string;
+						provider_id: string;
+						data: Record<string, unknown> | null;
+						raw: unknown;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
 						FROM ${tableName(schema, 'customers')}
 						WHERE provider = $1 AND provider_id = $2 AND deleted_at IS NULL
 						LIMIT 1`,
@@ -39,19 +37,21 @@ export function createRepositories(
 
 				if (!row) return null;
 
+				const data = { ...(row.data ?? {}) };
+				for (const field of fields) {
+					const value = row[field.key];
+					if (value !== null && value !== undefined) data[field.key] = value;
+				}
+
 				return withRaw(
 					{
+						...data,
 						id: row.provider_id,
 						provider: row.provider,
-						externalId: row.external_id ?? undefined,
-						name: row.name ?? undefined,
-						email: row.email ?? undefined,
-						phone: row.phone ?? undefined,
-						metadata: row.metadata ?? undefined,
 					},
 					row.raw,
 					options?.includeRaw,
-				);
+				) as never;
 			},
 			upsert: (schema, customer) =>
 				upsertByProviderId(executor, schema, 'customers', {
@@ -63,31 +63,33 @@ export function createRepositories(
 					email: customer.email ?? null,
 					phone: customer.phone ?? null,
 					metadata: customer.metadata ?? null,
-					data: withoutRaw(customer),
+					data: withoutSchemaFields(
+						withoutRaw(customer),
+						schema.tables.customers.fields,
+					),
 					raw: getPersistableRaw(executor, customer),
 					deleted_at: null,
 					updated_at: new Date().toISOString(),
+					...getExtraFieldValues(schema, 'customers', customer),
 				}),
 			markDeleted: (schema, customer) =>
-				upsertByProviderId(executor, schema, 'customers', {
-					provider: customer.provider,
-					provider_id: customer.id,
-					version: getVersion(customer, getInternalRaw(customer)),
-					external_id: null,
-					name: null,
-					email: null,
-					phone: null,
-					metadata: null,
-					data: withoutRaw(customer),
-					raw: getPersistableRaw(executor, customer),
-					deleted_at: new Date().toISOString(),
-					updated_at: new Date().toISOString(),
+				executor.execute({
+					sql: `UPDATE ${tableName(schema, 'customers')}
+						SET version = $3, data = $4, raw = $5, deleted_at = NOW(), updated_at = NOW()
+						WHERE provider = $1 AND provider_id = $2`,
+					params: [
+						customer.provider,
+						customer.id,
+						getVersion(customer, getInternalRaw(customer)),
+						withoutRaw(customer),
+						getPersistableRaw(executor, customer),
+					],
 				}),
 		},
 		checkouts: {
 			findByProviderId: (schema, provider, id) =>
 				findDataByProviderId(executor, schema, 'checkouts', provider, id).then(
-					(data) => data as BasePayment | null,
+					(data) => data as never,
 				),
 			upsert: (schema, payment) =>
 				upsertByProviderId(executor, schema, 'checkouts', {
@@ -100,15 +102,19 @@ export function createRepositories(
 					status: payment.status,
 					checkout_url: payment.checkoutUrl ?? null,
 					metadata: payment.metadata ?? null,
-					data: withoutRaw(payment),
+					data: withoutSchemaFields(
+						withoutRaw(payment),
+						schema.tables.checkouts.fields,
+					),
 					raw: getPersistableRaw(executor, payment),
 					updated_at: new Date().toISOString(),
+					...getExtraFieldValues(schema, 'checkouts', payment),
 				}),
 		},
 		invoices: {
 			findByProviderId: (schema, provider, id) =>
 				findDataByProviderId(executor, schema, 'invoices', provider, id).then(
-					(data) => data as BasePayment | null,
+					(data) => data as never,
 				),
 			upsert: (schema, payment) =>
 				upsertByProviderId(executor, schema, 'invoices', {
@@ -272,7 +278,14 @@ export function createRepositories(
 					params: [],
 				}),
 			listApplied: async (schema) => {
-				await repositories.migrations.ensureTable(schema);
+				await executor.execute({
+					sql: `CREATE TABLE IF NOT EXISTS ${tableName(schema, 'migrations')} (
+						id BIGSERIAL PRIMARY KEY,
+						name TEXT NOT NULL UNIQUE,
+						applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+					)`,
+					params: [],
+				});
 				const rows = await executor.query<{ name: string }>({
 					sql: `SELECT name FROM ${tableName(schema, 'migrations')} ORDER BY name ASC`,
 					params: [],
@@ -280,7 +293,14 @@ export function createRepositories(
 				return rows.map((row) => row.name);
 			},
 			recordApplied: async (schema, name) => {
-				await repositories.migrations.ensureTable(schema);
+				await executor.execute({
+					sql: `CREATE TABLE IF NOT EXISTS ${tableName(schema, 'migrations')} (
+						id BIGSERIAL PRIMARY KEY,
+						name TEXT NOT NULL UNIQUE,
+						applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+					)`,
+					params: [],
+				});
 				await executor.execute({
 					sql: `INSERT INTO ${tableName(schema, 'migrations')} (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
 					params: [name],
@@ -288,8 +308,6 @@ export function createRepositories(
 			},
 		},
 	};
-
-	return repositories;
 }
 
 function findDataByProviderId(
@@ -370,6 +388,36 @@ function withoutRaw(value: unknown) {
 
 	const { raw: _raw, ...data } = value as Record<string, unknown>;
 	return data;
+}
+
+function withoutSchemaFields(
+	value: Record<string, unknown>,
+	fields: ResolvedDatabaseSchema['tables'][DatabaseTableKey]['fields'],
+) {
+	if (Object.keys(fields).length === 0) return value;
+
+	const data = { ...value };
+
+	for (const key of Object.keys(fields)) {
+		delete data[key];
+	}
+
+	return data;
+}
+
+function getExtraFieldValues(
+	schema: ResolvedDatabaseSchema,
+	tableKey: DatabaseTableKey,
+	value: unknown,
+) {
+	if (typeof value !== 'object' || value === null) return {};
+
+	const record = value as Record<string, unknown>;
+	return Object.fromEntries(
+		Object.values(schema.tables[tableKey].fields)
+			.filter((field) => Object.hasOwn(record, field.key))
+			.map((field) => [field.column, record[field.key] as SqlValue]),
+	) as Record<string, SqlValue>;
 }
 
 function getPersistableRaw(

@@ -1,6 +1,8 @@
 import type { RetryOptions } from '../shared/request';
 import type {
 	DatabaseSchemaOptions,
+	DatabaseTableInputExtraFields,
+	DatabaseTableOutputExtraFields,
 	PaymeshDatabaseDriver,
 	ResolvedDatabaseSchema,
 } from './database';
@@ -89,36 +91,73 @@ export interface PaymeshWebhookHandler<IncludeRaw extends boolean = false> {
 	): Promise<HandleWebhookResult<IncludeRaw>>;
 }
 
-export interface PaymeshPaymentsClient<IncludeRaw extends boolean = false> {
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+export type PaymeshPaymentCreateData<
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	PaymentCreateData & DatabaseTableInputExtraFields<Schema, 'checkouts'>
+>;
+
+export type PaymeshPayment<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	Payment<IncludeRaw> & DatabaseTableOutputExtraFields<Schema, 'checkouts'>
+>;
+
+export type PaymeshCustomerUpsertData<
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	CustomerUpsertData & DatabaseTableInputExtraFields<Schema, 'customers'>
+>;
+
+export type PaymeshCustomer<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	Customer<IncludeRaw> & DatabaseTableOutputExtraFields<Schema, 'customers'>
+>;
+
+export interface PaymeshPaymentsClient<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> {
 	create<CallIncludeRaw extends boolean = IncludeRaw>(
-		data: PaymentCreateData,
+		data: PaymeshPaymentCreateData<Schema>,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
-	): Promise<Payment<CallIncludeRaw>>;
+	): Promise<PaymeshPayment<CallIncludeRaw, Schema>>;
 }
 
-export interface PaymeshCustomersClient<IncludeRaw extends boolean = false> {
+export interface PaymeshCustomersClient<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> {
 	upsert<CallIncludeRaw extends boolean = IncludeRaw>(
-		data: CustomerUpsertData,
+		data: PaymeshCustomerUpsertData<Schema>,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
-	): Promise<Customer<CallIncludeRaw>>;
+	): Promise<PaymeshCustomer<CallIncludeRaw, Schema>>;
 	get<CallIncludeRaw extends boolean = IncludeRaw>(
 		id: string,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
-	): Promise<Customer<CallIncludeRaw>>;
+	): Promise<PaymeshCustomer<CallIncludeRaw, Schema>>;
 	delete<CallIncludeRaw extends boolean = IncludeRaw>(
 		id: string,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
 	): Promise<CustomerDeleteResult<CallIncludeRaw>>;
 }
 
-export interface PaymeshClient<IncludeRaw extends boolean = false> {
+export interface PaymeshClient<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> {
 	provider: Provider<string>;
 	hooks?: PaymeshHooks<IncludeRaw>;
 	includeRaw?: IncludeRaw;
 	database?: PaymeshDatabaseDriver;
 	schema: ResolvedDatabaseSchema;
-	payments: PaymeshPaymentsClient<IncludeRaw>;
-	customers: PaymeshCustomersClient<IncludeRaw>;
+	payments: PaymeshPaymentsClient<IncludeRaw, Schema>;
+	customers: PaymeshCustomersClient<IncludeRaw, Schema>;
 	webhooks: PaymeshWebhookHandler<IncludeRaw>;
 	capabilities: ProviderCapabilities;
 }
@@ -126,10 +165,11 @@ export interface PaymeshClient<IncludeRaw extends boolean = false> {
 export interface ClientOptions<
 	P extends Provider<string>,
 	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
 > {
 	provider: P;
 	database?: PaymeshDatabaseDriver;
-	schema?: DatabaseSchemaOptions;
+	schema?: Schema;
 	baseUrl?: string;
 	timeout?: number;
 	retry?: RetryOptions;
