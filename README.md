@@ -24,14 +24,29 @@ Paymesh is a provider-agnostic payments toolkit for TypeScript applications. It 
 The core package exposes the client and provider contracts. Provider packages implement those contracts, and framework adapters make webhook handling feel native in your HTTP framework.
 
 ```ts
+import { drizzle as paymeshDrizzle } from "@paymesh/drizzle";
 import { stripe } from "@paymesh/stripe";
 import { createClient } from "paymesh";
+import { drizzle } from "drizzle-orm/node-postgres";
+
+const db = drizzle(process.env.DATABASE_URL!);
 
 export const paymesh = createClient({
   provider: stripe({
     secret: process.env.STRIPE_API_KEY!,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
   }),
+  database: paymeshDrizzle(db, {
+    persistRaw: true,
+  }),
+  schema: {
+    prefix: "paymesh_",
+    tables: {
+      customers: {
+        name: "paymesh_customers",
+      },
+    },
+  },
 });
 
 const payment = await paymesh.payments.create({
@@ -50,21 +65,85 @@ console.log(payment.checkoutUrl);
 
 ## Getting Started
 
-Install the core package and a provider:
+Install the core package, a provider, and a database adapter:
 
 ```bash
-bun add paymesh @paymesh/stripe
-```
-
-You can also use your preferred package manager:
-
-```bash
-npm install paymesh @paymesh/stripe
-pnpm add paymesh @paymesh/stripe
-yarn add paymesh @paymesh/stripe
+npm install paymesh @paymesh/stripe @paymesh/postgres
+# or, if you already use Drizzle
+npm install paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
+# or, if you already use Prisma
+npm install paymesh @paymesh/stripe @paymesh/prisma @prisma/client
 ```
 
 Available providers currently include `@paymesh/stripe` and `@paymesh/polar`.
+Available database adapters currently include `@paymesh/postgres`, `@paymesh/drizzle`, and `@paymesh/prisma`.
+
+## Database and CLI
+
+Paymesh can persist normalized relational data for customers, checkouts, invoices, subscriptions, webhook events, products, and prices.
+When a database is configured, `paymesh.customers.get(id)` reads from the local database instead of calling the provider API.
+
+You can pass a database adapter instance directly:
+
+```ts
+const paymesh = createClient({
+  provider: stripe(),
+  database: postgres(process.env.DATABASE_URL!),
+});
+```
+
+Or adapt an existing Drizzle database instance:
+
+```ts
+import { drizzle as drizzleAdapter } from "@paymesh/drizzle";
+import { drizzle } from "drizzle-orm/node-postgres";
+
+const db = drizzle(process.env.DATABASE_URL!);
+
+const paymesh = createClient({
+  provider: stripe(),
+  database: drizzleAdapter(db),
+});
+```
+
+Or adapt an existing Prisma client:
+
+```ts
+import { prisma } from "@paymesh/prisma";
+import { PrismaClient } from "@prisma/client";
+
+const db = new PrismaClient();
+
+const paymesh = createClient({
+  provider: stripe(),
+  database: prisma(db),
+});
+```
+
+The CLI reads the same client module used by your app. Point it at the module with `--client`, `PAYMESH_PATH`, or `package.json.paymesh.path`.
+
+```bash
+paymesh generate --client ./src/lib/paymesh.ts
+paymesh migrate --client ./src/lib/paymesh.ts
+paymesh push --client ./src/lib/paymesh.ts
+paymesh status --client ./src/lib/paymesh.ts
+```
+
+`paymesh generate` writes both `paymesh/history.json` and `paymesh/migrations/*.sql`. The history file is the schema manifest used by `migrate` and `status`.
+
+Customer writes go through a single upsert entrypoint:
+
+```ts
+await paymesh.customers.upsert({
+  email: "ada@example.com",
+  externalId: "user_123",
+});
+
+await paymesh.customers.upsert({
+  id: "cus_123",
+  name: "Ada Lovelace",
+});
+```
 
 ## Webhooks
 

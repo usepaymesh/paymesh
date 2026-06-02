@@ -7,6 +7,7 @@ export type PaymeshErrorCode =
 	| 'webhook_mapping_error'
 	| 'hook_error'
 	| 'invalid_request'
+	| 'database_error'
 	| 'network_error'
 	| 'timeout';
 

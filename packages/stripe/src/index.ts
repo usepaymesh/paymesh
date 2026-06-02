@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
-	type CustomerCreateData,
-	type CustomerUpdateData,
+	type CustomerUpsertData,
 	defineProvider,
 	type PaymentCreateData,
 	type PaymentStatus,
@@ -9,7 +8,8 @@ import {
 	type PaymeshEventType,
 	type ProviderCapabilities,
 	type ProviderRequestOptions,
-	type ProviderWebhookMapOptions,
+	type ProviderWebhookHandleOptions,
+	type ProviderWebhookHandleResult,
 	request,
 	withRaw,
 } from 'paymesh';
@@ -18,7 +18,10 @@ import type {
 	StripeCustomer,
 	StripeDeletedCustomer,
 	StripeEvent,
+	StripeListResponse,
 	StripePaymentObject,
+	StripePrice,
+	StripeProduct,
 	StripeProviderOptions,
 } from './types';
 
@@ -72,6 +75,22 @@ const STRIPE_PAYMENT_STATUSES: Record<string, PaymentStatus> = {
 	failed: 'failed',
 	canceled: 'canceled',
 };
+
+function mapStripeCustomer(customer: StripeCustomer) {
+	return {
+		id: customer.id,
+		provider: 'stripe' as const,
+		externalId:
+			typeof customer.metadata?.externalId === 'string' &&
+			customer.metadata.externalId.length > 0
+				? customer.metadata.externalId
+				: undefined,
+		name: customer.name ?? undefined,
+		email: customer.email ?? undefined,
+		phone: customer.phone ?? undefined,
+		metadata: customer.metadata ?? undefined,
+	};
+}
 
 export const stripe = ({
 	secret = process.env.STRIPE_API_KEY,
@@ -170,8 +189,8 @@ export const stripe = ({
 			},
 		},
 		customers: {
-			async create<IncludeRaw extends boolean = false>(
-				data: CustomerCreateData,
+			async upsert<IncludeRaw extends boolean = false>(
+				data: CustomerUpsertData,
 				options?: ProviderRequestOptions<IncludeRaw>,
 			) {
 				const body = new URLSearchParams();
@@ -185,31 +204,24 @@ export const stripe = ({
 				}
 				if (data.externalId) body.set('metadata[externalId]', data.externalId);
 
-				const customer = await request<StripeCustomer>('/v1/customers', {
-					provider: 'stripe',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
-					method: 'POST',
-					headers,
-					body,
-				});
+				const customer = await request<StripeCustomer>(
+					data.id
+						? `/v1/customers/${encodeURIComponent(data.id)}`
+						: '/v1/customers',
+					{
+						provider: 'stripe',
+						baseUrl: options?.baseUrl ?? baseUrl,
+						timeout: options?.timeout ?? timeout,
+						retry: options?.retry ?? retry,
+						fetch: options?.fetch ?? fetch,
+						method: 'POST',
+						headers,
+						body,
+					},
+				);
 
 				return withRaw(
-					{
-						id: customer.id,
-						provider: 'stripe',
-						externalId:
-							typeof customer.metadata?.externalId === 'string' &&
-							customer.metadata.externalId.length > 0
-								? customer.metadata.externalId
-								: undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						phone: customer.phone ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
+					mapStripeCustomer(customer),
 					customer,
 					options?.includeRaw,
 				);
@@ -231,66 +243,7 @@ export const stripe = ({
 				);
 
 				return withRaw(
-					{
-						id: customer.id,
-						provider: 'stripe',
-						externalId:
-							typeof customer.metadata?.externalId === 'string' &&
-							customer.metadata.externalId.length > 0
-								? customer.metadata.externalId
-								: undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						phone: customer.phone ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
-					customer,
-					options?.includeRaw,
-				);
-			},
-			async update<IncludeRaw extends boolean = false>(
-				id: string,
-				data: CustomerUpdateData,
-				options?: ProviderRequestOptions<IncludeRaw>,
-			) {
-				const body = new URLSearchParams();
-
-				if (data.name !== undefined) body.set('name', data.name);
-				if (data.email !== undefined) body.set('email', data.email);
-				if (data.phone !== undefined) body.set('phone', data.phone);
-
-				for (const [key, value] of Object.entries(data.metadata ?? {})) {
-					if (value !== null) body.set(`metadata[${key}]`, String(value));
-				}
-
-				const customer = await request<StripeCustomer>(
-					`/v1/customers/${encodeURIComponent(id)}`,
-					{
-						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
-						method: 'POST',
-						headers,
-						body,
-					},
-				);
-
-				return withRaw(
-					{
-						id: customer.id,
-						provider: 'stripe',
-						externalId:
-							typeof customer.metadata?.externalId === 'string' &&
-							customer.metadata.externalId.length > 0
-								? customer.metadata.externalId
-								: undefined,
-						name: customer.name ?? undefined,
-						email: customer.email ?? undefined,
-						phone: customer.phone ?? undefined,
-						metadata: customer.metadata ?? undefined,
-					},
+					mapStripeCustomer(customer),
 					customer,
 					options?.includeRaw,
 				);
@@ -323,6 +276,60 @@ export const stripe = ({
 				);
 			},
 		},
+		catalog: {
+			async list() {
+				const [products, prices] = await Promise.all([
+					request<StripeListResponse<StripeProduct>>('/v1/products', {
+						provider: 'stripe',
+						baseUrl,
+						timeout,
+						retry,
+						fetch,
+						headers,
+						query: {
+							limit: 100,
+						},
+					}),
+					request<StripeListResponse<StripePrice>>('/v1/prices', {
+						provider: 'stripe',
+						baseUrl,
+						timeout,
+						retry,
+						fetch,
+						headers,
+						query: {
+							limit: 100,
+						},
+					}),
+				]);
+
+				return {
+					products: products.data.map((product) => ({
+						id: product.id,
+						name: product.name,
+						description: product.description ?? undefined,
+						active: product.active ?? true,
+						metadata: product.metadata ?? undefined,
+						version: product.metadata?.version ?? undefined,
+						raw: product,
+					})),
+					prices: prices.data.map((price) => ({
+						id: price.id,
+						productId:
+							typeof price.product === 'string' ? price.product : undefined,
+						active: price.active ?? true,
+						type: price.type ?? undefined,
+						currency: price.currency ?? undefined,
+						amount: price.unit_amount ?? undefined,
+						interval: price.recurring?.interval ?? undefined,
+						intervalCount: price.recurring?.interval_count ?? undefined,
+						metadata: price.metadata ?? undefined,
+						version: price.metadata?.version ?? undefined,
+						raw: price,
+					})),
+				};
+			},
+		},
 		webhooks: {
 			async verify({ request }) {
 				if (!webhookSecret) return false;
@@ -344,19 +351,17 @@ export const stripe = ({
 					timingSafeEqual(Buffer.from(actual), Buffer.from(expected))
 				);
 			},
-			async parse(request) {
+			async handle<IncludeRaw extends boolean = false>(
+				options: ProviderWebhookHandleOptions<IncludeRaw>,
+			): Promise<ProviderWebhookHandleResult<IncludeRaw>> {
+				const { request, includeRaw } = options;
 				const payload = await request.json();
 
 				if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
 					throw new TypeError('Stripe webhook payload must be a JSON object.');
 				}
 
-				return payload as Record<string, unknown>;
-			},
-			map<IncludeRaw extends boolean = false>(
-				body: Record<string, unknown>,
-				options?: ProviderWebhookMapOptions<IncludeRaw>,
-			): PaymeshEvent<unknown, IncludeRaw> {
+				const body = payload as Record<string, unknown>;
 				const event = body as unknown as StripeEvent;
 				const object = event.data?.object;
 				const type = STRIPE_EVENTS[event.type] ?? 'payment.created';
@@ -373,7 +378,7 @@ export const stripe = ({
 								deleted: customer.deleted,
 							},
 							customer,
-							options?.includeRaw,
+							includeRaw,
 						);
 					} else if (
 						type === 'customer.created' ||
@@ -396,7 +401,7 @@ export const stripe = ({
 								metadata: customer.metadata ?? undefined,
 							},
 							customer,
-							options?.includeRaw,
+							includeRaw,
 						);
 					} else {
 						const payment = object as StripePaymentObject;
@@ -445,24 +450,25 @@ export const stripe = ({
 								metadata: payment.metadata ?? undefined,
 							},
 							payment,
-							options?.includeRaw,
+							includeRaw,
 						);
 					}
 				}
 
-				return withRaw(
-					{
-						id: event.id,
-						type,
-						provider: 'stripe',
-						data,
-					},
-					body,
-					options?.includeRaw,
-				);
-			},
-			hook(event) {
-				return STRIPE_HOOKS[event.type];
+				return {
+					deliveryId: event.id,
+					hook: STRIPE_HOOKS[type],
+					event: withRaw(
+						{
+							id: event.id,
+							type,
+							provider: 'stripe',
+							data,
+						},
+						body,
+						includeRaw,
+					) as PaymeshEvent<unknown, IncludeRaw>,
+				};
 			},
 		},
 	});

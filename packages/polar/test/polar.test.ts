@@ -201,7 +201,7 @@ describe('polar provider', () => {
 		expect(globalRawPayment.customer?.externalId).toBe('user_123');
 	});
 
-	test('supports raw webhook payloads per map call', () => {
+	test('supports raw webhook payloads per handle call', async () => {
 		const provider = polar({
 			accessToken: 'polar_oat_123',
 		});
@@ -216,18 +216,35 @@ describe('polar provider', () => {
 			},
 		};
 
-		const defaultEvent = provider.webhooks?.map(payload);
-		const rawEvent = provider.webhooks?.map(payload, { includeRaw: true });
-
-		if (defaultEvent instanceof Promise || rawEvent instanceof Promise) {
-			throw new Error('Polar webhook mapping should be synchronous');
-		}
+		const defaultEvent = (
+			await provider.webhooks?.handle({
+				request: new Request('https://app.test/webhooks', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify(payload),
+				}),
+			})
+		)?.event;
+		const rawEvent = (
+			await provider.webhooks?.handle({
+				request: new Request('https://app.test/webhooks', {
+					method: 'POST',
+					headers: {
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify(payload),
+				}),
+				includeRaw: true,
+			})
+		)?.event;
 
 		expectType<null>(defaultEvent?.raw ?? null);
 		expectType<unknown>(rawEvent?.raw);
 
 		expect(defaultEvent?.raw).toBeNull();
-		expect(rawEvent?.raw).toBe(payload);
+		expect(rawEvent?.raw).toEqual(payload);
 		expect(defaultEvent?.data).toMatchObject({
 			id: 'ord_raw',
 			raw: null,

@@ -82,7 +82,7 @@ describe('customers', () => {
 			}) as typeof fetch,
 		});
 
-		const created = await client.customers.create({
+		const created = await client.customers.upsert({
 			name: 'Ana',
 			email: 'ana@example.com',
 			phone: '+5511999999999',
@@ -92,7 +92,8 @@ describe('customers', () => {
 			externalId: 'user_ext_123',
 		});
 		const found = await client.customers.get('cus_create');
-		const updated = await client.customers.update('cus_create', {
+		const updated = await client.customers.upsert({
+			id: 'cus_create',
 			name: 'Ana Silva',
 			metadata: {
 				plan: 'business',
@@ -233,7 +234,7 @@ describe('customers', () => {
 		expect(payment.customer).toBeUndefined();
 	});
 
-	test('checks customer capability before calling the provider', () => {
+	test('checks customer capability before calling the provider', async () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
@@ -247,13 +248,10 @@ describe('customers', () => {
 					},
 				},
 				customers: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
 					get: async () => {
 						throw new Error('should not be called');
 					},
-					update: async () => {
+					upsert: async () => {
 						throw new Error('should not be called');
 					},
 					delete: async () => {
@@ -263,20 +261,17 @@ describe('customers', () => {
 			}),
 		});
 
-		try {
-			client.customers.get('cus_test');
-			throw new Error('Expected unsupported_capability error');
-		} catch (error) {
-			expect(error).toBeInstanceOf(PaymeshError);
-			expect(error).toMatchObject({
-				code: 'unsupported_capability',
-				message: 'Provider "stub" does not support "customers" capability',
-				provider: 'stub',
-			});
-		}
+		await expect(client.customers.get('cus_test')).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support "customers" capability',
+			provider: 'stub',
+		});
+		await expect(client.customers.get('cus_test')).rejects.toBeInstanceOf(
+			PaymeshError,
+		);
 	});
 
-	test('checks checkout capability before calling the provider', () => {
+	test('checks checkout capability before calling the provider', async () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
@@ -290,13 +285,10 @@ describe('customers', () => {
 					},
 				},
 				customers: {
-					create: async () => {
-						throw new Error('should not be called');
-					},
 					get: async () => {
 						throw new Error('should not be called');
 					},
-					update: async () => {
+					upsert: async () => {
 						throw new Error('should not be called');
 					},
 					delete: async () => {
@@ -306,19 +298,21 @@ describe('customers', () => {
 			}),
 		});
 
-		try {
+		await expect(
 			client.payments.create({
 				amount: 1000,
 				currency: 'USD',
-			});
-			throw new Error('Expected unsupported_capability error');
-		} catch (error) {
-			expect(error).toBeInstanceOf(PaymeshError);
-			expect(error).toMatchObject({
-				code: 'unsupported_capability',
-				message: 'Provider "stub" does not support "checkout" capability',
-				provider: 'stub',
-			});
-		}
+			}),
+		).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support "checkout" capability',
+			provider: 'stub',
+		});
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+			}),
+		).rejects.toBeInstanceOf(PaymeshError);
 	});
 });
