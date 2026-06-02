@@ -3,6 +3,8 @@ import type {
 	DatabaseSchemaOptions,
 	DatabaseTableInputExtraFields,
 	DatabaseTableOutputExtraFields,
+	PaymeshCustomerListOptions,
+	PaymeshCustomerListResult,
 	PaymeshDatabaseDriver,
 	ResolvedDatabaseSchema,
 } from './database';
@@ -119,6 +121,13 @@ export type PaymeshCustomer<
 	Customer<IncludeRaw> & DatabaseTableOutputExtraFields<Schema, 'customers'>
 >;
 
+export type PaymeshCustomerList<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	PaymeshCustomerListResult<IncludeRaw, PaymeshCustomer<IncludeRaw, Schema>>
+>;
+
 export interface PaymeshPaymentsClient<
 	IncludeRaw extends boolean = false,
 	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
@@ -141,6 +150,9 @@ export interface PaymeshCustomersClient<
 		id: string,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
 	): Promise<PaymeshCustomer<CallIncludeRaw, Schema>>;
+	list<CallIncludeRaw extends boolean = IncludeRaw>(
+		options?: PaymeshCustomerListOptions<CallIncludeRaw>,
+	): Promise<PaymeshCustomerList<CallIncludeRaw, Schema>>;
 	delete<CallIncludeRaw extends boolean = IncludeRaw>(
 		id: string,
 		options?: ProviderRequestOptions<CallIncludeRaw>,

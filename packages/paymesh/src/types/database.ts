@@ -104,10 +104,10 @@ type DatabaseSchemaTableFields<Schema, TableKey extends DatabaseTableKey> =
 	}
 		? Fields extends DatabaseExtraTableFields
 			? string extends keyof Fields
-				? {}
+				? Record<never, never>
 				: Fields
-			: {}
-		: {};
+			: Record<never, never>
+		: Record<never, never>;
 
 type DatabaseExtraFieldValue<Field extends DatabaseExtraTableFieldOptions> =
 	Field['type'] extends 'string'
@@ -204,6 +204,25 @@ export interface PaymeshRepositoryReadOptions<
 	includeRaw?: IncludeRaw;
 }
 
+export interface PaymeshCustomerListOptions<
+	IncludeRaw extends boolean = false,
+> {
+	limit?: number;
+	after?: string;
+	before?: string;
+	includeRaw?: IncludeRaw;
+}
+
+export interface PaymeshCustomerListResult<
+	IncludeRaw extends boolean = false,
+	TCustomer = Customer<IncludeRaw>,
+> {
+	data: TCustomer[];
+	total: number;
+	previous: string | null;
+	next: string | null;
+}
+
 export interface PaymeshCustomersRepository {
 	findByProviderId<
 		IncludeRaw extends boolean = false,
@@ -218,6 +237,14 @@ export interface PaymeshCustomersRepository {
 		schema: ResolvedDatabaseSchema,
 		customer: TCustomer,
 	): Promise<void>;
+	list<
+		IncludeRaw extends boolean = false,
+		TCustomer extends Customer<IncludeRaw> = Customer<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		options?: PaymeshCustomerListOptions<IncludeRaw>,
+	): Promise<PaymeshCustomerListResult<IncludeRaw, TCustomer>>;
 	markDeleted(
 		schema: ResolvedDatabaseSchema,
 		customer: BaseCustomerDeleteResult,

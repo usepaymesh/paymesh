@@ -157,6 +157,14 @@ describe('cli helpers', () => {
 					async findByProviderId() {
 						return null;
 					},
+					async list() {
+						return {
+							data: [],
+							total: 0,
+							previous: null,
+							next: null,
+						};
+					},
 					async upsert() {},
 					async markDeleted() {},
 				},
