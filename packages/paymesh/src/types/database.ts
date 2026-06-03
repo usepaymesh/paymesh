@@ -26,6 +26,12 @@ export interface DatabaseTableConfig {
 	fields?: DatabaseExtraTableFields;
 }
 
+export interface CustomDatabaseTableConfig {
+	name?: string;
+	fields?: DatabaseExtraTableFields;
+	pluginId?: string;
+}
+
 export type DatabaseExtraTableFields = Record<
 	string,
 	DatabaseExtraTableFieldOptions
@@ -52,6 +58,7 @@ export interface DatabaseExtraTableFieldOptions {
 export interface DatabaseSchemaOptions {
 	prefix?: string;
 	tables?: Partial<Record<DatabaseTableKey, DatabaseTableConfig>>;
+	customTables?: Record<string, CustomDatabaseTableConfig>;
 }
 
 export interface ResolvedDatabaseTable {
@@ -60,9 +67,18 @@ export interface ResolvedDatabaseTable {
 	fields: ResolvedDatabaseExtraTableFields;
 }
 
+export interface ResolvedCustomDatabaseTable {
+	id: string;
+	key: string;
+	name: string;
+	fields: ResolvedDatabaseExtraTableFields;
+	pluginId?: string;
+}
+
 export interface ResolvedDatabaseSchema {
 	prefix: string;
 	tables: Record<DatabaseTableKey, ResolvedDatabaseTable>;
+	customTables: Record<string, ResolvedCustomDatabaseTable>;
 }
 
 export type SqlValue =

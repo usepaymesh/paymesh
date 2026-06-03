@@ -2,6 +2,10 @@ import { defineDatabaseAdapter } from './database/adapter';
 import { resolveDatabaseSchema } from './database/schema';
 import { handleClientWebhook } from './database/webhooks';
 import { PaymeshError } from './errors';
+import { bootstrapPlugins } from './plugins/runtime';
+import { createRequestOptionsMerger } from './shared/client/request-options';
+import { splitExtraFields } from './shared/database/fields';
+import { resolveClientSchemaOptions } from './shared/database/schema';
 import type {
 	ClientOptions,
 	HandleWebhookOptions,
@@ -9,15 +13,15 @@ import type {
 	PaymeshCustomer,
 	PaymeshCustomerList,
 	PaymeshCustomerUpsertData,
-	PaymeshHooks,
 	PaymeshPayment,
 	PaymeshPaymentCreateData,
+	PluginClientExtensions,
 } from './types/client';
 import type {
 	DatabaseSchemaOptions,
 	PaymeshCustomerListOptions,
-	ResolvedDatabaseExtraTableFields,
 } from './types/database';
+import type { AnyPaymeshPlugin } from './types/plugins';
 import type {
 	Provider,
 	ProviderCapability,
@@ -26,25 +30,43 @@ import type {
 
 export type * from './errors';
 export { PaymeshError } from './errors';
+export { definePlugin } from './plugins';
 export { defineProvider } from './providers';
 export { withRaw } from './shared/raw';
 export type { RetryOptions } from './shared/request';
 export { request } from './shared/request';
+
 export type * from './types/client';
 export type * from './types/database';
+export type * from './types/plugins';
 export type * from './types/providers';
+
 export { defineDatabaseAdapter, resolveDatabaseSchema };
 
 export const createClient = <
 	const Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
 	P extends Provider<string> = Provider<string>,
 	IncludeRaw extends boolean = false,
+	const Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
 >({
 	provider,
 	...options
-}: ClientOptions<P, IncludeRaw, Schema>): PaymeshClient<IncludeRaw, Schema> => {
-	const database = options.database;
-	const schema = resolveDatabaseSchema(options.schema);
+}: ClientOptions<P, IncludeRaw, Schema, Plugins>): PaymeshClient<
+	IncludeRaw,
+	Schema,
+	Plugins
+> &
+	PluginClientExtensions<Plugins> => {
+	const {
+		database,
+		hooks: baseHooks,
+		includeRaw: baseIncludeRaw,
+		plugins = [] as unknown as Plugins,
+	} = options;
+
+	const schema = resolveDatabaseSchema(
+		resolveClientSchemaOptions(options.schema, plugins),
+	);
 
 	const assertCapability = (capability: ProviderCapability) => {
 		if (!provider.capabilities[capability])
@@ -55,21 +77,15 @@ export const createClient = <
 			});
 	};
 
-	const mergeOptions = <CallIncludeRaw extends boolean = IncludeRaw>(
-		requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-	): ProviderRequestOptions<CallIncludeRaw> => ({
-		baseUrl: requestOptions?.baseUrl ?? options.baseUrl,
-		timeout: requestOptions?.timeout ?? options.timeout,
-		retry: requestOptions?.retry ?? options.retry,
-		fetch: requestOptions?.fetch ?? options.fetch,
-		includeRaw: (requestOptions?.includeRaw ??
-			options.includeRaw ??
-			false) as CallIncludeRaw,
+	const mergeOptions = createRequestOptionsMerger({
+		baseUrl: options.baseUrl,
+		timeout: options.timeout,
+		retry: options.retry,
+		fetch: options.fetch,
+		includeRaw: options.includeRaw,
 	});
-	const baseHooks = options.hooks;
-	const baseIncludeRaw = options.includeRaw;
 
-	return {
+	const client = {
 		provider,
 		database,
 		schema,
@@ -81,6 +97,7 @@ export const createClient = <
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('checkout');
+
 				const { input, extra } = splitExtraFields(
 					data,
 					schema.tables.checkouts.fields,
@@ -95,9 +112,8 @@ export const createClient = <
 					Schema
 				>;
 
-				if (database) {
+				if (database)
 					await database.repositories.checkouts.upsert(schema, resolvedPayment);
-				}
 
 				return resolvedPayment;
 			},
@@ -108,6 +124,7 @@ export const createClient = <
 				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 			) => {
 				assertCapability('customers');
+
 				const { input, extra } = splitExtraFields(
 					data,
 					schema.tables.customers.fields,
@@ -122,12 +139,11 @@ export const createClient = <
 					extra,
 				) as PaymeshCustomer<CallIncludeRaw, Schema>;
 
-				if (database) {
+				if (database)
 					await database.repositories.customers.upsert(
 						schema,
 						resolvedCustomer,
 					);
-				}
 
 				return resolvedCustomer;
 			},
@@ -150,9 +166,8 @@ export const createClient = <
 							},
 						);
 
-					if (customer) {
+					if (customer)
 						return customer as PaymeshCustomer<CallIncludeRaw, Schema>;
-					}
 
 					throw new PaymeshError({
 						code: 'provider_not_found',
@@ -206,54 +221,59 @@ export const createClient = <
 					mergeOptions(requestOptions),
 				);
 
-				if (database) {
+				if (database)
 					await database.repositories.customers.markDeleted(schema, result);
-				}
 
 				return result;
 			},
 		},
 		webhooks: {
-			handle: <CallIncludeRaw extends boolean = IncludeRaw>(
-				webhookOptions: HandleWebhookOptions<CallIncludeRaw>,
+			handle: async <CallIncludeRaw extends boolean = IncludeRaw>(
+				webhookOptions: HandleWebhookOptions<CallIncludeRaw, Plugins>,
 			) =>
 				handleClientWebhook({
 					provider,
 					database,
 					schema,
 					request: webhookOptions.request,
-					hooks: {
-						...(baseHooks as PaymeshHooks<CallIncludeRaw> | undefined),
-						...(webhookOptions.hooks as
-							| PaymeshHooks<CallIncludeRaw>
-							| undefined),
-					},
+					dispatchHook: bootstrappedPlugins.createHookDispatcher(
+						webhookOptions.hooks as never,
+					),
 					includeRaw: (webhookOptions.includeRaw ??
 						baseIncludeRaw ??
 						false) as CallIncludeRaw,
 					skipVerify: webhookOptions.skipVerify ?? false,
 				}),
 		},
+		routes: {
+			list: () => [],
+			handle: async () =>
+				Response.json({ error: 'route_not_found' }, { status: 404 }),
+		},
+		plugins: {
+			byId: {},
+			list: () => [],
+		},
 		capabilities: provider.capabilities,
-	};
+	} as PaymeshClient<IncludeRaw, Schema, Plugins>;
+
+	const bootstrappedPlugins = bootstrapPlugins({
+		baseHooks: baseHooks as never,
+		client,
+		database,
+		plugins,
+		provider,
+		schema,
+	});
+
+	client.routes = bootstrappedPlugins.routesClient;
+	client.plugins = bootstrappedPlugins.pluginsClient;
+
+	const extendedClient = Object.assign(
+		client as object,
+		bootstrappedPlugins.extensions,
+	);
+
+	return extendedClient as PaymeshClient<IncludeRaw, Schema, Plugins> &
+		PluginClientExtensions<Plugins>;
 };
-
-function splitExtraFields(
-	value: unknown,
-	fields: ResolvedDatabaseExtraTableFields,
-) {
-	const extra: Record<string, unknown> = {};
-	if (typeof value !== 'object' || value === null) {
-		return { input: value, extra };
-	}
-
-	const input = { ...(value as Record<string, unknown>) };
-
-	for (const key of Object.keys(fields)) {
-		if (!Object.hasOwn(input, key)) continue;
-		extra[key] = input[key];
-		delete input[key];
-	}
-
-	return { input, extra };
-}

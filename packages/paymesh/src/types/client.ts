@@ -9,6 +9,13 @@ import type {
 	ResolvedDatabaseSchema,
 } from './database';
 import type {
+	AnyPaymeshPlugin,
+	PaymeshPluginsClient,
+	PaymeshRoutesClient,
+	PluginEventDefinitions,
+	PluginEventHooks,
+} from './plugins';
+import type {
 	Customer,
 	CustomerDeleteResult,
 	CustomerUpsertData,
@@ -45,7 +52,7 @@ export type UnknownEvent<
 	IncludeRaw extends boolean = false,
 > = PaymeshEvent<unknown, IncludeRaw> & { type: Type };
 
-export interface PaymeshHooks<IncludeRaw extends boolean = false> {
+interface BuiltInPaymeshHooks<IncludeRaw extends boolean = false> {
 	onPaymentCreated?: PaymeshHook<PaymentEvent<'payment.created', IncludeRaw>>;
 	onPaymentSucceeded?: PaymeshHook<
 		PaymentEvent<'payment.succeeded', IncludeRaw>
@@ -74,9 +81,54 @@ export interface PaymeshHooks<IncludeRaw extends boolean = false> {
 	>;
 }
 
-export interface HandleWebhookOptions<IncludeRaw extends boolean = false> {
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+type UnionToIntersection<T> = (
+	T extends unknown
+		? (value: T) => void
+		: never
+) extends (value: infer TResult) => void
+	? TResult
+	: never;
+
+export type PluginClientExtensions<
+	Plugins extends readonly AnyPaymeshPlugin[],
+> = Plugins[number] extends never
+	? Record<never, never>
+	: UnionToIntersection<
+			Plugins[number] extends {
+				extends?: (...args: never[]) => infer TExtension;
+			}
+				? TExtension extends Record<string, unknown>
+					? TExtension
+					: Record<never, never>
+				: Record<never, never>
+		>;
+
+type PluginEventsFromList<Plugins extends readonly AnyPaymeshPlugin[]> =
+	Plugins[number] extends never
+		? Record<never, never>
+		: UnionToIntersection<
+				Plugins[number] extends {
+					events?: infer TEvents;
+				}
+					? NonNullable<TEvents> extends PluginEventDefinitions
+						? PluginEventHooks<NonNullable<TEvents>>
+						: Record<never, never>
+					: Record<never, never>
+			>;
+
+export type PaymeshHooks<
+	IncludeRaw extends boolean = false,
+	Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
+> = Simplify<BuiltInPaymeshHooks<IncludeRaw> & PluginEventsFromList<Plugins>>;
+
+export interface HandleWebhookOptions<
+	IncludeRaw extends boolean = false,
+	Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
+> {
 	request: Request;
-	hooks?: PaymeshHooks<IncludeRaw>;
+	hooks?: PaymeshHooks<IncludeRaw, Plugins>;
 	includeRaw?: IncludeRaw;
 	skipVerify?: boolean;
 }
@@ -87,13 +139,14 @@ export interface HandleWebhookResult<IncludeRaw extends boolean = false> {
 	event?: PaymeshEvent<unknown, IncludeRaw>;
 }
 
-export interface PaymeshWebhookHandler<IncludeRaw extends boolean = false> {
+export interface PaymeshWebhookHandler<
+	IncludeRaw extends boolean = false,
+	Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
+> {
 	handle(
-		options: HandleWebhookOptions<IncludeRaw>,
+		options: HandleWebhookOptions<IncludeRaw, Plugins>,
 	): Promise<HandleWebhookResult<IncludeRaw>>;
 }
-
-type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
 export type PaymeshPaymentCreateData<
 	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
@@ -162,15 +215,18 @@ export interface PaymeshCustomersClient<
 export interface PaymeshClient<
 	IncludeRaw extends boolean = false,
 	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+	Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
 > {
 	provider: Provider<string>;
-	hooks?: PaymeshHooks<IncludeRaw>;
+	hooks?: PaymeshHooks<IncludeRaw, Plugins>;
 	includeRaw?: IncludeRaw;
 	database?: PaymeshDatabaseDriver;
 	schema: ResolvedDatabaseSchema;
 	payments: PaymeshPaymentsClient<IncludeRaw, Schema>;
 	customers: PaymeshCustomersClient<IncludeRaw, Schema>;
-	webhooks: PaymeshWebhookHandler<IncludeRaw>;
+	webhooks: PaymeshWebhookHandler<IncludeRaw, Plugins>;
+	routes: PaymeshRoutesClient<IncludeRaw, Plugins>;
+	plugins: PaymeshPluginsClient<Plugins>;
 	capabilities: ProviderCapabilities;
 }
 
@@ -178,6 +234,7 @@ export interface ClientOptions<
 	P extends Provider<string>,
 	IncludeRaw extends boolean = false,
 	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+	Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
 > {
 	provider: P;
 	database?: PaymeshDatabaseDriver;
@@ -186,14 +243,7 @@ export interface ClientOptions<
 	timeout?: number;
 	retry?: RetryOptions;
 	fetch?: typeof fetch;
-	logger?: PaymeshLogger | boolean;
 	includeRaw?: IncludeRaw;
-	hooks?: PaymeshHooks<IncludeRaw>;
-}
-
-export interface PaymeshLogger {
-	debug(message: string, context?: Record<string, unknown>): void;
-	info(message: string, context?: Record<string, unknown>): void;
-	warn(message: string, context?: Record<string, unknown>): void;
-	error(message: string, context?: Record<string, unknown>): void;
+	hooks?: PaymeshHooks<IncludeRaw, Plugins>;
+	plugins?: Plugins;
 }

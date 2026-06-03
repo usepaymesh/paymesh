@@ -1,8 +1,10 @@
 import type {
+	CustomDatabaseTableConfig,
 	DatabaseExtraTableFieldOptions,
 	DatabaseExtraTableFields,
 	DatabaseSchemaOptions,
 	DatabaseTableKey,
+	ResolvedCustomDatabaseTable,
 	ResolvedDatabaseExtraTableFields,
 	ResolvedDatabaseSchema,
 } from '../types/database';
@@ -31,6 +33,7 @@ export function resolveDatabaseSchema(
 	schema: DatabaseSchemaOptions = {},
 ): ResolvedDatabaseSchema {
 	const prefix = schema.prefix ?? PAYMESH_DEFAULT_SCHEMA_PREFIX;
+	const customTables = resolveCustomTables(prefix, schema.customTables);
 
 	return {
 		prefix,
@@ -46,7 +49,57 @@ export function resolveDatabaseSchema(
 				},
 			]),
 		) as ResolvedDatabaseSchema['tables'],
+		customTables,
 	};
+}
+
+export function mergeDatabaseSchemas(
+	base: DatabaseSchemaOptions = {},
+	extensions: DatabaseSchemaOptions[] = [],
+) {
+	const mergedTables: NonNullable<DatabaseSchemaOptions['tables']> = {
+		...(base.tables ?? {}),
+	};
+	const mergedCustomTables: NonNullable<DatabaseSchemaOptions['customTables']> =
+		{
+			...(base.customTables ?? {}),
+		};
+
+	for (const extension of extensions) {
+		for (const key of PAYMESH_DATABASE_TABLE_KEYS) {
+			const table = extension.tables?.[key];
+			if (!table) continue;
+
+			if (table.name) {
+				throw new Error(
+					`Plugin schema cannot redefine the table name for "${key}".`,
+				);
+			}
+
+			const current = mergedTables[key];
+			mergedTables[key] = {
+				...current,
+				fields: {
+					...(current?.fields ?? {}),
+					...(table.fields ?? {}),
+				},
+			};
+		}
+
+		for (const [key, table] of Object.entries(extension.customTables ?? {})) {
+			if (mergedCustomTables[key]) {
+				throw new Error(`Custom table "${key}" is already registered.`);
+			}
+
+			mergedCustomTables[key] = table;
+		}
+	}
+
+	return {
+		...base,
+		tables: mergedTables,
+		customTables: mergedCustomTables,
+	} satisfies DatabaseSchemaOptions;
 }
 
 function resolveTableFields(fields?: DatabaseExtraTableFields) {
@@ -66,6 +119,34 @@ function resolveTableFields(fields?: DatabaseExtraTableFields) {
 			];
 		}),
 	) as ResolvedDatabaseExtraTableFields;
+}
+
+function resolveCustomTables(
+	prefix: string,
+	tables?: Record<string, CustomDatabaseTableConfig>,
+) {
+	if (!tables) return {};
+
+	return Object.fromEntries(
+		Object.entries(tables).map(([id, table]) => {
+			const key = id.includes('.') ? id.slice(id.indexOf('.') + 1) : id;
+
+			return [
+				id,
+				{
+					id,
+					key,
+					name: table.name ?? `${prefix}${normalizeIdentifier(id)}`,
+					fields: resolveTableFields(table.fields),
+					pluginId: table.pluginId,
+				} satisfies ResolvedCustomDatabaseTable,
+			];
+		}),
+	) as ResolvedDatabaseSchema['customTables'];
+}
+
+function normalizeIdentifier(value: string) {
+	return value.replaceAll(/[^a-zA-Z0-9_]/g, '_').replaceAll(/_+/g, '_');
 }
 
 function validateField(key: string, field: DatabaseExtraTableFieldOptions) {

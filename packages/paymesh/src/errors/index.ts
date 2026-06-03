@@ -1,5 +1,7 @@
 export type PaymeshErrorCode =
 	| 'provider_error'
+	| 'plugin_error'
+	| 'plugin_configuration_error'
 	| 'provider_not_found'
 	| 'unsupported_capability'
 	| 'invalid_webhook_signature'

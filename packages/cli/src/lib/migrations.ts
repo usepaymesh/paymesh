@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
 	PaymeshDatabaseDriver,
+	ResolvedCustomDatabaseTable,
 	ResolvedDatabaseExtraTableField,
 	ResolvedDatabaseSchema,
 } from 'paymesh';
@@ -258,6 +259,9 @@ function createInitialMigrationSql(schema: ResolvedDatabaseSchema) {
 		createSubscriptionsTableSql(schema),
 		createProductsTableSql(schema),
 		createPricesTableSql(schema),
+		...Object.values(schema.customTables).map((table) =>
+			createCustomTableSql(table),
+		),
 	].join('\n\n');
 }
 
@@ -354,6 +358,9 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 			'quantity IS NULL OR quantity >= 0',
 		),
 		...createExtraFieldIndexesAndConstraintsSql(schema),
+		...Object.values(schema.customTables).flatMap((table) =>
+			createCustomTableIndexesAndConstraintsSql(table),
+		),
 	].join('\n\n');
 }
 
@@ -583,6 +590,15 @@ ${extraTableColumnsSql(schema, 'prices')}
 );`.trim();
 }
 
+function createCustomTableSql(table: ResolvedCustomDatabaseTable) {
+	return `
+CREATE TABLE IF NOT EXISTS ${quoteIdentifier(table.name)} (
+	id BIGSERIAL PRIMARY KEY,
+${customTableColumnsSql(table)}	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);`.trim();
+}
+
 function createIndexSql(
 	schema: ResolvedDatabaseSchema,
 	key: keyof ResolvedDatabaseSchema['tables'],
@@ -651,6 +667,12 @@ function extraTableColumnsSql(
 	return columns.length === 0 ? '' : `\t${columns.join(',\n\t')},\n`;
 }
 
+function customTableColumnsSql(table: ResolvedCustomDatabaseTable) {
+	const columns = Object.values(table.fields).map(createExtraTableColumnSql);
+
+	return columns.length === 0 ? '' : `\t${columns.join(',\n\t')},\n`;
+}
+
 function createExtraTableColumnSql(field: ResolvedDatabaseExtraTableField) {
 	return `${quoteIdentifier(field.column)} ${postgresType(field)}${field.required ? ' NOT NULL' : ''}${defaultSql(field)}`;
 }
@@ -694,6 +716,62 @@ function createExtraFieldIndexesAndConstraintsSql(
 			return queries;
 		}),
 	);
+}
+
+function createCustomTableIndexesAndConstraintsSql(
+	table: ResolvedCustomDatabaseTable,
+) {
+	return Object.values(table.fields).flatMap((field) => {
+		const queries: string[] = [];
+
+		if (field.unique) {
+			queries.push(createCustomTableIndexSql(table, [field.column], true));
+		} else if (field.index) {
+			queries.push(createCustomTableIndexSql(table, [field.column], false));
+		}
+
+		if (field.type === 'enum' && field.enum) {
+			queries.push(
+				createCustomTableCheckConstraintSql(
+					table,
+					`${field.column}_enum`,
+					enumCheckSql(field),
+				),
+			);
+		}
+
+		return queries;
+	});
+}
+
+function createCustomTableIndexSql(
+	table: ResolvedCustomDatabaseTable,
+	columns: string[],
+	unique: boolean,
+) {
+	const suffix = `${unique ? 'uniq' : 'idx'}_${columns.join('_')}`;
+	const prefix = unique ? 'CREATE UNIQUE INDEX' : 'CREATE INDEX';
+	return `${prefix} IF NOT EXISTS ${quoteIdentifier(objectName(table.name, suffix))}
+ON ${quoteIdentifier(table.name)} (${columns.map(quoteIdentifier).join(', ')});`;
+}
+
+function createCustomTableCheckConstraintSql(
+	table: ResolvedCustomDatabaseTable,
+	suffix: string,
+	expression: string,
+) {
+	const constraint = objectName(table.name, suffix);
+	return `DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint
+		WHERE conname = '${constraint}'
+	) THEN
+		ALTER TABLE ${quoteIdentifier(table.name)}
+		ADD CONSTRAINT ${quoteIdentifier(constraint)} CHECK (${expression});
+	END IF;
+END $$;`;
 }
 
 function postgresType(field: ResolvedDatabaseExtraTableField) {

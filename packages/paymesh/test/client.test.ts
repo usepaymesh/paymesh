@@ -3,9 +3,11 @@ import {
 	type Customer,
 	createClient,
 	defineDatabaseAdapter,
+	definePlugin,
 	defineProvider,
 	type Payment,
 	PaymeshError,
+	type PluginEventDefinition,
 	type ProviderRequestOptions,
 	withRaw,
 } from '../src';
@@ -332,6 +334,142 @@ describe('client', () => {
 		expect(customer.first_and_last_name).toBe('Ada Lovelace');
 		expect(paymentInput?.campaign).toBeUndefined();
 		expect(customerInput?.first_and_last_name).toBeUndefined();
+	});
+
+	test('supports plugin routes, events, and client extensions', async () => {
+		const redeemedCodes: string[] = [];
+		const pluginHooks: string[] = [];
+		const plugin = definePlugin({
+			id: 'coupons',
+			events: {
+				onCouponRedeemed: {
+					description: 'Triggered when a coupon is redeemed',
+				} as PluginEventDefinition<{ code: string }>,
+			},
+			hooks: {
+				onCouponRedeemed(event) {
+					expectType<string>(event.data.code);
+					pluginHooks.push(event.data.code);
+				},
+			},
+			schema: {
+				customTables: {
+					redemptions: {
+						fields: {
+							code: {
+								type: 'string',
+								required: true,
+								unique: true,
+							},
+						},
+					},
+				},
+			},
+			routes: [
+				{
+					method: 'POST',
+					path: '/coupons/redeem',
+					async handler(context) {
+						expectType<Request>(context.request);
+						expectType<typeof context.client.customers.get>(
+							context.client.customers.get,
+						);
+						await context.emit('onCouponRedeemed', {
+							code: 'WELCOME10',
+						});
+						if (false) {
+							// @ts-expect-error plugin event payload is strictly typed
+							await context.emit('onCouponRedeemed', { code: 10 });
+							// @ts-expect-error plugin can only emit its own declared events
+							await context.emit('onMissingHook', {
+								code: 'WELCOME10',
+							});
+						}
+
+						return Response.json({ ok: true });
+					},
+				},
+			],
+			extends() {
+				return {
+					coupons: {
+						repository: 'available',
+					},
+					customers: {
+						sync() {
+							return 'synced';
+						},
+					},
+				};
+			},
+		});
+		const client = createClient({
+			provider: createStubProvider(),
+			plugins: [plugin] as const,
+			hooks: {
+				onCouponRedeemed(event) {
+					expectType<string>(event.data.code);
+					// @ts-expect-error plugin event payload should not accept unknown properties
+					expectType<string>(event.data.missing);
+					redeemedCodes.push(event.data.code);
+				},
+			},
+		});
+
+		expectType<string>(client.coupons.repository);
+		expectType<() => string>(client.customers.sync);
+		expect(client.schema.customTables['coupons.redemptions']?.name).toBe(
+			'paymesh_coupons_redemptions',
+		);
+		expect(client.routes.list()).toEqual([
+			{
+				pluginId: 'coupons',
+				method: 'POST',
+				path: '/coupons/redeem',
+				description: undefined,
+			},
+		]);
+		expect(client.plugins.byId.coupons?.eventHooks).toEqual([
+			'onCouponRedeemed',
+		]);
+
+		const response = await client.routes.handle(
+			new Request('https://app.test/coupons/redeem', { method: 'POST' }),
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ ok: true });
+		expect(redeemedCodes).toEqual(['WELCOME10']);
+		expect(pluginHooks).toEqual(['WELCOME10']);
+		expect(client.customers.sync()).toBe('synced');
+	});
+
+	test('tracks async plugin setup state without blocking client creation', async () => {
+		let resolveSetup: (() => void) | undefined;
+		const client = createClient({
+			provider: createStubProvider(),
+			plugins: [
+				definePlugin({
+					id: 'async-plugin',
+					setup(context) {
+						expectType<typeof context.client.payments.create>(
+							context.client.payments.create,
+						);
+						return new Promise<void>((resolve) => {
+							resolveSetup = resolve;
+						});
+					},
+				}),
+			] as const,
+		});
+
+		expect(client.plugins.byId['async-plugin']?.status).toBe('pending');
+
+		resolveSetup?.();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(client.plugins.byId['async-plugin']?.status).toBe('ready');
 	});
 });
 

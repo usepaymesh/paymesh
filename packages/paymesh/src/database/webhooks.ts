@@ -1,19 +1,17 @@
 import { PaymeshError } from '../errors';
-import type { HandleWebhookResult, PaymeshHooks } from '../types/client';
+import type { HandleWebhookResult } from '../types/client';
 import type {
 	PaymeshDatabaseDriver,
 	ResolvedDatabaseSchema,
 } from '../types/database';
 import type { PaymeshEvent, Provider } from '../types/providers';
 
-type AnyHook = (event: unknown) => void | Promise<void>;
-
 interface HandleClientWebhookOptions<IncludeRaw extends boolean = false> {
 	provider: Provider<string>;
 	database?: PaymeshDatabaseDriver;
 	schema: ResolvedDatabaseSchema;
 	request: Request;
-	hooks?: PaymeshHooks<IncludeRaw>;
+	dispatchHook?: (hook: string, event: unknown) => Promise<void>;
 	includeRaw?: IncludeRaw;
 	skipVerify?: boolean;
 }
@@ -23,7 +21,7 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 	database,
 	schema,
 	request,
-	hooks,
+	dispatchHook,
 	includeRaw,
 	skipVerify,
 }: HandleClientWebhookOptions<IncludeRaw>): Promise<
@@ -92,11 +90,9 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 			);
 		}
 
-		await (handled.hook
-			? (hooks as Record<string, AnyHook | undefined> | undefined)?.[
-					handled.hook
-				]
-			: undefined)?.(event);
+		if (handled.hook && dispatchHook) {
+			await dispatchHook(handled.hook, event);
+		}
 
 		if (database) {
 			await database.repositories.webhookEvents.markProcessed(

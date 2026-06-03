@@ -145,6 +145,44 @@ describe('cli helpers', () => {
 		expect(incremental?.sql).toContain('customer');
 	});
 
+	test('includes custom plugin tables in generated migrations', () => {
+		const files = getPaymeshMigrationFiles(
+			resolveDatabaseSchema({
+				customTables: {
+					'coupons.redemptions': {
+						pluginId: 'coupons',
+						fields: {
+							code: {
+								type: 'string',
+								required: true,
+								unique: true,
+							},
+							status: {
+								type: 'enum',
+								enum: ['pending', 'redeemed'],
+								default: 'pending',
+								index: true,
+							},
+						},
+					},
+				},
+			}),
+		);
+		const initial = files.find((file) => file.version === 1);
+		const incremental = files.find((file) => file.version === 2);
+
+		expect(initial?.sql).toContain(
+			'CREATE TABLE IF NOT EXISTS "paymesh_coupons_redemptions"',
+		);
+		expect(initial?.sql).toContain('"code" TEXT NOT NULL');
+		expect(initial?.sql).toContain('"status" TEXT DEFAULT \'pending\'');
+		expect(incremental?.sql).toContain(
+			'paymesh_coupons_redemptions_idx_status',
+		);
+		expect(incremental?.sql).toContain('paymesh_coupons_redemptions_uniq_code');
+		expect(incremental?.sql).toContain("\"status\" IN ('pending', 'redeemed')");
+	});
+
 	test('pushes catalog through cli helper', async () => {
 		const productWrites: Array<{ provider: string; count: number }> = [];
 		const priceWrites: Array<{ provider: string; count: number }> = [];
