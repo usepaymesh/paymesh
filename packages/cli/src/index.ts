@@ -19,6 +19,7 @@ export {
 	type PaymeshMigrationHistory,
 	type PaymeshMigrationHistoryEntry,
 	type PaymeshMigrationHistoryStatus,
+	planGenerateMigrations,
 	readMigrationFiles,
 	readMigrationHistory,
 	resolveHistoryPath,

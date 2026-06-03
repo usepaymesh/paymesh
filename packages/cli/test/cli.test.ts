@@ -14,6 +14,7 @@ import {
 	getMigrationHistoryStatus,
 	getPaymeshMigrationFiles,
 	loadClient,
+	planGenerateMigrations,
 	pushProviderCatalog,
 	readMigrationFiles,
 	readMigrationHistory,
@@ -85,7 +86,10 @@ describe('cli helpers', () => {
 		const historyPath = resolveHistoryPath(directory);
 
 		await writeMigrationFiles(migrationsDir, files);
-		await writeMigrationHistory(historyPath, createMigrationHistory(files));
+		await writeMigrationHistory(
+			historyPath,
+			createMigrationHistory(files, schema),
+		);
 		const readBack = await readMigrationFiles(migrationsDir);
 		const history = await readMigrationHistory(historyPath);
 		const expected = await getExpectedMigrationNames(
@@ -110,6 +114,50 @@ describe('cli helpers', () => {
 			exists: true,
 			valid: true,
 		});
+	});
+
+	test('plans an incremental migration when the client schema changes', async () => {
+		const directory = await createTempProject();
+		const migrationsDir = path.join(directory, 'paymesh', 'migrations');
+		const historyPath = resolveHistoryPath(directory);
+		const initialSchema = resolveDatabaseSchema();
+		const initialFiles = getPaymeshMigrationFiles(initialSchema);
+
+		await writeMigrationFiles(migrationsDir, initialFiles);
+		await writeMigrationHistory(
+			historyPath,
+			createMigrationHistory(initialFiles, initialSchema),
+		);
+
+		const nextSchema = resolveDatabaseSchema({
+			tables: {
+				customers: {
+					fields: {
+						segment: {
+							type: 'string',
+							default: 'vip',
+							index: true,
+						},
+					},
+				},
+			},
+		});
+		const plan = await planGenerateMigrations(
+			migrationsDir,
+			historyPath,
+			nextSchema,
+		);
+
+		expect(plan.changed).toBe(true);
+		expect(plan.files).toHaveLength(1);
+		expect(plan.files[0]?.file).toBe('0003_paymesh_schema_sync.sql');
+		expect(plan.files[0]?.sql).toContain(
+			'ADD COLUMN IF NOT EXISTS "segment" TEXT DEFAULT \'vip\'',
+		);
+		expect(plan.files[0]?.sql).toContain(
+			'CREATE INDEX IF NOT EXISTS "paymesh_customers_idx_segment"',
+		);
+		expect(plan.history.schema).toEqual(nextSchema);
 	});
 
 	test('includes schema extra fields in generated migrations', () => {
