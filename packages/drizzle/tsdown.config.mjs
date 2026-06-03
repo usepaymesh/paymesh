@@ -9,5 +9,5 @@ export default defineConfig({
 	minify: true,
 	target: 'node20',
 	outDir: 'dist',
-	external: ['paymesh', 'next'],
+	external: ['paymesh', 'drizzle-orm'],
 });
