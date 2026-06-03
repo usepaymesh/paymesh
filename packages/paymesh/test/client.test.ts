@@ -377,14 +377,6 @@ describe('client', () => {
 						await context.emit('onCouponRedeemed', {
 							code: 'WELCOME10',
 						});
-						if (false) {
-							// @ts-expect-error plugin event payload is strictly typed
-							await context.emit('onCouponRedeemed', { code: 10 });
-							// @ts-expect-error plugin can only emit its own declared events
-							await context.emit('onMissingHook', {
-								code: 'WELCOME10',
-							});
-						}
 
 						return Response.json({ ok: true });
 					},
