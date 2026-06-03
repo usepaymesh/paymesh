@@ -28,6 +28,7 @@ export {
 } from './lib/migrations';
 
 import packageJson from 'package.json';
+import { registerPluginsCommand } from './commands/plugins';
 
 export { type CliStatus, getPaymeshStatus } from './lib/status';
 
@@ -46,6 +47,7 @@ export function createProgram() {
 	registerMigrateCommand(program);
 	registerPushCommand(program);
 	registerStatusCommand(program);
+	registerPluginsCommand(program);
 
 	return program;
 }
