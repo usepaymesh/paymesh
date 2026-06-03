@@ -2,6 +2,7 @@ import {
 	type CompiledQuery,
 	type DatabaseTableKey,
 	type PaymeshDatabaseRepositories,
+	PaymeshError,
 	type ResolvedDatabaseSchema,
 	type SqlValue,
 	withRaw,
@@ -52,6 +53,167 @@ export function createRepositories(
 					row.raw,
 					options?.includeRaw,
 				) as never;
+			},
+			async list(schema, provider, options) {
+				const fields = Object.values(schema.tables.customers.fields);
+				const limit = options?.limit ?? 20;
+				if (!Number.isInteger(limit) || limit <= 0) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: 'Customer list limit must be a positive integer',
+					});
+				}
+
+				if (options?.after && options?.before) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message:
+							'Customer list accepts either "after" or "before", not both',
+					});
+				}
+
+				const cursorValue = options?.before ?? options?.after;
+				let cursor: {
+					mode: 'after' | 'before';
+					value: {
+						createdAt: string;
+						providerId: string;
+					};
+				} | null = null;
+
+				if (cursorValue) {
+					if (!cursorValue.startsWith('pc1.')) {
+						throw new PaymeshError({
+							code: 'invalid_request',
+							message: 'Invalid customer list cursor',
+						});
+					}
+
+					try {
+						const parsed = JSON.parse(
+							Buffer.from(cursorValue.slice(4), 'base64url').toString('utf8'),
+						) as Record<string, unknown>;
+
+						if (
+							typeof parsed.createdAt !== 'string' ||
+							typeof parsed.providerId !== 'string' ||
+							parsed.createdAt.length === 0 ||
+							parsed.providerId.length === 0
+						) {
+							throw new Error('invalid cursor payload');
+						}
+
+						cursor = {
+							mode: options?.before ? 'before' : 'after',
+							value: {
+								createdAt: parsed.createdAt,
+								providerId: parsed.providerId,
+							},
+						};
+					} catch {
+						throw new PaymeshError({
+							code: 'invalid_request',
+							message: 'Invalid customer list cursor',
+						});
+					}
+				}
+				const includeRaw = options?.includeRaw;
+				const [totalRow] = await executor.query<{ total: number | string }>({
+					sql: `SELECT COUNT(*) AS total
+						FROM ${tableName(schema, 'customers')}
+						WHERE provider = $1 AND deleted_at IS NULL`,
+					params: [provider],
+				});
+				const params: SqlValue[] = [provider];
+				let cursorSql = '';
+				let order = 'ASC';
+
+				if (cursor) {
+					params.push(cursor.value.createdAt, cursor.value.providerId);
+					if (cursor.mode === 'before') {
+						cursorSql = ' AND (created_at, provider_id) < ($2, $3)';
+						order = 'DESC';
+					} else {
+						cursorSql = ' AND (created_at, provider_id) > ($2, $3)';
+					}
+				}
+
+				params.push(limit + 1);
+				const limitPlaceholder = `$${params.length}`;
+				const rows = await executor.query<
+					{
+						provider: string;
+						provider_id: string;
+						created_at: Date | string;
+						data: Record<string, unknown> | null;
+						raw: unknown;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, created_at, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'customers')}
+						WHERE provider = $1 AND deleted_at IS NULL${cursorSql}
+						ORDER BY created_at ${order}, provider_id ${order}
+						LIMIT ${limitPlaceholder}`,
+					params,
+				});
+
+				const hasExtra = rows.length > limit;
+				const windowRows = hasExtra ? rows.slice(0, limit) : rows;
+				const pageRows =
+					cursor?.mode === 'before' ? [...windowRows].reverse() : windowRows;
+				const data = pageRows.map((row) => {
+					const data = { ...(row.data ?? {}) };
+					for (const field of fields) {
+						const value = row[field.key];
+						if (value !== null && value !== undefined) data[field.key] = value;
+					}
+
+					return withRaw(
+						{
+							...data,
+							id: row.provider_id,
+							provider: row.provider,
+						},
+						row.raw,
+						includeRaw,
+					) as never;
+				});
+				const encodeCursor = (row: {
+					created_at: Date | string;
+					provider_id: string;
+				}) =>
+					`pc1.${Buffer.from(
+						JSON.stringify({
+							createdAt:
+								row.created_at instanceof Date
+									? row.created_at.toISOString()
+									: String(row.created_at),
+							providerId: row.provider_id,
+						}),
+					).toString('base64url')}`;
+
+				return {
+					data,
+					total: Number(totalRow?.total ?? 0),
+					previous:
+						data.length === 0
+							? null
+							: cursor?.mode === 'before'
+								? hasExtra
+									? encodeCursor(pageRows[0]!)
+									: null
+								: cursor
+									? encodeCursor(pageRows[0]!)
+									: null,
+					next:
+						data.length === 0
+							? null
+							: cursor?.mode === 'before'
+								? encodeCursor(pageRows[pageRows.length - 1]!)
+								: hasExtra
+									? encodeCursor(pageRows[pageRows.length - 1]!)
+									: null,
+				};
 			},
 			upsert: (schema, customer) =>
 				upsertByProviderId(executor, schema, 'customers', {

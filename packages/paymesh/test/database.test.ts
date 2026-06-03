@@ -154,6 +154,104 @@ describe('database support', () => {
 		expect(database.customerWrites).toHaveLength(1);
 	});
 
+	test('lists customers from the local database with cursor pagination', async () => {
+		const database = createMockDatabase({ persistRaw: true });
+		database.seedCustomer({
+			id: 'cus_1',
+			provider: 'stub',
+			createdAt: '2024-01-01T00:00:00.000Z',
+			email: 'ada@example.com',
+			raw: { id: 'raw_cus_1' },
+		});
+		database.seedCustomer({
+			id: 'cus_2',
+			provider: 'stub',
+			createdAt: '2024-01-01T00:00:00.000Z',
+			email: 'grace@example.com',
+			raw: { id: 'raw_cus_2' },
+		});
+		database.seedCustomer({
+			id: 'cus_3',
+			provider: 'stub',
+			createdAt: '2024-01-02T00:00:00.000Z',
+			email: 'linus@example.com',
+			raw: { id: 'raw_cus_3' },
+		});
+		database.seedCustomer({
+			id: 'cus_4',
+			provider: 'stub',
+			createdAt: '2024-01-03T00:00:00.000Z',
+			email: 'rita@example.com',
+			raw: { id: 'raw_cus_4' },
+		});
+		database.seedCustomer({
+			id: 'cus_5',
+			provider: 'stub',
+			createdAt: '2024-01-04T00:00:00.000Z',
+			email: 'deleted@example.com',
+			deleted: true,
+			raw: { id: 'raw_cus_5' },
+		});
+		const client = createClient({
+			provider: defineProvider({
+				id: 'stub',
+				capabilities: {
+					checkout: true,
+					customers: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+				},
+				customers: {
+					get: async () => {
+						throw new Error('should not be called');
+					},
+					upsert: async () => {
+						throw new Error('should not be called');
+					},
+					delete: async () => {
+						throw new Error('should not be called');
+					},
+				},
+			}),
+			database,
+			includeRaw: true,
+		});
+
+		const firstPage = await client.customers.list({ limit: 2 });
+		const secondPage = await client.customers.list({
+			limit: 2,
+			after: firstPage.next ?? undefined,
+		});
+		const previousPage = await client.customers.list({
+			limit: 2,
+			before: secondPage.previous ?? undefined,
+		});
+
+		expect(firstPage.total).toBe(4);
+		expect(firstPage.data.map((customer) => customer.id)).toEqual([
+			'cus_1',
+			'cus_2',
+		]);
+		expect(firstPage.previous).toBeNull();
+		expect(firstPage.next).toEqual(expect.any(String));
+		expect(firstPage.data[0]!.raw).toEqual({ id: 'raw_cus_1' });
+		expect(secondPage.data.map((customer) => customer.id)).toEqual([
+			'cus_3',
+			'cus_4',
+		]);
+		expect(secondPage.previous).toEqual(expect.any(String));
+		expect(secondPage.next).toBeNull();
+		expect(previousPage.data.map((customer) => customer.id)).toEqual([
+			'cus_1',
+			'cus_2',
+		]);
+		expect(previousPage.previous).toBeNull();
+		expect(previousPage.next).toEqual(firstPage.next);
+	});
+
 	test('persists and reads schema extra fields on customers', async () => {
 		const database = createMockDatabase({ persistRaw: true });
 		const client = createClient({
@@ -485,6 +583,7 @@ function createMockDatabase({
 		Record<string, unknown> & {
 			id: string;
 			provider: string;
+			createdAt: string;
 			deleted?: boolean;
 			raw: unknown;
 		}
@@ -501,29 +600,102 @@ function createMockDatabase({
 					const customer = customers.get(`${provider}:${id}`);
 					if (!customer || customer.deleted) return null;
 
+					const {
+						createdAt: _createdAt,
+						deleted: _deleted,
+						raw,
+						...data
+					} = customer;
 					return withRaw(
 						{
-							...(customer as Record<string, unknown>),
+							...data,
 						},
-						customer.raw,
+						raw,
 						options?.includeRaw,
 					) as never;
 				},
+				async list(_schema, provider, options) {
+					const limit = resolveCustomerListLimit(options?.limit);
+					const cursor = resolveCustomerCursor(options?.after, options?.before);
+					const includeRaw = options?.includeRaw;
+					const filtered = [...customers.values()]
+						.filter(
+							(customer) => customer.provider === provider && !customer.deleted,
+						)
+						.sort(compareCustomerRecords);
+					const total = filtered.length;
+
+					let pageSource = filtered;
+					if (cursor?.mode === 'after') {
+						pageSource = filtered.filter(
+							(customer) => compareCustomerCursor(customer, cursor.value) > 0,
+						);
+					} else if (cursor?.mode === 'before') {
+						pageSource = filtered
+							.filter(
+								(customer) => compareCustomerCursor(customer, cursor.value) < 0,
+							)
+							.sort((left, right) => compareCustomerRecords(right, left));
+					}
+
+					const hasExtra = pageSource.length > limit;
+					const windowRows = hasExtra ? pageSource.slice(0, limit) : pageSource;
+					const pageRows =
+						cursor?.mode === 'before' ? [...windowRows].reverse() : windowRows;
+					const data = pageRows.map((customer) => {
+						const {
+							createdAt: _createdAt,
+							deleted: _deleted,
+							raw,
+							...record
+						} = customer;
+
+						return withRaw(record, raw, includeRaw) as never;
+					});
+
+					return {
+						data,
+						total,
+						previous:
+							data.length === 0
+								? null
+								: cursor?.mode === 'before'
+									? hasExtra
+										? encodeCustomerCursor(pageRows[0]!)
+										: null
+									: cursor
+										? encodeCustomerCursor(pageRows[0]!)
+										: null,
+						next:
+							data.length === 0
+								? null
+								: cursor?.mode === 'before'
+									? encodeCustomerCursor(pageRows[pageRows.length - 1]!)
+									: hasExtra
+										? encodeCustomerCursor(pageRows[pageRows.length - 1]!)
+										: null,
+					};
+				},
 				async upsert(_schema, customer) {
+					const existing = customers.get(`${customer.provider}:${customer.id}`);
+					const createdAt = existing?.createdAt ?? new Date().toISOString();
 					customerWrites.push({
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
 					customers.set(`${customer.provider}:${customer.id}`, {
 						id: customer.id,
 						provider: customer.provider,
+						createdAt,
 						...(customer as Record<string, unknown>),
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
 				},
 				async markDeleted(_schema, customer) {
+					const existing = customers.get(`${customer.provider}:${customer.id}`);
 					customers.set(`${customer.provider}:${customer.id}`, {
 						id: customer.id,
 						provider: customer.provider,
+						createdAt: existing?.createdAt ?? new Date().toISOString(),
 						deleted: true,
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
@@ -601,5 +773,103 @@ function createMockDatabase({
 		},
 	});
 
-	return Object.assign(database, { customerWrites });
+	function seedCustomer(
+		customer: Record<string, unknown> & {
+			id: string;
+			provider: string;
+			createdAt: string;
+			deleted?: boolean;
+			raw: unknown;
+		},
+	) {
+		customers.set(`${customer.provider}:${customer.id}`, customer);
+	}
+
+	return Object.assign(database, { customerWrites, seedCustomer });
+}
+
+function resolveCustomerListLimit(limit?: number) {
+	if (limit === undefined) return 20;
+	if (!Number.isInteger(limit) || limit <= 0) {
+		throw new Error('Customer list limit must be a positive integer');
+	}
+
+	return limit;
+}
+
+function resolveCustomerCursor(after?: string, before?: string) {
+	if (after && before) {
+		throw new Error(
+			'Customer list accepts either "after" or "before", not both',
+		);
+	}
+
+	if (before) {
+		return {
+			mode: 'before' as const,
+			value: decodeCustomerCursor(before),
+		};
+	}
+
+	if (after) {
+		return {
+			mode: 'after' as const,
+			value: decodeCustomerCursor(after),
+		};
+	}
+
+	return null;
+}
+
+function decodeCustomerCursor(cursor: string) {
+	if (!cursor.startsWith('pc1.')) {
+		throw new Error('Invalid customer list cursor');
+	}
+
+	const parsed = JSON.parse(
+		Buffer.from(cursor.slice(4), 'base64url').toString('utf8'),
+	) as Record<string, unknown>;
+
+	if (
+		typeof parsed.createdAt !== 'string' ||
+		typeof parsed.providerId !== 'string' ||
+		parsed.createdAt.length === 0 ||
+		parsed.providerId.length === 0
+	) {
+		throw new Error('Invalid customer list cursor');
+	}
+
+	return {
+		createdAt: parsed.createdAt,
+		providerId: parsed.providerId,
+	};
+}
+
+function encodeCustomerCursor(customer: { createdAt: string; id: string }) {
+	return `pc1.${Buffer.from(
+		JSON.stringify({
+			createdAt: customer.createdAt,
+			providerId: customer.id,
+		}),
+	).toString('base64url')}`;
+}
+
+function compareCustomerRecords(
+	left: Record<string, unknown> & { createdAt: string; id: string },
+	right: Record<string, unknown> & { createdAt: string; id: string },
+) {
+	return (
+		left.createdAt.localeCompare(right.createdAt) ||
+		left.id.localeCompare(right.id)
+	);
+}
+
+function compareCustomerCursor(
+	left: { createdAt: string; id: string },
+	right: { createdAt: string; providerId: string },
+) {
+	return (
+		left.createdAt.localeCompare(right.createdAt) ||
+		left.id.localeCompare(right.providerId)
+	);
 }

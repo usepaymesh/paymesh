@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
 	type Customer,
 	createClient,
+	defineDatabaseAdapter,
 	defineProvider,
 	type Payment,
 	PaymeshError,
@@ -113,6 +114,55 @@ describe('client', () => {
 		expect(callNullPayment.raw).toBeNull();
 		expect(defaultCustomer.raw).toBeNull();
 		expect(callRawCustomer.raw).toMatchObject({ id: 'raw_cus_123' });
+	});
+
+	test('lists customers from the configured database with typed extra fields', async () => {
+		const database = createListDatabase();
+		const client = createClient({
+			provider: createStubProvider(),
+			database,
+			includeRaw: true,
+			schema: {
+				tables: {
+					customers: {
+						fields: {
+							segment: {
+								type: 'string',
+								required: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		const page = await client.customers.list({ limit: 10 });
+		const firstCustomer = page.data[0]!;
+
+		expectType<number>(page.total);
+		expectType<string | null>(page.previous);
+		expectType<string | null>(page.next);
+		expectType<string>(firstCustomer.segment);
+		expectType<unknown>(firstCustomer.raw);
+		expect(page.data).toHaveLength(2);
+		expect(firstCustomer).toMatchObject({
+			id: 'cus_1',
+			provider: 'stub',
+			segment: 'vip',
+		});
+	});
+
+	test('rejects customers.list without a configured database', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+		});
+
+		await expect(client.customers.list()).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message:
+				'Provider "stub" does not support "customers.list" without a configured database',
+			provider: 'stub',
+		});
 	});
 
 	test('checks customer capability before calling the provider', async () => {
@@ -361,4 +411,97 @@ function createStubProvider({
 				),
 		},
 	});
+}
+
+function createListDatabase() {
+	const database = defineDatabaseAdapter({
+		id: 'mock',
+		dialect: 'postgres',
+		persistRaw: true,
+		repositories: {
+			customers: {
+				async findByProviderId() {
+					return null;
+				},
+				async list(_schema, _provider, options) {
+					return {
+						data: [
+							withRaw(
+								{
+									id: 'cus_1',
+									provider: 'stub',
+									email: 'ada@example.com',
+									segment: 'vip',
+								},
+								{ id: 'raw_cus_1' },
+								options?.includeRaw,
+							),
+							withRaw(
+								{
+									id: 'cus_2',
+									provider: 'stub',
+									email: 'grace@example.com',
+									segment: 'vip',
+								},
+								{ id: 'raw_cus_2' },
+								options?.includeRaw,
+							),
+						],
+						total: 2,
+						previous: null,
+						next: null,
+					} as never;
+				},
+				async upsert() {},
+				async markDeleted() {},
+			},
+			checkouts: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
+			},
+			invoices: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
+			},
+			subscriptions: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
+			},
+			webhookEvents: {
+				async acquire() {
+					return { duplicate: true };
+				},
+				async markProcessed() {},
+				async markFailed() {},
+			},
+			products: {
+				async upsertMany() {},
+			},
+			prices: {
+				async upsertMany() {},
+			},
+			migrations: {
+				async ensureTable() {},
+				async listApplied() {
+					return [];
+				},
+				async recordApplied() {},
+			},
+		},
+		async query<Row = unknown>() {
+			return [] as Row[];
+		},
+		async execute() {},
+		async transaction(callback) {
+			return callback(database);
+		},
+	});
+
+	return database;
 }

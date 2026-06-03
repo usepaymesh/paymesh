@@ -7,6 +7,7 @@ import type {
 	HandleWebhookOptions,
 	PaymeshClient,
 	PaymeshCustomer,
+	PaymeshCustomerList,
 	PaymeshCustomerUpsertData,
 	PaymeshHooks,
 	PaymeshPayment,
@@ -14,6 +15,7 @@ import type {
 } from './types/client';
 import type {
 	DatabaseSchemaOptions,
+	PaymeshCustomerListOptions,
 	ResolvedDatabaseExtraTableFields,
 } from './types/database';
 import type {
@@ -162,6 +164,36 @@ export const createClient = <
 				return provider.customers.get(id, mergedOptions) as Promise<
 					PaymeshCustomer<CallIncludeRaw, Schema>
 				>;
+			},
+			list: async <CallIncludeRaw extends boolean = IncludeRaw>(
+				options?: PaymeshCustomerListOptions<CallIncludeRaw>,
+			) => {
+				if (!database)
+					throw new PaymeshError({
+						code: 'unsupported_capability',
+						message: `Provider "${provider.id}" does not support "customers.list" without a configured database`,
+						provider: provider.id,
+					});
+
+				const includeRaw = (options?.includeRaw ??
+					baseIncludeRaw ??
+					false) as CallIncludeRaw;
+
+				const result = await database.repositories.customers.list(
+					schema,
+					provider.id,
+					{
+						includeRaw,
+						limit: options?.limit,
+						after: options?.after,
+						before: options?.before,
+					},
+				);
+
+				return {
+					...result,
+					data: result.data as Array<PaymeshCustomer<CallIncludeRaw, Schema>>,
+				} as PaymeshCustomerList<CallIncludeRaw, Schema>;
 			},
 			delete: async <CallIncludeRaw extends boolean = IncludeRaw>(
 				id: Parameters<P['customers']['delete']>[0],
