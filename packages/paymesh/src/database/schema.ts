@@ -1,3 +1,4 @@
+import { PaymeshError } from '../errors';
 import type {
 	CustomDatabaseTableConfig,
 	DatabaseExtraTableFieldOptions,
@@ -70,11 +71,11 @@ export function mergeDatabaseSchemas(
 			const table = extension.tables?.[key];
 			if (!table) continue;
 
-			if (table.name) {
-				throw new Error(
-					`Plugin schema cannot redefine the table name for "${key}".`,
-				);
-			}
+			if (table.name)
+				throw new PaymeshError({
+					code: 'database_error',
+					message: `Plugin schema cannot redefine the table name for "${key}".`,
+				});
 
 			const current = mergedTables[key];
 			mergedTables[key] = {
@@ -87,9 +88,11 @@ export function mergeDatabaseSchemas(
 		}
 
 		for (const [key, table] of Object.entries(extension.customTables ?? {})) {
-			if (mergedCustomTables[key]) {
-				throw new Error(`Custom table "${key}" is already registered.`);
-			}
+			if (mergedCustomTables[key])
+				throw new PaymeshError({
+					code: 'database_error',
+					message: `Custom table "${key}" is already registered.`,
+				});
 
 			mergedCustomTables[key] = table;
 		}
@@ -150,15 +153,15 @@ function normalizeIdentifier(value: string) {
 }
 
 function validateField(key: string, field: DatabaseExtraTableFieldOptions) {
-	if (field.required && field.default !== undefined) {
-		throw new Error(
-			`Database field "${key}" cannot be required and define a default value at the same time.`,
-		);
-	}
+	if (field.required && field.default !== undefined)
+		throw new PaymeshError({
+			code: 'database_error',
+			message: `Database field "${key}" cannot be required and define a default value at the same time.`,
+		});
 
-	if (field.type === 'enum' && (!field.enum || field.enum.length === 0)) {
-		throw new Error(
-			`Database field "${key}" must define at least one enum value.`,
-		);
-	}
+	if (field.type === 'enum' && (!field.enum || field.enum.length === 0))
+		throw new PaymeshError({
+			code: 'database_error',
+			message: `Database field "${key}" must define at least one enum value.`,
+		});
 }

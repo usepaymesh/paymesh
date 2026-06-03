@@ -418,9 +418,11 @@ async function runMiddlewarePipeline<TClient>(
 	let index = -1;
 
 	const dispatch = async (currentIndex: number): Promise<Response> => {
-		if (currentIndex <= index) {
-			throw new Error('Middleware "next()" called multiple times.');
-		}
+		if (currentIndex <= index)
+			throw new PaymeshError({
+				code: 'plugin_error',
+				message: 'Middleware "next()" called multiple times',
+			});
 
 		index = currentIndex;
 		const current = middleware[currentIndex];

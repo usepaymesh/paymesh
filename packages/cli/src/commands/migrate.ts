@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { PaymeshError } from 'paymesh';
 import { loadClient } from '../lib/client';
 import {
 	getAppliedPaymeshMigrations,
@@ -23,9 +24,11 @@ export function registerMigrateCommand(program: Command) {
 				explicitPath: options.client,
 			});
 
-			if (!client.database) {
-				throw new Error('The configured client does not define a database');
-			}
+			if (!client.database)
+				throw new PaymeshError({
+					code: 'client_error',
+					message: 'The configured client does not define a database',
+				});
 
 			try {
 				const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);

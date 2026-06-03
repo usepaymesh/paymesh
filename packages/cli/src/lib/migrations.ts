@@ -7,6 +7,7 @@ import type {
 	ResolvedDatabaseExtraTableField,
 	ResolvedDatabaseSchema,
 } from 'paymesh';
+import { PaymeshError } from 'paymesh';
 import { tableName } from './sql';
 
 export interface PaymeshMigrationFile {
@@ -160,9 +161,11 @@ export async function getExpectedMigrations(
 ) {
 	const history = await readMigrationHistory(historyPath);
 	if (!history) {
-		throw new Error(
-			'Missing paymesh/history.json. Run "paymesh generate" before applying migrations.',
-		);
+		throw new PaymeshError({
+			code: 'database_error',
+			message:
+				'Missing paymesh/history.json. Run "paymesh generate" before applying migrations.',
+		});
 	}
 
 	const localFiles = await readMigrationFiles(directory);
@@ -171,15 +174,17 @@ export async function getExpectedMigrations(
 	return history.migrations.map((entry) => {
 		const file = files.get(entry.file);
 		if (!file) {
-			throw new Error(
-				`Missing migration file "${entry.file}". Run "paymesh generate" to restore the expected artifacts.`,
-			);
+			throw new PaymeshError({
+				code: 'database_error',
+				message: `Missing migration file "${entry.file}". Run "paymesh generate" to restore the expected artifacts.`,
+			});
 		}
 
 		if (file.checksum !== entry.checksum) {
-			throw new Error(
-				`Migration file "${entry.file}" does not match paymesh/history.json. Run "paymesh generate" to regenerate the expected artifacts.`,
-			);
+			throw new PaymeshError({
+				code: 'database_error',
+				message: `Migration file "${entry.file}" does not match paymesh/history.json. Run "paymesh generate" to regenerate the expected artifacts.`,
+			});
 		}
 
 		return file;

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { PaymeshClient } from 'paymesh';
+import { type PaymeshClient, PaymeshError } from 'paymesh';
 
 export async function loadClient({
 	cwd,
@@ -19,9 +19,10 @@ export async function loadClient({
 	const client = loaded.default ?? loaded.paymesh;
 
 	if (!isPaymeshClient(client)) {
-		throw new Error(
-			`The client module "${clientPath}" must export the Paymesh client as default or named export "paymesh"`,
-		);
+		throw new PaymeshError({
+			code: 'client_error',
+			message: `The client module "${clientPath}" must export the Paymesh client as default or named export "paymesh"`,
+		});
 	}
 
 	return client;
@@ -33,11 +34,12 @@ export async function resolveClientPath(cwd: string, explicitPath?: string) {
 		process.env.PAYMESH_PATH ??
 		(await readClientPathFromPackageJson(cwd));
 
-	if (!candidate) {
-		throw new Error(
-			'Unable to resolve the Paymesh client path. Use --client, PAYMESH_PATH, or package.json.paymesh.path.',
-		);
-	}
+	if (!candidate)
+		throw new PaymeshError({
+			code: 'client_error',
+			message:
+				'Unable to resolve the Paymesh client path. Use --client, PAYMESH_PATH, or package.json.paymesh.path.',
+		});
 
 	return path.resolve(cwd, candidate);
 }

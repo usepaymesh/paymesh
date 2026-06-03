@@ -99,9 +99,11 @@ export function createRepositories(
 							typeof parsed.providerId !== 'string' ||
 							parsed.createdAt.length === 0 ||
 							parsed.providerId.length === 0
-						) {
-							throw new Error('invalid cursor payload');
-						}
+						)
+							throw new PaymeshError({
+								code: 'database_error',
+								message: 'Invalid cursor payload',
+							});
 
 						cursor = {
 							mode: options?.before ? 'before' : 'after',
