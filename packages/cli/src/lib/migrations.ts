@@ -195,7 +195,7 @@ export async function getExpectedMigrations(
 }
 
 export async function planGenerateMigrations(
-	directory: string,
+	_directory: string,
 	historyPath: string,
 	schema: ResolvedDatabaseSchema,
 ) {
@@ -774,11 +774,24 @@ ${extraTableColumnsSql(schema, 'prices')}
 }
 
 function createCustomTableSql(table: ResolvedCustomDatabaseTable) {
+	const lines = [
+		`\t${createCustomTablePrimaryKeySql(table)}`,
+		...Object.values(table.fields).map(
+			(field) => `\t${createExtraTableColumnSql(field)}`,
+		),
+	];
+
+	if (table.timestamps.createdAt) {
+		lines.push('\tcreated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+	}
+
+	if (table.timestamps.updatedAt) {
+		lines.push('\tupdated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+	}
+
 	return `
 CREATE TABLE IF NOT EXISTS ${quoteIdentifier(table.name)} (
-	id BIGSERIAL PRIMARY KEY,
-${customTableColumnsSql(table)}	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+${lines.join(',\n')}
 );`.trim();
 }
 
@@ -843,10 +856,10 @@ function extraTableColumnsSql(
 	return columns.length === 0 ? '' : `\t${columns.join(',\n\t')},\n`;
 }
 
-function customTableColumnsSql(table: ResolvedCustomDatabaseTable) {
-	const columns = Object.values(table.fields).map(createExtraTableColumnSql);
-
-	return columns.length === 0 ? '' : `\t${columns.join(',\n\t')},\n`;
+function createCustomTablePrimaryKeySql(table: ResolvedCustomDatabaseTable) {
+	return table.primaryKey.type === 'text'
+		? `${quoteIdentifier(table.primaryKey.name)} TEXT PRIMARY KEY`
+		: `${quoteIdentifier(table.primaryKey.name)} BIGSERIAL PRIMARY KEY`;
 }
 
 function createExtraTableColumnSql(field: ResolvedDatabaseExtraTableField) {
@@ -897,37 +910,43 @@ function createExtraFieldIndexesAndConstraintsSql(
 function createCustomTableIndexesAndConstraintsSql(
 	table: ResolvedCustomDatabaseTable,
 ) {
-	return Object.values(table.fields).flatMap((field) => {
-		const queries: string[] = [];
+	return [
+		...table.indexes.map((index) =>
+			createCustomTableIndexSql(table, index.columns, index.unique, index.name),
+		),
+		...Object.values(table.fields).flatMap((field) => {
+			const queries: string[] = [];
 
-		if (field.unique) {
-			queries.push(createCustomTableIndexSql(table, [field.column], true));
-		} else if (field.index) {
-			queries.push(createCustomTableIndexSql(table, [field.column], false));
-		}
+			if (field.unique) {
+				queries.push(createCustomTableIndexSql(table, [field.column], true));
+			} else if (field.index) {
+				queries.push(createCustomTableIndexSql(table, [field.column], false));
+			}
 
-		if (field.type === 'enum' && field.enum) {
-			queries.push(
-				createCustomTableCheckConstraintSql(
-					table,
-					`${field.column}_enum`,
-					enumCheckSql(field),
-				),
-			);
-		}
+			if (field.type === 'enum' && field.enum) {
+				queries.push(
+					createCustomTableCheckConstraintSql(
+						table,
+						`${field.column}_enum`,
+						enumCheckSql(field),
+					),
+				);
+			}
 
-		return queries;
-	});
+			return queries;
+		}),
+	];
 }
 
 function createCustomTableIndexSql(
 	table: ResolvedCustomDatabaseTable,
 	columns: string[],
 	unique: boolean,
+	name?: string,
 ) {
 	const suffix = `${unique ? 'uniq' : 'idx'}_${columns.join('_')}`;
 	const prefix = unique ? 'CREATE UNIQUE INDEX' : 'CREATE INDEX';
-	return `${prefix} IF NOT EXISTS ${quoteIdentifier(objectName(table.name, suffix))}
+	return `${prefix} IF NOT EXISTS ${quoteIdentifier(name ?? objectName(table.name, suffix))}
 ON ${quoteIdentifier(table.name)} (${columns.map(quoteIdentifier).join(', ')});`;
 }
 

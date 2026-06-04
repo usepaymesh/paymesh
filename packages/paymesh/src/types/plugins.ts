@@ -1,4 +1,5 @@
 import type {
+	BuiltInPaymeshHooks,
 	PaymeshCustomersClient,
 	PaymeshHooks,
 	PaymeshPaymentsClient,
@@ -207,7 +208,7 @@ export interface PaymeshPlugin<
 		TEvents,
 		TId
 	>[];
-	hooks?: PluginEventHooks<TEvents>;
+	hooks?: PluginEventHooks<TEvents> & BuiltInPaymeshHooks<boolean>;
 	events?: TEvents;
 	middleware?: readonly PluginMiddleware<
 		PluginRuntimeClient<TProviderId>,
@@ -218,7 +219,13 @@ export interface PaymeshPlugin<
 	extends?(client: PluginRuntimeClient<TProviderId>): TExtends;
 }
 
-export type AnyPaymeshPlugin = PaymeshPlugin<Any, Any, Any, Any>;
+export type AnyPaymeshPlugin = Omit<
+	PaymeshPlugin<Any, Any, Any, Any>,
+	'hooks' | 'events'
+> & {
+	hooks?: unknown;
+	events?: unknown;
+};
 
 export type PluginRouteHandleOptions<
 	IncludeRaw extends boolean = boolean,

@@ -540,6 +540,10 @@ describe('database support', () => {
 			}),
 			hooks: {
 				onEvent: async (event) => {
+					expect(event.context.deliveryId).toBe('evt_parallel');
+					expect(event.context.request.headers.get('content-type')).toBe(
+						'application/json',
+					);
 					calls.push(`event:${event.type}`);
 				},
 				onCustomerCreated: async (event) => {

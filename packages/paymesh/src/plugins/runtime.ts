@@ -11,7 +11,6 @@ import type {
 } from '../types/database';
 import type {
 	AnyPaymeshPlugin,
-	PaymeshPlugin,
 	PaymeshPluginsClient,
 	PaymeshRoutesClient,
 	PluginHook,
@@ -41,7 +40,7 @@ type RuntimeHookHandler = PluginHook<unknown>;
 
 type RuntimeHooks<
 	IncludeRaw extends boolean,
-	Plugins extends readonly PaymeshPlugin[],
+	Plugins extends readonly AnyPaymeshPlugin[],
 > = Partial<
 	Record<keyof PaymeshHooks<IncludeRaw, Plugins> & string, RuntimeHookHandler>
 >;
@@ -72,7 +71,9 @@ interface BootstrappedPlugins<
 	routesClient: PaymeshRoutesClient<IncludeRaw, Plugins>;
 }
 
-interface RouteRegistration<TPlugin extends PaymeshPlugin = PaymeshPlugin> {
+interface RouteRegistration<
+	TPlugin extends AnyPaymeshPlugin = AnyPaymeshPlugin,
+> {
 	definition: PluginRouteDefinition;
 	metadata: RegisteredPluginRoute<TPlugin['id']>;
 	plugin: TPlugin;
@@ -499,7 +500,7 @@ function createPluginEmitter({
 	providerId,
 }: {
 	dispatchHook: (hook: string, event: unknown) => Promise<void>;
-	plugin: PaymeshPlugin;
+	plugin: AnyPaymeshPlugin;
 	pluginEventOwners: Map<string, string>;
 	providerId: string;
 }) {

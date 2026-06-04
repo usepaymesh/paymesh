@@ -231,6 +231,60 @@ describe('cli helpers', () => {
 		expect(incremental?.sql).toContain("\"status\" IN ('pending', 'redeemed')");
 	});
 
+	test('supports custom table primary keys, timestamps, and explicit indexes', () => {
+		const files = getPaymeshMigrationFiles(
+			resolveDatabaseSchema({
+				customTables: {
+					'audit-logs.audit_logs': {
+						name: 'paymesh_audit_logs',
+						pluginId: 'audit-logs',
+						primaryKey: {
+							type: 'text',
+						},
+						timestamps: {
+							createdAt: true,
+							updatedAt: false,
+						},
+						fields: {
+							action: {
+								type: 'string',
+								required: true,
+							},
+							resource_type: {
+								type: 'string',
+								required: true,
+							},
+							occurred_at: {
+								type: 'date',
+								required: true,
+							},
+						},
+						indexes: [
+							{
+								name: 'paymesh_audit_logs_resource_idx',
+								columns: ['resource_type', 'action'],
+							},
+						],
+					},
+				},
+			}),
+		);
+		const initial = files.find((file) => file.version === 1);
+		const incremental = files.find((file) => file.version === 2);
+
+		expect(initial?.sql).toContain(
+			'CREATE TABLE IF NOT EXISTS "paymesh_audit_logs"',
+		);
+		expect(initial?.sql).toContain('"id" TEXT PRIMARY KEY');
+		expect(initial?.sql).toContain('"action" TEXT NOT NULL');
+		expect(initial?.sql).toContain(
+			'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()',
+		);
+		expect(initial?.sql).not.toContain('"updated_at" TIMESTAMPTZ');
+		expect(incremental?.sql).toContain('paymesh_audit_logs_resource_idx');
+		expect(incremental?.sql).toContain('("resource_type", "action")');
+	});
+
 	test('pushes catalog through cli helper', async () => {
 		const productWrites: Array<{ provider: string; count: number }> = [];
 		const priceWrites: Array<{ provider: string; count: number }> = [];

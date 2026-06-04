@@ -125,6 +125,8 @@ describe('client', () => {
 				onEvent(event) {
 					expectType<string>(event.id);
 					expectType<string>(event.provider);
+					expectType<Request>(event.context.request);
+					expectType<string>(event.context.deliveryId);
 
 					if (event.type === 'checkout.completed') {
 						expectType<string>(event.data.id);

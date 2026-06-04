@@ -91,9 +91,20 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 		}
 
 		if (dispatchHook) {
-			const dispatches: Promise<void>[] = [dispatchHook('onEvent', event)];
+			const context = {
+				request: request.clone(),
+				deliveryId,
+				dispatchedAt: new Date().toISOString(),
+				hook: handled.hook,
+			};
+			const dispatches: Promise<void>[] = [
+				dispatchHook('onEvent', withHookContext(event, context)),
+			];
 
-			if (handled.hook) dispatches.push(dispatchHook(handled.hook, event));
+			if (handled.hook)
+				dispatches.push(
+					dispatchHook(handled.hook, withHookContext(event, context)),
+				);
 
 			await Promise.all(dispatches);
 		}
@@ -127,6 +138,18 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 		body: { received: true },
 		event,
 	};
+}
+
+function withHookContext<TEvent extends PaymeshEvent<unknown, boolean>>(
+	event: TEvent,
+	context: {
+		request: Request;
+		deliveryId: string;
+		dispatchedAt: string;
+		hook?: string;
+	},
+) {
+	return Object.assign(event, { context });
 }
 
 async function persistEvent(

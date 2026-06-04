@@ -1,0 +1,15 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"paymesh": [
+				"../paymesh/src/index.ts"
+			]
+		}
+	},
+	"include": [
+		"src",
+		"test"
+	]
+}

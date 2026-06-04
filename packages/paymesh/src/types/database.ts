@@ -26,10 +26,29 @@ export interface DatabaseTableConfig {
 	fields?: DatabaseExtraTableFields;
 }
 
+export interface CustomDatabaseTablePrimaryKeyConfig {
+	name?: string;
+	type?: 'bigserial' | 'text';
+}
+
+export interface CustomDatabaseTableTimestampsConfig {
+	createdAt?: boolean;
+	updatedAt?: boolean;
+}
+
+export interface CustomDatabaseTableIndexConfig {
+	name?: string;
+	columns: string[];
+	unique?: boolean;
+}
+
 export interface CustomDatabaseTableConfig {
 	name?: string;
 	fields?: DatabaseExtraTableFields;
 	pluginId?: string;
+	primaryKey?: CustomDatabaseTablePrimaryKeyConfig;
+	timestamps?: CustomDatabaseTableTimestampsConfig;
+	indexes?: CustomDatabaseTableIndexConfig[];
 }
 
 export type DatabaseExtraTableFields = Record<
@@ -73,6 +92,15 @@ export interface ResolvedCustomDatabaseTable {
 	name: string;
 	fields: ResolvedDatabaseExtraTableFields;
 	pluginId?: string;
+	primaryKey: Required<CustomDatabaseTablePrimaryKeyConfig>;
+	timestamps: Required<CustomDatabaseTableTimestampsConfig>;
+	indexes: ResolvedCustomDatabaseTableIndex[];
+}
+
+export interface ResolvedCustomDatabaseTableIndex {
+	name?: string;
+	columns: string[];
+	unique: boolean;
 }
 
 export interface ResolvedDatabaseSchema {

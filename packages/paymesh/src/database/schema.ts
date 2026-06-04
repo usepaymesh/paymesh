@@ -1,11 +1,13 @@
 import { PaymeshError } from '../errors';
 import type {
 	CustomDatabaseTableConfig,
+	CustomDatabaseTableIndexConfig,
 	DatabaseExtraTableFieldOptions,
 	DatabaseExtraTableFields,
 	DatabaseSchemaOptions,
 	DatabaseTableKey,
 	ResolvedCustomDatabaseTable,
+	ResolvedCustomDatabaseTableIndex,
 	ResolvedDatabaseExtraTableFields,
 	ResolvedDatabaseSchema,
 } from '../types/database';
@@ -142,6 +144,15 @@ function resolveCustomTables(
 					name: table.name ?? `${prefix}${normalizeIdentifier(id)}`,
 					fields: resolveTableFields(table.fields),
 					pluginId: table.pluginId,
+					primaryKey: {
+						name: table.primaryKey?.name ?? 'id',
+						type: table.primaryKey?.type ?? 'bigserial',
+					},
+					timestamps: {
+						createdAt: table.timestamps?.createdAt ?? true,
+						updatedAt: table.timestamps?.updatedAt ?? true,
+					},
+					indexes: resolveCustomTableIndexes(table.indexes),
 				} satisfies ResolvedCustomDatabaseTable,
 			];
 		}),
@@ -150,6 +161,22 @@ function resolveCustomTables(
 
 function normalizeIdentifier(value: string) {
 	return value.replaceAll(/[^a-zA-Z0-9_]/g, '_').replaceAll(/_+/g, '_');
+}
+
+function resolveCustomTableIndexes(indexes?: CustomDatabaseTableIndexConfig[]) {
+	return (indexes ?? []).map((index) => {
+		if (!Array.isArray(index.columns) || index.columns.length === 0)
+			throw new PaymeshError({
+				code: 'database_error',
+				message: 'Custom table indexes must define at least one column.',
+			});
+
+		return {
+			name: index.name,
+			columns: [...index.columns],
+			unique: index.unique ?? false,
+		};
+	}) satisfies ResolvedCustomDatabaseTableIndex[];
 }
 
 function validateField(key: string, field: DatabaseExtraTableFieldOptions) {

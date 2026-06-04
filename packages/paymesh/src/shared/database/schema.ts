@@ -1,10 +1,10 @@
 import { mergeDatabaseSchemas } from '../../database/schema';
 import type { DatabaseSchemaOptions } from '../../types/database';
-import type { PaymeshPlugin, PluginSchema } from '../../types/plugins';
+import type { AnyPaymeshPlugin, PluginSchema } from '../../types/plugins';
 
 export function resolveClientSchemaOptions(
 	base: DatabaseSchemaOptions | undefined,
-	plugins: readonly PaymeshPlugin[],
+	plugins: readonly AnyPaymeshPlugin[],
 ) {
 	return mergeDatabaseSchemas(
 		base,

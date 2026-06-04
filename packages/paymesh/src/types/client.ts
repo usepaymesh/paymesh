@@ -52,6 +52,19 @@ export type UnknownEvent<
 	IncludeRaw extends boolean = false,
 > = PaymeshEvent<unknown, IncludeRaw> & { type: Type };
 
+export interface WebhookHookContext {
+	request: Request;
+	deliveryId: string;
+	dispatchedAt: string;
+	hook?: string;
+}
+
+export type WebhookHookEvent<TEvent> = Simplify<
+	TEvent & {
+		context: WebhookHookContext;
+	}
+>;
+
 export type AnyWebhookEvent<IncludeRaw extends boolean = false> =
 	| PaymentEvent<'payment.created', IncludeRaw>
 	| PaymentEvent<'payment.succeeded', IncludeRaw>
@@ -66,33 +79,43 @@ export type AnyWebhookEvent<IncludeRaw extends boolean = false> =
 	| UnknownEvent<'subscription.canceled', IncludeRaw>
 	| PaymentEvent<'checkout.completed', IncludeRaw>;
 
-interface BuiltInPaymeshHooks<IncludeRaw extends boolean = false> {
-	onEvent?: PaymeshHook<AnyWebhookEvent<IncludeRaw>>;
-	onPaymentCreated?: PaymeshHook<PaymentEvent<'payment.created', IncludeRaw>>;
-	onPaymentSucceeded?: PaymeshHook<
-		PaymentEvent<'payment.succeeded', IncludeRaw>
+export interface BuiltInPaymeshHooks<IncludeRaw extends boolean = false> {
+	onEvent?: PaymeshHook<WebhookHookEvent<AnyWebhookEvent<IncludeRaw>>>;
+	onPaymentCreated?: PaymeshHook<
+		WebhookHookEvent<PaymentEvent<'payment.created', IncludeRaw>>
 	>;
-	onPaymentFailed?: PaymeshHook<PaymentEvent<'payment.failed', IncludeRaw>>;
-	onPaymentCanceled?: PaymeshHook<PaymentEvent<'payment.canceled', IncludeRaw>>;
-	onPaymentRefunded?: PaymeshHook<PaymentEvent<'payment.refunded', IncludeRaw>>;
+	onPaymentSucceeded?: PaymeshHook<
+		WebhookHookEvent<PaymentEvent<'payment.succeeded', IncludeRaw>>
+	>;
+	onPaymentFailed?: PaymeshHook<
+		WebhookHookEvent<PaymentEvent<'payment.failed', IncludeRaw>>
+	>;
+	onPaymentCanceled?: PaymeshHook<
+		WebhookHookEvent<PaymentEvent<'payment.canceled', IncludeRaw>>
+	>;
+	onPaymentRefunded?: PaymeshHook<
+		WebhookHookEvent<PaymentEvent<'payment.refunded', IncludeRaw>>
+	>;
 	onCustomerCreated?: PaymeshHook<
-		CustomerEvent<'customer.created', IncludeRaw>
+		WebhookHookEvent<CustomerEvent<'customer.created', IncludeRaw>>
 	>;
 	onCustomerUpdated?: PaymeshHook<
-		CustomerEvent<'customer.updated', IncludeRaw>
+		WebhookHookEvent<CustomerEvent<'customer.updated', IncludeRaw>>
 	>;
-	onCustomerDeleted?: PaymeshHook<CustomerDeletedEvent<IncludeRaw>>;
+	onCustomerDeleted?: PaymeshHook<
+		WebhookHookEvent<CustomerDeletedEvent<IncludeRaw>>
+	>;
 	onSubscriptionCreated?: PaymeshHook<
-		UnknownEvent<'subscription.created', IncludeRaw>
+		WebhookHookEvent<UnknownEvent<'subscription.created', IncludeRaw>>
 	>;
 	onSubscriptionUpdated?: PaymeshHook<
-		UnknownEvent<'subscription.updated', IncludeRaw>
+		WebhookHookEvent<UnknownEvent<'subscription.updated', IncludeRaw>>
 	>;
 	onSubscriptionCanceled?: PaymeshHook<
-		UnknownEvent<'subscription.canceled', IncludeRaw>
+		WebhookHookEvent<UnknownEvent<'subscription.canceled', IncludeRaw>>
 	>;
 	onCheckoutCompleted?: PaymeshHook<
-		PaymentEvent<'checkout.completed', IncludeRaw>
+		WebhookHookEvent<PaymentEvent<'checkout.completed', IncludeRaw>>
 	>;
 }
 
