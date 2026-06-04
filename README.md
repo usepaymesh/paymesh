@@ -158,6 +158,9 @@ import { paymesh } from "@/lib/paymesh";
 
 export const POST = Webhooks({
   client: paymesh,
+  async onEvent(event) {
+    console.log("Webhook event", event.type, event.id);
+  },
   async onCheckoutCompleted(event) {
     console.log("Checkout completed", event.data.id);
   },

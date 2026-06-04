@@ -22,6 +22,7 @@ import type {
 import type { Provider } from '../types/providers';
 
 const BUILT_IN_HOOK_NAMES = new Set([
+	'onEvent',
 	'onPaymentCreated',
 	'onPaymentSucceeded',
 	'onPaymentFailed',

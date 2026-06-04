@@ -28,9 +28,9 @@ import type {
 	ProviderRequestOptions,
 } from './providers';
 
-export type PaymeshHook<Event = PaymeshEvent> = (
-	event: Event,
-) => void | Promise<void>;
+export type PaymeshHook<Event = PaymeshEvent> = {
+	bivarianceHack(event: Event): unknown | Promise<unknown>;
+}['bivarianceHack'];
 
 export type PaymentEvent<
 	Type extends PaymeshEventType,
@@ -52,7 +52,22 @@ export type UnknownEvent<
 	IncludeRaw extends boolean = false,
 > = PaymeshEvent<unknown, IncludeRaw> & { type: Type };
 
+export type AnyWebhookEvent<IncludeRaw extends boolean = false> =
+	| PaymentEvent<'payment.created', IncludeRaw>
+	| PaymentEvent<'payment.succeeded', IncludeRaw>
+	| PaymentEvent<'payment.failed', IncludeRaw>
+	| PaymentEvent<'payment.canceled', IncludeRaw>
+	| PaymentEvent<'payment.refunded', IncludeRaw>
+	| CustomerEvent<'customer.created', IncludeRaw>
+	| CustomerEvent<'customer.updated', IncludeRaw>
+	| CustomerDeletedEvent<IncludeRaw>
+	| UnknownEvent<'subscription.created', IncludeRaw>
+	| UnknownEvent<'subscription.updated', IncludeRaw>
+	| UnknownEvent<'subscription.canceled', IncludeRaw>
+	| PaymentEvent<'checkout.completed', IncludeRaw>;
+
 interface BuiltInPaymeshHooks<IncludeRaw extends boolean = false> {
+	onEvent?: PaymeshHook<AnyWebhookEvent<IncludeRaw>>;
 	onPaymentCreated?: PaymeshHook<PaymentEvent<'payment.created', IncludeRaw>>;
 	onPaymentSucceeded?: PaymeshHook<
 		PaymentEvent<'payment.succeeded', IncludeRaw>
@@ -91,6 +106,13 @@ type UnionToIntersection<T> = (
 	? TResult
 	: never;
 
+type PluginEventHooksFromDefinition<TEvents> =
+	TEvents extends PluginEventDefinitions
+		? string extends keyof TEvents
+			? Record<never, never>
+			: PluginEventHooks<TEvents>
+		: Record<never, never>;
+
 export type PluginClientExtensions<
 	Plugins extends readonly AnyPaymeshPlugin[],
 > = Plugins[number] extends never
@@ -112,9 +134,7 @@ type PluginEventsFromList<Plugins extends readonly AnyPaymeshPlugin[]> =
 				Plugins[number] extends {
 					events?: infer TEvents;
 				}
-					? NonNullable<TEvents> extends PluginEventDefinitions
-						? PluginEventHooks<NonNullable<TEvents>>
-						: Record<never, never>
+					? PluginEventHooksFromDefinition<NonNullable<TEvents>>
 					: Record<never, never>
 			>;
 

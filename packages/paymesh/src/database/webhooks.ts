@@ -90,8 +90,12 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 			);
 		}
 
-		if (handled.hook && dispatchHook) {
-			await dispatchHook(handled.hook, event);
+		if (dispatchHook) {
+			const dispatches: Promise<void>[] = [dispatchHook('onEvent', event)];
+
+			if (handled.hook) dispatches.push(dispatchHook(handled.hook, event));
+
+			await Promise.all(dispatches);
 		}
 
 		if (database) {

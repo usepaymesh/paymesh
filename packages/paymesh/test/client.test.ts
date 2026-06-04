@@ -118,6 +118,31 @@ describe('client', () => {
 		expect(callRawCustomer.raw).toMatchObject({ id: 'raw_cus_123' });
 	});
 
+	test('types onEvent as a discriminated union of normalized webhook events', () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			hooks: {
+				onEvent(event) {
+					expectType<string>(event.id);
+					expectType<string>(event.provider);
+
+					if (event.type === 'checkout.completed') {
+						expectType<string>(event.data.id);
+						expectType<number>(event.data.amount);
+					}
+
+					if (event.type === 'customer.deleted') {
+						expectType<boolean>(event.data.deleted);
+						// @ts-expect-error customer.deleted payload does not expose amount
+						expectType<number>(event.data.amount);
+					}
+				},
+			},
+		});
+
+		expectType<typeof client>(client);
+	});
+
 	test('lists customers from the configured database with typed extra fields', async () => {
 		const database = createListDatabase();
 		const client = createClient({
@@ -462,6 +487,55 @@ describe('client', () => {
 		await Promise.resolve();
 
 		expect(client.plugins.byId['async-plugin']?.status).toBe('ready');
+	});
+
+	test('rejects plugin events using the built-in onEvent hook name', () => {
+		expect(() =>
+			createClient({
+				provider: createStubProvider(),
+				plugins: [
+					definePlugin({
+						id: 'invalid-plugin',
+						events: {
+							onEvent: {
+								description: 'invalid',
+							} as PluginEventDefinition<{ ok: true }>,
+						},
+					}),
+				] as const,
+			}),
+		).toThrow(
+			new PaymeshError({
+				code: 'plugin_configuration_error',
+				message:
+					'Plugin "invalid-plugin" cannot reuse the built-in hook name "onEvent".',
+				provider: 'stub',
+			}),
+		);
+	});
+
+	test('allows built-in hooks when plugins are passed as a non-const array', () => {
+		const plugins = [
+			definePlugin({
+				id: 'coupons',
+			}),
+			definePlugin({
+				id: 'seats',
+			}),
+		];
+
+		const client = createClient({
+			provider: createStubProvider(),
+			plugins,
+			hooks: {
+				onEvent(event) {
+					expectType<string>(event.type);
+					return {};
+				},
+			},
+		});
+
+		expectType<typeof client>(client);
 	});
 });
 
