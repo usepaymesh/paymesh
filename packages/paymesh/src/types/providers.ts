@@ -1,4 +1,5 @@
 import type { RetryOptions } from '../shared/request';
+import type { PaymeshDatabaseDriver, ResolvedDatabaseSchema } from './database';
 
 export type ProviderId = string;
 
@@ -153,6 +154,46 @@ export interface ProviderCatalog {
 	list(): Promise<ProviderCatalogSnapshot>;
 }
 
+export interface ProviderBalanceAmount {
+	amount: number;
+	currency: string;
+	label?: string;
+	source?: string;
+}
+
+export interface ProviderBalanceSnapshot {
+	available: ProviderBalanceAmount[];
+	pending?: ProviderBalanceAmount[];
+	reserved?: ProviderBalanceAmount[];
+}
+
+export interface ProviderDashboardResourceLinkInput {
+	type: 'customer' | 'payment' | 'subscription' | 'webhook';
+	id: string;
+}
+
+export interface ProviderDashboardSyncInput {
+	database: PaymeshDatabaseDriver;
+	id: string;
+	schema: ResolvedDatabaseSchema;
+}
+
+export interface ProviderDashboardAdapter {
+	getBalance?(): Promise<ProviderBalanceSnapshot | null>;
+	getResourceUrl?(
+		input: ProviderDashboardResourceLinkInput,
+	): Promise<string | null> | string | null;
+	syncCustomer?(
+		input: ProviderDashboardSyncInput,
+	): Promise<Customer<true> | null>;
+	syncPayment?(
+		input: ProviderDashboardSyncInput,
+	): Promise<Payment<true> | null>;
+	syncSubscription?(
+		input: ProviderDashboardSyncInput,
+	): Promise<Record<string, unknown> | null>;
+}
+
 export interface ProviderPayments {
 	create<IncludeRaw extends boolean = false>(
 		data: PaymentCreateData,
@@ -249,6 +290,8 @@ export interface ProviderDefinition<Name extends string = string> {
 	webhooks?: ProviderWebhooks;
 
 	catalog?: ProviderCatalog;
+
+	dashboard?: ProviderDashboardAdapter;
 
 	capabilities: ProviderCapabilities;
 }

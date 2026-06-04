@@ -74,10 +74,17 @@ interface BootstrappedPlugins<
 interface RouteRegistration<
 	TPlugin extends AnyPaymeshPlugin = AnyPaymeshPlugin,
 > {
+	matcher: RouteMatcher;
 	definition: PluginRouteDefinition;
 	metadata: RegisteredPluginRoute<TPlugin['id']>;
 	plugin: TPlugin;
 	pluginMetadata: RegisteredPaymeshPlugin<TPlugin['id']>;
+}
+
+interface RouteMatcher {
+	path: string;
+	paramNames: string[];
+	pattern: RegExp;
 }
 
 export function bootstrapPlugins<
@@ -228,6 +235,7 @@ export function bootstrapPlugins<
 			routeKeys.add(routeKey);
 			pluginMetadata.routes.push(metadata);
 			routeRegistrations.push({
+				matcher: compileRouteMatcher(route.path, provider.id),
 				definition: route,
 				metadata,
 				plugin,
@@ -319,13 +327,18 @@ export function bootstrapPlugins<
 		},
 		async handle(request, options) {
 			const pathname = new URL(request.url).pathname;
-			const route = routeRegistrations.find(
+			const method = request.method.toUpperCase();
+			const resolved = routeRegistrations.find(
 				(candidate) =>
-					candidate.metadata.method === request.method.toUpperCase() &&
-					candidate.metadata.path === pathname,
+					candidate.metadata.method === method &&
+					matchRoute(candidate.matcher, pathname) !== null,
 			);
 
-			if (!route) {
+			if (!resolved) {
+				return Response.json({ error: 'route_not_found' }, { status: 404 });
+			}
+			const params = matchRoute(resolved.matcher, pathname);
+			if (!params) {
 				return Response.json({ error: 'route_not_found' }, { status: 404 });
 			}
 
@@ -334,30 +347,32 @@ export function bootstrapPlugins<
 			);
 			const emit = createPluginEmitter({
 				dispatchHook,
-				plugin: route.plugin,
+				plugin: resolved.plugin,
 				pluginEventOwners,
 				providerId: provider.id,
 			});
 			const context = {
+				locals: {},
+				params,
 				request,
-				route: route.metadata,
+				route: resolved.metadata,
 				client: client as never,
-				plugin: route.pluginMetadata as never,
+				plugin: resolved.pluginMetadata as never,
 				provider,
 				database,
 				schema,
 				emit,
 			};
 			const middleware = [
-				...(route.plugin.middleware ?? []),
-				...(route.definition.middleware ?? []),
+				...(resolved.plugin.middleware ?? []),
+				...(resolved.definition.middleware ?? []),
 			] as RuntimeMiddleware<TClient>[];
 
 			try {
 				return await runMiddlewarePipeline(
 					context,
 					middleware,
-					route.definition.handler as RuntimeRouteHandler<TClient>,
+					resolved.definition.handler as RuntimeRouteHandler<TClient>,
 				);
 			} catch (error) {
 				if (error instanceof PaymeshError) {
@@ -393,6 +408,8 @@ export function bootstrapPlugins<
 }
 
 type RuntimeRouteContext<TClient> = {
+	locals: Record<string, unknown>;
+	params: Record<string, string>;
 	request: Request;
 	route: RegisteredPluginRoute;
 	client: TClient;
@@ -532,6 +549,59 @@ function getErrorMessage(error: unknown) {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function compileRouteMatcher(path: string, providerId: string): RouteMatcher {
+	if (!path.startsWith('/')) {
+		throw new PaymeshError({
+			code: 'plugin_configuration_error',
+			message: `Plugin route "${path}" must start with "/".`,
+			provider: providerId,
+		});
+	}
+
+	const paramNames: string[] = [];
+	const escapedSegments = path.split('/').map((segment) => {
+		if (!segment.startsWith(':')) {
+			return escapeRegex(segment);
+		}
+
+		const name = segment.slice(1);
+		if (!name || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) {
+			throw new PaymeshError({
+				code: 'plugin_configuration_error',
+				message: `Plugin route "${path}" contains an invalid parameter segment.`,
+				provider: providerId,
+			});
+		}
+
+		paramNames.push(name);
+		return '([^/]+)';
+	});
+
+	return {
+		path,
+		paramNames,
+		pattern: new RegExp(`^${escapedSegments.join('/')}$`),
+	};
+}
+
+function matchRoute(matcher: RouteMatcher, pathname: string) {
+	const matched = matcher.pattern.exec(pathname);
+	if (!matched) {
+		return null;
+	}
+
+	return Object.fromEntries(
+		matcher.paramNames.map((name, index) => [
+			name,
+			decodeURIComponent(matched[index + 1] ?? ''),
+		]),
+	);
+}
+
+function escapeRegex(value: string) {
+	return value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function isPromiseLike(value: unknown): value is Promise<unknown> {

@@ -60,6 +60,9 @@ export type PluginRouteMethod =
 	| 'OPTIONS'
 	| 'HEAD';
 
+export type PluginRouteParams = Record<string, string>;
+export type PluginRouteLocals = Record<string, unknown>;
+
 export interface PluginConfigRequirements<TProviderId extends string = string> {
 	requiredDatabase?: boolean;
 	requiredProviders?: readonly TProviderId[];
@@ -154,6 +157,8 @@ export interface PluginRouteContext<
 	TEvents extends PluginEventDefinitions = Record<never, never>,
 	TPluginId extends string = string,
 > extends PluginSetupContext<TClient, TEvents, TPluginId> {
+	locals: PluginRouteLocals;
+	params: PluginRouteParams;
 	request: Request;
 	route: RegisteredPluginRoute<TPluginId>;
 }

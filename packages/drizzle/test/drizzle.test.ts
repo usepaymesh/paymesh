@@ -90,7 +90,7 @@ describe('@paymesh/drizzle', () => {
 		).rejects.toMatchObject({
 			name: 'PaymeshError',
 			code: 'database_error',
-			message: 'Failed to execute database query',
+			message: 'Failed to execute database query: boom',
 		});
 	});
 
@@ -106,7 +106,7 @@ describe('@paymesh/drizzle', () => {
 		await expect(driver.transaction(async () => 'ok')).rejects.toMatchObject({
 			name: 'PaymeshError',
 			code: 'database_error',
-			message: 'Failed to execute database transaction',
+			message: 'Failed to execute database transaction: tx failed',
 		});
 	});
 });

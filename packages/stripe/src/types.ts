@@ -62,6 +62,41 @@ export interface StripeCharge {
 	status: string;
 }
 
+export interface StripeSubscription {
+	id: string;
+	object: 'subscription';
+	amount?: number | null;
+	cancel_at_period_end?: boolean;
+	canceled_at?: number | null;
+	current_period_end?: number | null;
+	current_period_start?: number | null;
+	customer?: string | null;
+	currency?: string | null;
+	items?: {
+		data?: Array<{
+			price?: {
+				id?: string | null;
+				product?: string | null;
+			} | null;
+		}>;
+	} | null;
+	metadata?: Record<string, string> | null;
+	status?: string | null;
+}
+
+export interface StripeBalanceAmount {
+	amount: number;
+	currency: string;
+	source_types?: Record<string, number> | null;
+}
+
+export interface StripeBalance {
+	available: StripeBalanceAmount[];
+	connect_reserved?: StripeBalanceAmount[] | null;
+	livemode?: boolean;
+	pending: StripeBalanceAmount[];
+}
+
 export interface StripeEvent {
 	id: string;
 	type: string;

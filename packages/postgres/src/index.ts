@@ -56,7 +56,10 @@ export function postgres(
 				await client.query('ROLLBACK').catch(() => undefined);
 				throw PaymeshError.wrap(error, {
 					code: 'database_error',
-					message: 'Failed to execute database transaction',
+					message: formatDatabaseErrorMessage(
+						'Failed to execute database transaction',
+						error,
+					),
 				});
 			} finally {
 				client.release();
@@ -107,7 +110,18 @@ async function executeQuery<Row = unknown>(
 	} catch (error) {
 		throw PaymeshError.wrap(error, {
 			code: 'database_error',
-			message: 'Failed to execute database query',
+			message: formatDatabaseErrorMessage(
+				'Failed to execute database query',
+				error,
+			),
 		});
 	}
+}
+
+function formatDatabaseErrorMessage(prefix: string, error: unknown) {
+	if (error instanceof Error && error.message.length > 0) {
+		return `${prefix}: ${error.message}`;
+	}
+
+	return prefix;
 }

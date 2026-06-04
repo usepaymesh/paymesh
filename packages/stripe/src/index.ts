@@ -7,6 +7,7 @@ import {
 	type PaymeshEvent,
 	type PaymeshEventType,
 	type ProviderCapabilities,
+	type ProviderDashboardSyncInput,
 	type ProviderRequestOptions,
 	type ProviderWebhookHandleOptions,
 	type ProviderWebhookHandleResult,
@@ -14,6 +15,7 @@ import {
 	withRaw,
 } from 'paymesh';
 import type {
+	StripeBalance,
 	StripeCheckoutSession,
 	StripeCustomer,
 	StripeDeletedCustomer,
@@ -23,6 +25,7 @@ import type {
 	StripePrice,
 	StripeProduct,
 	StripeProviderOptions,
+	StripeSubscription,
 } from './types';
 
 export type * from './types';
@@ -92,6 +95,51 @@ function mapStripeCustomer(customer: StripeCustomer) {
 	};
 }
 
+function mapStripePaymentObject(payment: StripePaymentObject) {
+	const status: PaymentStatus =
+		('payment_status' in payment &&
+			STRIPE_PAYMENT_STATUSES[
+				payment.payment_status ?? payment.status ?? ''
+			]) ||
+		('refunded' in payment && payment.refunded && 'refunded') ||
+		STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ||
+		'pending';
+
+	return {
+		id: payment.id,
+		provider: 'stripe' as const,
+		amount:
+			'amount_total' in payment
+				? (payment.amount_total ?? 0)
+				: 'amount' in payment
+					? payment.amount
+					: 0,
+		currency: payment.currency ?? 'usd',
+		status,
+		checkoutUrl: 'url' in payment ? (payment.url ?? undefined) : undefined,
+		customer:
+			'customer_details' in payment
+				? {
+						id:
+							typeof payment.customer === 'string'
+								? payment.customer
+								: undefined,
+						externalId:
+							'client_reference_id' in payment
+								? (payment.client_reference_id ?? undefined)
+								: undefined,
+						name: payment.customer_details?.name ?? undefined,
+						email:
+							payment.customer_details?.email ??
+							payment.customer_email ??
+							undefined,
+						phone: payment.customer_details?.phone ?? undefined,
+					}
+				: undefined,
+		metadata: payment.metadata ?? undefined,
+	};
+}
+
 export const stripe = ({
 	secret = process.env.STRIPE_API_KEY,
 	webhookSecret = process.env.STRIPE_WEBHOOK_SECRET,
@@ -103,6 +151,104 @@ export const stripe = ({
 	const headers = {
 		authorization: `Bearer ${secret}`,
 		'content-type': 'application/x-www-form-urlencoded',
+	};
+
+	const requestOptions = {
+		baseUrl,
+		fetch,
+		headers,
+		retry,
+		timeout,
+	};
+
+	const readStripePayment = async (id: string) => {
+		if (id.startsWith('cs_')) {
+			return {
+				kind: 'checkout' as const,
+				raw: await request<StripeCheckoutSession>(
+					`/v1/checkout/sessions/${encodeURIComponent(id)}`,
+					{
+						provider: 'stripe',
+						...requestOptions,
+					},
+				),
+			};
+		}
+
+		if (id.startsWith('pi_')) {
+			return {
+				kind: 'invoice' as const,
+				raw: await request<
+					Extract<StripePaymentObject, { object: 'payment_intent' }>
+				>(`/v1/payment_intents/${encodeURIComponent(id)}`, {
+					provider: 'stripe',
+					...requestOptions,
+				}),
+			};
+		}
+
+		return {
+			kind: 'invoice' as const,
+			raw: await request<Extract<StripePaymentObject, { object: 'charge' }>>(
+				`/v1/charges/${encodeURIComponent(id)}`,
+				{
+					provider: 'stripe',
+					...requestOptions,
+				},
+			),
+		};
+	};
+
+	const syncStripePayment = async ({
+		database,
+		id,
+		schema,
+	}: ProviderDashboardSyncInput) => {
+		const payment = await readStripePayment(id);
+		const normalized = withRaw(
+			mapStripePaymentObject(payment.raw),
+			payment.raw,
+			true,
+		);
+
+		if (payment.kind === 'checkout') {
+			await database.repositories.checkouts.upsert(schema, normalized);
+		} else {
+			await database.repositories.invoices.upsert(schema, normalized);
+		}
+
+		return normalized;
+	};
+
+	const syncStripeSubscription = async ({
+		database,
+		id,
+		schema,
+	}: ProviderDashboardSyncInput) => {
+		const subscription = await request<StripeSubscription>(
+			`/v1/subscriptions/${encodeURIComponent(id)}`,
+			{
+				provider: 'stripe',
+				...requestOptions,
+			},
+		);
+		const eventType =
+			subscription.status === 'canceled'
+				? ('subscription.canceled' as const)
+				: ('subscription.updated' as const);
+		const event = withRaw(
+			{
+				id,
+				provider: 'stripe',
+				type: eventType,
+				data: withRaw(subscription, subscription, true),
+			},
+			subscription,
+			true,
+		);
+
+		await database.repositories.subscriptions.upsert(schema, event);
+		return event.data as unknown as Record<string, unknown>;
 	};
 
 	return defineProvider({
@@ -330,6 +476,49 @@ export const stripe = ({
 				};
 			},
 		},
+		dashboard: {
+			async getBalance() {
+				const balance = await request<StripeBalance>('/v1/balance', {
+					provider: 'stripe',
+					...requestOptions,
+				});
+
+				return {
+					available: balance.available.map((entry) => ({
+						amount: entry.amount,
+						currency: entry.currency,
+						label: `Available (${entry.currency.toUpperCase()})`,
+					})),
+					pending: balance.pending.map((entry) => ({
+						amount: entry.amount,
+						currency: entry.currency,
+						label: `Pending (${entry.currency.toUpperCase()})`,
+					})),
+					reserved: (balance.connect_reserved ?? []).map((entry) => ({
+						amount: entry.amount,
+						currency: entry.currency,
+						label: `Reserved (${entry.currency.toUpperCase()})`,
+					})),
+				};
+			},
+			getResourceUrl({ id, type }) {
+				if (type === 'customer') {
+					return `https://dashboard.stripe.com/customers/${encodeURIComponent(id)}`;
+				}
+
+				if (type === 'subscription') {
+					return `https://dashboard.stripe.com/subscriptions/${encodeURIComponent(id)}`;
+				}
+
+				if (type === 'payment') {
+					return `https://dashboard.stripe.com/payments/${encodeURIComponent(id)}`;
+				}
+
+				return null;
+			},
+			syncPayment: syncStripePayment,
+			syncSubscription: syncStripeSubscription,
+		},
 		webhooks: {
 			async verify({ request }) {
 				if (!webhookSecret) return false;
@@ -405,50 +594,8 @@ export const stripe = ({
 						);
 					} else {
 						const payment = object as StripePaymentObject;
-						const status: PaymentStatus =
-							('payment_status' in payment &&
-								STRIPE_PAYMENT_STATUSES[
-									payment.payment_status ?? payment.status ?? ''
-								]) ||
-							('refunded' in payment && payment.refunded && 'refunded') ||
-							STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ||
-							'pending';
-
 						data = withRaw(
-							{
-								id: payment.id,
-								provider: 'stripe',
-								amount:
-									'amount_total' in payment
-										? (payment.amount_total ?? 0)
-										: 'amount' in payment
-											? payment.amount
-											: 0,
-								currency: payment.currency ?? 'usd',
-								status,
-								checkoutUrl:
-									'url' in payment ? (payment.url ?? undefined) : undefined,
-								customer:
-									'customer_details' in payment
-										? {
-												id:
-													typeof payment.customer === 'string'
-														? payment.customer
-														: undefined,
-												externalId:
-													'client_reference_id' in payment
-														? (payment.client_reference_id ?? undefined)
-														: undefined,
-												name: payment.customer_details?.name ?? undefined,
-												email:
-													payment.customer_details?.email ??
-													payment.customer_email ??
-													undefined,
-												phone: payment.customer_details?.phone ?? undefined,
-											}
-										: undefined,
-								metadata: payment.metadata ?? undefined,
-							},
+							mapStripePaymentObject(payment),
 							payment,
 							includeRaw,
 						);

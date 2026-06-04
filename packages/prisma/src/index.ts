@@ -49,7 +49,10 @@ export function prisma(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database query',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database query',
+							error,
+						),
 					});
 				}),
 		execute: (query: CompiledQuery) =>
@@ -59,7 +62,10 @@ export function prisma(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database query',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database query',
+							error,
+						),
 					});
 				}),
 		transaction: <T>(
@@ -70,8 +76,19 @@ export function prisma(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database transaction',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database transaction',
+							error,
+						),
 					});
 				}),
 	});
+}
+
+function formatDatabaseErrorMessage(prefix: string, error: unknown) {
+	if (error instanceof Error && error.message.length > 0) {
+		return `${prefix}: ${error.message}`;
+	}
+
+	return prefix;
 }

@@ -463,6 +463,45 @@ describe('client', () => {
 		expect(client.customers.sync()).toBe('synced');
 	});
 
+	test('matches dynamic plugin routes and shares locals through middleware', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			plugins: [
+				definePlugin({
+					id: 'dashish',
+					middleware: [
+						async (context, next) => {
+							context.locals.actor = 'ada';
+							return next();
+						},
+					],
+					routes: [
+						{
+							method: 'GET',
+							path: '/resources/:resourceId',
+							async handler(context) {
+								return Response.json({
+									actor: context.locals.actor,
+									resourceId: context.params.resourceId,
+								});
+							},
+						},
+					],
+				}),
+			] as const,
+		});
+
+		const response = await client.routes.handle(
+			new Request('https://app.test/resources/pay_123', { method: 'GET' }),
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			actor: 'ada',
+			resourceId: 'pay_123',
+		});
+	});
+
 	test('tracks async plugin setup state without blocking client creation', async () => {
 		let resolveSetup: (() => void) | undefined;
 		const client = createClient({
