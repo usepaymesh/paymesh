@@ -3,7 +3,7 @@
 <h1 align="center">@paymesh/cli</h1>
 
 <p align="center">
-  <strong>Operational tooling for Paymesh migrations, status, catalog sync, and plugin introspection.</strong>
+  <strong>Operational tooling for Paymesh migrations, status, catalog sync, plugin introspection, and internal event triggering.</strong>
 </p>
 
 <p align="center">
@@ -66,6 +66,15 @@ paymesh status --client ./src/lib/paymesh.ts
 
 paymesh plugins --client ./src/lib/paymesh.ts
 # lists the plugins registered in the current client
+
+paymesh trigger customer.created --client ./src/lib/paymesh.ts
+# triggers a built-in normalized webhook event with fake data
+
+paymesh trigger customer.created --client ./src/lib/paymesh.ts --data '{"email":"ada@example.com"}'
+# merges JSON into the fake built-in event payload
+
+paymesh trigger onCouponRedeemed --client ./src/lib/paymesh.ts --data '{"code":"WELCOME10"}'
+# emits a registered plugin event; plugin events require --data
 ```
 
 <h2 align="center">Why Use It</h2>

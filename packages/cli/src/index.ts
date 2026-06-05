@@ -1,8 +1,10 @@
 import { Command } from 'commander';
 import { registerGenerateCommand } from './commands/generate';
 import { registerMigrateCommand } from './commands/migrate';
+import { registerPluginsCommand } from './commands/plugins';
 import { registerPushCommand } from './commands/push';
 import { registerStatusCommand } from './commands/status';
+import { registerTriggerCommand } from './commands/trigger';
 
 export { pushProviderCatalog } from './lib/catalog';
 export { loadClient, resolveClientPath } from './lib/client';
@@ -28,7 +30,6 @@ export {
 } from './lib/migrations';
 
 import packageJson from 'package.json';
-import { registerPluginsCommand } from './commands/plugins';
 
 export { type CliStatus, getPaymeshStatus } from './lib/status';
 
@@ -48,6 +49,7 @@ export function createProgram() {
 	registerPushCommand(program);
 	registerStatusCommand(program);
 	registerPluginsCommand(program);
+	registerTriggerCommand(program);
 
 	return program;
 }

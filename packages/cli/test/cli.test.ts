@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
 	type CompiledQuery,
 	defineDatabaseAdapter,
@@ -10,6 +11,7 @@ import {
 } from 'paymesh';
 import {
 	createMigrationHistory,
+	createProgram,
 	getExpectedMigrationNames,
 	getMigrationHistoryStatus,
 	getPaymeshMigrationFiles,
@@ -76,6 +78,101 @@ describe('cli helpers', () => {
 
 		expect(defaultClient.provider.id).toBe('stub');
 		expect(namedClient.provider.id).toBe('stub');
+	});
+
+	test('triggers a built-in event from the CLI', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		const logs = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+				]);
+			}),
+		);
+
+		expect(logs).toContain('customer.created');
+		expect(logs).toContain('hooks:');
+		expect(logs).toContain('onEvent, onCustomerCreated');
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"hook":"onCustomerCreated"');
+	});
+
+	test('triggers a plugin event from the CLI with json payload', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		const logs = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'{"code":"WELCOME10"}',
+				]);
+			}),
+		);
+
+		expect(logs).toContain('onCouponRedeemed');
+		expect(logs).toContain('plugin:coupons');
+		expect(logs).toContain('hooks:');
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"code":"WELCOME10"');
+	});
+
+	test('rejects non-object built-in --data payloads', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'"ada@example.com"',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message: 'Built-in events require --data to be a JSON object',
+		});
+	});
+
+	test('requires --data for plugin events', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message:
+				'Plugin event "onCouponRedeemed" requires --data with a JSON payload',
+		});
 	});
 
 	test('writes and reads generated migration files', async () => {
@@ -415,4 +512,103 @@ async function createTempProject() {
 	const directory = await fs.mkdtemp(path.join(tmpdir(), 'paymesh-cli-'));
 	tempDirectories.push(directory);
 	return directory;
+}
+
+async function writeCliClient(directory: string) {
+	const paymeshModuleUrl = pathToFileURL(
+		path.resolve(process.cwd(), 'packages/paymesh/src/index.ts'),
+	).href;
+	const logFile = path.join(directory, 'trigger-log.json');
+
+	await fs.writeFile(
+		path.join(directory, 'paymesh-client.ts'),
+		`
+import { appendFileSync } from "node:fs";
+import { createClient, definePlugin, defineProvider } from ${JSON.stringify(paymeshModuleUrl)};
+
+const coupons = definePlugin({
+	id: 'coupons',
+	events: {
+		onCouponRedeemed: {
+			description: 'Triggered when a coupon is redeemed',
+		},
+	},
+});
+
+export default createClient({
+	provider: defineProvider({
+		id: 'stub',
+		capabilities: {
+			checkout: true,
+			customers: true,
+		},
+		payments: {
+			create: async () => {
+				throw new Error('not used');
+			},
+		},
+		customers: {
+			get: async () => {
+				throw new Error('not used');
+			},
+			upsert: async () => {
+				throw new Error('not used');
+			},
+			delete: async () => {
+				throw new Error('not used');
+			},
+		},
+	}),
+	plugins: [coupons] as const,
+	hooks: {
+		onEvent(event) {
+			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
+				hook: 'onEvent',
+				type: event.type,
+			}) + "\\n");
+		},
+		onCustomerCreated(event) {
+			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
+				hook: 'onCustomerCreated',
+				customerId: event.data.id,
+			}) + "\\n");
+		},
+		onCouponRedeemed(event) {
+			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
+				hook: 'onCouponRedeemed',
+				code: event.data.code,
+			}) + "\\n");
+		},
+	},
+});
+`.trim(),
+	);
+}
+
+async function captureLogs(callback: () => Promise<void>) {
+	const originalLog = console.log;
+	const lines: string[] = [];
+
+	console.log = (...args: unknown[]) => {
+		lines.push(args.map((value) => String(value)).join(' '));
+	};
+
+	try {
+		await callback();
+	} finally {
+		console.log = originalLog;
+	}
+
+	return lines.join('\n');
+}
+
+async function withinCwd<T>(directory: string, callback: () => Promise<T>) {
+	const previous = process.cwd();
+	process.chdir(directory);
+
+	try {
+		return await callback();
+	} finally {
+		process.chdir(previous);
+	}
 }
