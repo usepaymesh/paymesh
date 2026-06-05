@@ -440,7 +440,9 @@ ALTER COLUMN ${quoteIdentifier(field.column)} ${field.required ? 'SET' : 'DROP'}
 
 	if (
 		previousField &&
-		(previousField.enum?.join('\0') ?? '') !== (field.enum?.join('\0') ?? '')
+		isEnumField(previousField) &&
+		isEnumField(field) &&
+		previousField.enum.join('\0') !== field.enum.join('\0')
 	) {
 		statements.push(dropCheckConstraintSql(tableName, `${field.column}_enum`));
 	}
@@ -891,7 +893,7 @@ function createExtraFieldIndexesAndConstraintsSql(
 				);
 			}
 
-			if (field.type === 'enum' && field.enum) {
+			if (isEnumField(field)) {
 				queries.push(
 					createCheckConstraintSql(
 						schema,
@@ -923,7 +925,7 @@ function createCustomTableIndexesAndConstraintsSql(
 				queries.push(createCustomTableIndexSql(table, [field.column], false));
 			}
 
-			if (field.type === 'enum' && field.enum) {
+			if (isEnumField(field)) {
 				queries.push(
 					createCustomTableCheckConstraintSql(
 						table,
@@ -1020,9 +1022,31 @@ function serializeDefault(value: unknown): string {
 }
 
 function enumCheckSql(field: ResolvedDatabaseExtraTableField) {
-	const values = field.enum?.map((value) => `'${value.replaceAll("'", "''")}'`);
+	if (!isEnumField(field)) {
+		throw new PaymeshError({
+			code: 'database_error',
+			message: `Field "${field.column}" is not an enum field.`,
+		});
+	}
+
+	const values = field.enum.map(
+		(value: string) => `'${value.replaceAll("'", "''")}'`,
+	);
 	const nullable = field.required
 		? ''
 		: ` OR ${quoteIdentifier(field.column)} IS NULL`;
-	return `${quoteIdentifier(field.column)} IN (${values?.join(', ')})${nullable}`;
+	return `${quoteIdentifier(field.column)} IN (${values.join(', ')})${nullable}`;
+}
+
+function isEnumField(
+	field: ResolvedDatabaseExtraTableField,
+): field is ResolvedDatabaseExtraTableField & {
+	type: 'enum';
+	enum: readonly string[];
+} {
+	return (
+		field.type === 'enum' &&
+		'enum' in field &&
+		Array.isArray((field as { enum?: unknown }).enum)
+	);
 }

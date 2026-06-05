@@ -474,22 +474,22 @@ export function createRepositories(
 	};
 }
 
-function findDataByProviderId(
+async function findDataByProviderId(
 	executor: SqlExecutor,
 	schema: ResolvedDatabaseSchema,
 	tableKey: DatabaseTableKey,
 	provider: string,
 	id: string,
 ) {
-	return executor
-		.query<{ data: Record<string, unknown> | null }>({
-			sql: `SELECT data
+	const [row] = await executor.query<{ data: Record<string, unknown> | null }>({
+		sql: `SELECT data
 				FROM ${tableName(schema, tableKey)}
 				WHERE provider = $1 AND provider_id = $2
 				LIMIT 1`,
-			params: [provider, id],
-		})
-		.then(([row]) => row?.data ?? null);
+		params: [provider, id],
+	});
+
+	return row?.data ?? null;
 }
 
 function upsertByProviderId(

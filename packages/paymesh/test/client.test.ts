@@ -182,6 +182,50 @@ describe('client', () => {
 		});
 	});
 
+	test('types schema defaults from the field discriminator', () => {
+		createClient({
+			provider: createStubProvider(),
+			schema: {
+				tables: {
+					customers: {
+						fields: {
+							createdOn: {
+								type: 'date',
+								default: new Date(),
+							},
+							retryCount: {
+								type: 'number',
+								default: 2,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		createClient({
+			provider: createStubProvider(),
+			schema: {
+				tables: {
+					customers: {
+						fields: {
+							// @ts-expect-error date defaults must be Date, not string
+							createdOn: {
+								type: 'date',
+								default: '2024-01-01',
+							},
+							// @ts-expect-error number defaults must be number, not string
+							retryCount: {
+								type: 'number',
+								default: '2',
+							},
+						},
+					},
+				},
+			},
+		});
+	});
+
 	test('rejects customers.list without a configured database', async () => {
 		const client = createClient({
 			provider: createStubProvider(),

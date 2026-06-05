@@ -56,23 +56,49 @@ export type DatabaseExtraTableFields = Record<
 	DatabaseExtraTableFieldOptions
 >;
 
-export interface DatabaseExtraTableFieldOptions {
-	type:
-		| 'string'
-		| 'number'
-		| 'bigint'
-		| 'boolean'
-		| 'date'
-		| 'json'
-		| 'decimal'
-		| 'enum';
+export const DatabaseExtraTableFieldType = {
+	String: 'string',
+	Number: 'number',
+	BigInt: 'bigint',
+	Boolean: 'boolean',
+	Date: 'date',
+	JSON: 'json',
+	Decimal: 'decimal',
+	Enum: 'enum',
+} as const;
+
+export type DatabaseExtraTableFieldType =
+	(typeof DatabaseExtraTableFieldType)[keyof typeof DatabaseExtraTableFieldType];
+
+interface DatabaseExtraTableFieldOptionsBase {
 	required?: boolean;
-	default?: unknown;
 	column?: string;
 	index?: boolean;
 	unique?: boolean;
-	enum?: readonly string[];
 }
+
+type DatabaseScalarTableFieldOptions = {
+	[Type in keyof MappedDatabaseExtraTableFieldType]: Simplify<
+		DatabaseExtraTableFieldOptionsBase & {
+			type: Type;
+			default?: MappedDatabaseExtraTableFieldType[Type];
+		}
+	>;
+}[keyof MappedDatabaseExtraTableFieldType];
+
+export type DatabaseEnumTableFieldOptions<
+	Enum extends readonly string[] = readonly string[],
+> = Simplify<
+	DatabaseExtraTableFieldOptionsBase & {
+		type: typeof DatabaseExtraTableFieldType.Enum;
+		enum: Enum;
+		default?: Enum[number];
+	}
+>;
+
+export type DatabaseExtraTableFieldOptions<
+	Enum extends readonly string[] = readonly string[],
+> = DatabaseScalarTableFieldOptions | DatabaseEnumTableFieldOptions<Enum>;
 
 export interface DatabaseSchemaOptions {
 	prefix?: string;
@@ -154,26 +180,29 @@ type DatabaseSchemaTableFields<Schema, TableKey extends DatabaseTableKey> =
 		: Record<never, never>;
 
 type DatabaseExtraFieldValue<Field extends DatabaseExtraTableFieldOptions> =
-	Field['type'] extends 'string'
-		? string
-		: Field['type'] extends 'number'
-			? number
-			: Field['type'] extends 'bigint'
-				? bigint | number | string
-				: Field['type'] extends 'boolean'
-					? boolean
-					: Field['type'] extends 'date'
-						? Date | string
-						: Field['type'] extends 'json'
-							? Record<string, unknown> | unknown[]
-							: Field['type'] extends 'decimal'
-								? number | string
-								: Field['type'] extends 'enum'
-									? Field['enum'] extends readonly (infer Value extends
-											string)[]
-										? Value
-										: string
-									: never;
+	Field extends {
+		type: infer Type;
+	}
+		? Type extends keyof MappedDatabaseExtraTableFieldType
+			? MappedDatabaseExtraTableFieldType[Type]
+			: Type extends typeof DatabaseExtraTableFieldType.Enum
+				? Field extends {
+						enum: readonly (infer Value extends string)[];
+					}
+					? Value
+					: never
+				: never
+		: never;
+
+interface MappedDatabaseExtraTableFieldType {
+	[DatabaseExtraTableFieldType.BigInt]: bigint;
+	[DatabaseExtraTableFieldType.String]: string;
+	[DatabaseExtraTableFieldType.Number]: number;
+	[DatabaseExtraTableFieldType.JSON]: Record<string, unknown>;
+	[DatabaseExtraTableFieldType.Decimal]: number;
+	[DatabaseExtraTableFieldType.Date]: Date;
+	[DatabaseExtraTableFieldType.Boolean]: boolean;
+}
 
 type DatabaseFieldHasDefault<Field extends DatabaseExtraTableFieldOptions> =
 	Field extends {
