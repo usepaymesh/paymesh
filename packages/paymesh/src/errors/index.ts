@@ -12,7 +12,8 @@ export type PaymeshErrorCode =
 	| 'database_error'
 	| 'network_error'
 	| 'timeout'
-	| 'client_error';
+	| 'client_error'
+	| 'cli_error';
 
 export interface PaymeshErrorProps {
 	code: PaymeshErrorCode;

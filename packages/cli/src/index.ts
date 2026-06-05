@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { registerGenerateCommand } from './commands/generate';
+import { registerListenCommand } from './commands/listen';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerPluginsCommand } from './commands/plugins';
 import { registerPushCommand } from './commands/push';
@@ -45,6 +46,7 @@ export function createProgram() {
 		.showHelpAfterError();
 
 	registerGenerateCommand(program);
+	registerListenCommand(program);
 	registerMigrateCommand(program);
 	registerPushCommand(program);
 	registerStatusCommand(program);

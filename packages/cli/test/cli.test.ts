@@ -7,7 +7,9 @@ import {
 	type CompiledQuery,
 	defineDatabaseAdapter,
 	defineProvider,
+	type PaymeshEventType,
 	resolveDatabaseSchema,
+	withRaw,
 } from 'paymesh';
 import {
 	createMigrationHistory,
@@ -25,6 +27,7 @@ import {
 	writeMigrationFiles,
 	writeMigrationHistory,
 } from '../src/index';
+import { inspectWebhookRequest, startWebhookServer } from '../src/lib/listen';
 
 const tempDirectories: string[] = [];
 
@@ -102,6 +105,46 @@ describe('cli helpers', () => {
 		expect(
 			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
 		).toContain('"hook":"onCustomerCreated"');
+	});
+
+	test('sends a built-in event to paymesh listen', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		const lines: string[] = [];
+		const server = await startWebhookServer({
+			client: createWebhookClient(),
+			port: 0,
+			logger: (message) => {
+				lines.push(message);
+			},
+		});
+
+		try {
+			const logs = await withinCwd(directory, () =>
+				captureLogs(async () => {
+					await createProgram().parseAsync([
+						'node',
+						'paymesh',
+						'trigger',
+						'payment.succeeded',
+						'--client',
+						'./paymesh-client.ts',
+						'--listen',
+						`http://127.0.0.1:${server.port}/webhooks`,
+					]);
+				}),
+			);
+
+			expect(logs).toContain('listener:');
+			expect(logs).toContain(`status=200`);
+			expect(lines[0]).toContain('source=trigger');
+			expect(lines[0]).toContain('event=payment.succeeded');
+			await expect(
+				fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+			).rejects.toThrow();
+		} finally {
+			await server.close();
+		}
 	});
 
 	test('triggers a plugin event from the CLI with json payload', async () => {
@@ -251,6 +294,198 @@ describe('cli helpers', () => {
 			code: 'client_error',
 			message:
 				'Plugin event "onCouponRedeemed" requires --data with a JSON payload',
+		});
+	});
+
+	test('rejects sending plugin events to paymesh listen', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+					'--listen',
+					'http://127.0.0.1:3000/webhooks',
+					'--data',
+					'{"code":"WELCOME10"}',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message:
+				'Plugin events cannot be sent to paymesh listen. Use built-in webhook events only.',
+		});
+	});
+
+	test('inspects a valid webhook request', async () => {
+		const payload = JSON.stringify({
+			id: 'evt_123',
+			type: 'payment.succeeded',
+			data: {
+				id: 'pay_123',
+				provider: 'stub',
+			},
+		});
+		const request = new Request('http://localhost/webhooks', {
+			method: 'POST',
+			headers: {
+				'x-paymesh-signature': 'valid',
+				'content-type': 'application/json',
+			},
+			body: payload,
+		});
+
+		const result = await inspectWebhookRequest(
+			createWebhookClient().provider,
+			request,
+		);
+
+		expect(result.status).toBe(200);
+		expect(result.body).toEqual({ received: true });
+		expect(result.deliveryId).toBe('delivery_evt_123');
+		expect(result.hook).toBe('onPaymentSucceeded');
+		expect(result.rawBody).toBe(payload);
+		expect(result.event).toMatchObject({
+			id: 'evt_123',
+			type: 'payment.succeeded',
+			provider: 'stub',
+		});
+	});
+
+	test('rejects webhook requests with invalid signature', async () => {
+		const result = await inspectWebhookRequest(
+			createWebhookClient().provider,
+			new Request('http://localhost/webhooks', {
+				method: 'POST',
+				headers: {
+					'x-paymesh-signature': 'invalid',
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({ id: 'evt_123' }),
+			}),
+		);
+
+		expect(result.status).toBe(401);
+		expect(result.body).toEqual({ error: 'invalid_webhook_signature' });
+	});
+
+	test('returns a 400 when webhook payload parsing fails', async () => {
+		const result = await inspectWebhookRequest(
+			createWebhookClient().provider,
+			new Request('http://localhost/webhooks', {
+				method: 'POST',
+				headers: {
+					'x-paymesh-signature': 'valid',
+					'content-type': 'application/json',
+				},
+				body: '{',
+			}),
+		);
+
+		expect(result.status).toBe(400);
+		expect(result.body).toEqual({ error: 'webhook_handle_error' });
+	});
+
+	test('serves webhook events through the listener server and logs payloads', async () => {
+		const lines: string[] = [];
+		const server = await startWebhookServer({
+			client: createWebhookClient(),
+			port: 0,
+			logger: (message) => {
+				lines.push(message);
+			},
+		});
+
+		try {
+			const response = await fetch(`http://127.0.0.1:${server.port}/webhooks`, {
+				method: 'POST',
+				headers: {
+					'x-paymesh-signature': 'valid',
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					id: 'evt_live',
+					type: 'checkout.completed',
+					data: {
+						id: 'pay_123',
+						provider: 'stub',
+					},
+				}),
+			});
+
+			expect(response.status).toBe(200);
+			await expect(response.json()).resolves.toEqual({ received: true });
+			expect(lines[0]).toContain('[200]');
+			expect(lines[0]).toContain('provider=stub');
+			expect(lines[0]).toContain('event=checkout.completed');
+			expect(lines[1]).toContain('"normalizedEvent"');
+			expect(lines[1]).toContain('"rawBody"');
+		} finally {
+			await server.close();
+		}
+	});
+
+	test('returns 405 for unsupported methods', async () => {
+		const lines: string[] = [];
+		const server = await startWebhookServer({
+			client: createWebhookClient(),
+			port: 0,
+			logger: (message) => {
+				lines.push(message);
+			},
+		});
+
+		try {
+			const response = await fetch(`http://127.0.0.1:${server.port}/webhooks`);
+
+			expect(response.status).toBe(405);
+			await expect(response.json()).resolves.toEqual({
+				error: 'method_not_allowed',
+			});
+			expect(lines[0]).toContain('[405]');
+		} finally {
+			await server.close();
+		}
+	});
+
+	test('fails to start the listener when provider does not support webhooks', async () => {
+		await expect(
+			startWebhookServer({
+				client: {
+					provider: defineProvider({
+						id: 'stub',
+						capabilities: {
+							checkout: true,
+						},
+						payments: {
+							create: async () => {
+								throw new Error('not used');
+							},
+						},
+						customers: {
+							get: async () => {
+								throw new Error('not used');
+							},
+							upsert: async () => {
+								throw new Error('not used');
+							},
+							delete: async () => {
+								throw new Error('not used');
+							},
+						},
+					}),
+				},
+				port: 0,
+			}),
+		).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support webhooks capability',
 		});
 	});
 
@@ -663,6 +898,69 @@ export default createClient({
 });
 `.trim(),
 	);
+}
+
+function createWebhookClient() {
+	return {
+		provider: defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async () => {
+					throw new Error('not used');
+				},
+			},
+			customers: {
+				get: async () => {
+					throw new Error('not used');
+				},
+				upsert: async () => {
+					throw new Error('not used');
+				},
+				delete: async () => {
+					throw new Error('not used');
+				},
+			},
+			webhooks: {
+				async verify({ request }) {
+					return request.headers.get('x-paymesh-signature') === 'valid';
+				},
+				async handle({ request, includeRaw }) {
+					const payload = (await request.json()) as {
+						id: string;
+						type: PaymeshEventType;
+						data: {
+							id: string;
+							provider: string;
+						};
+					};
+
+					return {
+						deliveryId: `delivery_${payload.id}`,
+						hook:
+							payload.type === 'payment.succeeded'
+								? 'onPaymentSucceeded'
+								: 'onCheckoutCompleted',
+						event: withRaw(
+							{
+								id: payload.id,
+								type: payload.type,
+								provider: 'stub',
+								data: payload.data,
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		}),
+		schema: resolveDatabaseSchema(),
+	};
 }
 
 async function captureLogs(callback: () => Promise<void>) {

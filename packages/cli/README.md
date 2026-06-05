@@ -67,15 +67,25 @@ paymesh status --client ./src/lib/paymesh.ts
 paymesh plugins --client ./src/lib/paymesh.ts
 # lists the plugins registered in the current client
 
+paymesh listen 3000 --client ./src/lib/paymesh.ts
+# starts a local webhook listener, validates provider signatures, and prints normalized events
+
 paymesh trigger customer.created --client ./src/lib/paymesh.ts
 # triggers a built-in normalized webhook event with fake data
 
 paymesh trigger customer.created --client ./src/lib/paymesh.ts --data '{"email":"ada@example.com"}'
 # merges JSON into the fake built-in event payload
 
+paymesh trigger payment.succeeded --client ./src/lib/paymesh.ts --listen http://127.0.0.1:3000/webhooks
+# sends the built-in event to a running paymesh listen server instead of calling local hooks directly
+
 paymesh trigger onCouponRedeemed --client ./src/lib/paymesh.ts --data '{"code":"WELCOME10"}'
 # emits a registered plugin event; plugin events require --data
 ```
+
+<p align="center">
+  <code>paymesh listen</code> is an observability command. It uses the provider configured in your resolved client, verifies the incoming webhook signature, normalizes the event, and prints request headers, raw payload, and normalized event data to the terminal. It does not persist webhook rows or trigger your configured hooks/plugins.
+</p>
 
 <h2 align="center">Why Use It</h2>
 

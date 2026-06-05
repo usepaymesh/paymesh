@@ -37,11 +37,12 @@ export function registerTriggerCommand(program: Command) {
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
 		)
+		.option('--listen <url>', 'Send the built-in event to a paymesh listen URL')
 		.option('--data <json>', 'JSON payload data for the triggered event')
 		.action(
 			async (
 				eventName: string,
-				options: { client?: string; data?: string },
+				options: { client?: string; data?: string; listen?: string },
 			) => {
 				const client = await loadClient({
 					cwd: process.cwd(),
@@ -71,6 +72,19 @@ export function registerTriggerCommand(program: Command) {
 							},
 						};
 
+						if (options.listen) {
+							const response = await sendEventToListener(
+								options.listen,
+								event,
+								hook,
+							);
+
+							console.log(
+								`${pc.magenta('✦')} ${pc.bold(eventName)} ${pc.dim('listener:')} ${pc.cyan(options.listen)} ${pc.dim(`status=${response.status}`)}`,
+							);
+							return;
+						}
+
 						const [called, specificCalled] = await Promise.all([
 							callClientHook(client, 'onEvent', event),
 							callClientHook(client, hook, event),
@@ -90,6 +104,14 @@ export function registerTriggerCommand(program: Command) {
 						);
 
 					if (plugin) {
+						if (options.listen) {
+							throw new PaymeshError({
+								code: 'client_error',
+								message:
+									'Plugin events cannot be sent to paymesh listen. Use built-in webhook events only.',
+							});
+						}
+
 						if (options.data == null) {
 							throw new PaymeshError({
 								code: 'client_error',
@@ -149,4 +171,29 @@ async function callClientHook(
 	await hook(event);
 
 	return name;
+}
+
+async function sendEventToListener(url: string, event: unknown, hook: string) {
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json',
+			'x-paymesh-source': 'trigger',
+		},
+		body: JSON.stringify({
+			event,
+			hook,
+		}),
+	});
+
+	if (!response.ok) {
+		const body = await response.text();
+
+		throw new PaymeshError({
+			code: 'client_error',
+			message: `Failed to deliver triggered event to ${url}: HTTP ${response.status}${body ? ` ${body}` : ''}`,
+		});
+	}
+
+	return response;
 }
