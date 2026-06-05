@@ -130,6 +130,62 @@ describe('cli helpers', () => {
 		).toContain('"code":"WELCOME10"');
 	});
 
+	test('triggers a built-in event from a json file', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		await fs.writeFile(
+			path.join(directory, 'customer.json'),
+			JSON.stringify({ email: 'file@example.com' }),
+		);
+
+		await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'@customer.json',
+				]);
+			}),
+		);
+
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"email":"file@example.com"');
+	});
+
+	test('triggers a plugin event from a json file', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		await fs.writeFile(
+			path.join(directory, 'coupon.json'),
+			JSON.stringify({ code: 'FILE10' }),
+		);
+
+		await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'@coupon.json',
+				]);
+			}),
+		);
+
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"code":"FILE10"');
+	});
+
 	test('rejects non-object built-in --data payloads', async () => {
 		const directory = await createTempProject();
 		await writeCliClient(directory);
@@ -150,6 +206,29 @@ describe('cli helpers', () => {
 		).rejects.toMatchObject({
 			code: 'client_error',
 			message: 'Built-in events require --data to be a JSON object',
+		});
+	});
+
+	test('rejects file data that does not end with json', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'@customer.txt',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message: 'File passed to --data must start with "@" and end with ".json"',
 		});
 	});
 
@@ -571,6 +650,7 @@ export default createClient({
 			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
 				hook: 'onCustomerCreated',
 				customerId: event.data.id,
+				email: event.data.email,
 			}) + "\\n");
 		},
 		onCouponRedeemed(event) {
