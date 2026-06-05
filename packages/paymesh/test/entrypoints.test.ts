@@ -8,6 +8,8 @@ describe('package entrypoints', () => {
 		expect(typeof mod.createClient).toBe('function');
 		expect(typeof mod.definePlugin).toBe('function');
 		expect(typeof mod.defineProvider).toBe('function');
+		expect(typeof mod.event).toBe('function');
+		expect(typeof mod.lazy).toBe('function');
 		expect(typeof mod.request).toBe('function');
 		expect(typeof mod.withRaw).toBe('function');
 	});

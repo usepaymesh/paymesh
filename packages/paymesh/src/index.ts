@@ -30,19 +30,16 @@ import type {
 
 export type * from './errors';
 export { PaymeshError } from './errors';
-export { definePlugin } from './plugins';
+export { definePlugin, event, lazy } from './plugins';
 export { defineProvider } from './providers';
 export { withRaw } from './shared/raw';
 export type { RetryOptions } from './shared/request';
 export { request } from './shared/request';
-
 export type * from './types/client';
 export type * from './types/database';
 export type * from './types/plugins';
 export type * from './types/providers';
-
 export { defineDatabaseAdapter, resolveDatabaseSchema };
-
 export const createClient = <
 	const Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
 	P extends Provider<string> = Provider<string>,
@@ -269,9 +266,9 @@ export const createClient = <
 	client.routes = bootstrappedPlugins.routesClient;
 	client.plugins = bootstrappedPlugins.pluginsClient;
 
-	const extendedClient = Object.assign(
-		client as object,
-		bootstrappedPlugins.extensions,
+	const extendedClient = Object.defineProperties(
+		client,
+		Object.getOwnPropertyDescriptors(bootstrappedPlugins.extensions),
 	);
 
 	return extendedClient as PaymeshClient<IncludeRaw, Schema, Plugins> &

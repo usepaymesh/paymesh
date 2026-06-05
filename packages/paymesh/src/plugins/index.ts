@@ -1,4 +1,9 @@
-import type { PaymeshPlugin, PluginEventDefinitions } from '../types/plugins';
+import type {
+	LazyPluginExtension,
+	PaymeshPlugin,
+	PluginEventDefinition,
+	PluginEventDefinitions,
+} from '../types/plugins';
 
 export function definePlugin<
 	const Id extends string,
@@ -11,5 +16,20 @@ export function definePlugin<
 		type: 'plugin',
 	} as PaymeshPlugin<Id, Events, Extends, ProviderId> & {
 		readonly type: 'plugin';
+	};
+}
+
+export function event<Payload = never>(
+	definition: Omit<PluginEventDefinition<Payload>, '__payload'> = {},
+): PluginEventDefinition<Payload> {
+	return definition;
+}
+
+export function lazy<TValue extends object>(
+	load: () => TValue,
+): LazyPluginExtension<TValue> {
+	return {
+		__type: 'paymesh.lazy_extension',
+		load,
 	};
 }

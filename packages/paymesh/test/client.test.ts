@@ -5,9 +5,10 @@ import {
 	defineDatabaseAdapter,
 	definePlugin,
 	defineProvider,
+	event,
+	lazy,
 	type Payment,
 	PaymeshError,
-	type PluginEventDefinition,
 	type ProviderRequestOptions,
 	withRaw,
 } from '../src';
@@ -366,12 +367,17 @@ describe('client', () => {
 	test('supports plugin routes, events, and client extensions', async () => {
 		const redeemedCodes: string[] = [];
 		const pluginHooks: string[] = [];
+		let lazyLoads = 0;
 		const plugin = definePlugin({
 			id: 'coupons',
 			events: {
-				onCouponRedeemed: {
+				onCouponRedeemed: event<{ code: string }>({
 					description: 'Triggered when a coupon is redeemed',
-				} as PluginEventDefinition<{ code: string }>,
+					example: {
+						code: 'WELCOME10',
+					},
+					async: false,
+				}),
 			},
 			hooks: {
 				onCouponRedeemed(event) {
@@ -409,11 +415,26 @@ describe('client', () => {
 					},
 				},
 			],
-			extends() {
+			extends(context) {
+				expectType<typeof context.client.customers.get>(
+					context.client.customers.get,
+				);
 				return {
-					coupons: {
-						repository: 'available',
-					},
+					coupons: lazy(() => {
+						lazyLoads += 1;
+						return {
+							repository: 'available',
+							async redeem(code: string) {
+								await context.emit('onCouponRedeemed', {
+									code,
+								});
+
+								return {
+									code,
+								};
+							},
+						};
+					}),
 					customers: {
 						sync() {
 							return 'synced';
@@ -435,8 +456,10 @@ describe('client', () => {
 			},
 		});
 
-		expectType<string>(client.coupons.repository);
-		expectType<() => string>(client.customers.sync);
+		type CouponsRepository = (typeof client)['coupons']['repository'];
+		type CustomerSync = (typeof client)['customers']['sync'];
+		expectType<CouponsRepository>('available');
+		expectType<CustomerSync>(() => 'synced');
 		expect(client.schema.customTables['coupons.redemptions']?.name).toBe(
 			'paymesh_coupons_redemptions',
 		);
@@ -461,6 +484,18 @@ describe('client', () => {
 		expect(redeemedCodes).toEqual(['WELCOME10']);
 		expect(pluginHooks).toEqual(['WELCOME10']);
 		expect(client.customers.sync()).toBe('synced');
+		expect(lazyLoads).toBe(0);
+		type CouponsClient = typeof client.coupons;
+		expectType<CouponsClient>({} as never);
+		expect(client.coupons.repository).toBe('available');
+		expect(lazyLoads).toBe(1);
+		expect(await client.coupons.redeem('SPRING25')).toEqual({
+			code: 'SPRING25',
+		});
+		expect(redeemedCodes).toEqual(['WELCOME10', 'SPRING25']);
+		expect(pluginHooks).toEqual(['WELCOME10', 'SPRING25']);
+		expect(client.coupons.repository).toBe('available');
+		expect(lazyLoads).toBe(1);
 	});
 
 	test('matches dynamic plugin routes and shares locals through middleware', async () => {
@@ -538,9 +573,9 @@ describe('client', () => {
 					definePlugin({
 						id: 'invalid-plugin',
 						events: {
-							onEvent: {
+							onEvent: event<{ ok: true }>({
 								description: 'invalid',
-							} as PluginEventDefinition<{ ok: true }>,
+							}),
 						},
 					}),
 				] as const,

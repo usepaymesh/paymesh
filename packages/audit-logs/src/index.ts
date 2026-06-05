@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import {
 	type AnyWebhookEvent,
 	definePlugin,
+	lazy,
 	PaymeshError,
-	type PluginRuntimeClient,
 	type WebhookHookEvent,
 } from 'paymesh';
 import {
@@ -244,11 +244,12 @@ export function auditLog(options: AuditLogOptions = {}) {
 				);
 			},
 		},
-		extends(client: PluginRuntimeClient) {
+		extends(context) {
+			const { client } = context;
 			const tableName = getTableName(client);
 
 			return {
-				auditLog: {
+				auditLog: lazy(() => ({
 					create: async (input: AuditLogCreateInput) => {
 						let entry: AuditLogEntry = {
 							id: `alog_${randomUUID().replaceAll('-', '')}`,
@@ -304,7 +305,7 @@ export function auditLog(options: AuditLogOptions = {}) {
 						before?: string | Date;
 						retention?: AuditLogOptions['retention'];
 					}) => pruneEntries(client, tableName, config, pruneOptions),
-				},
+				})),
 			};
 		},
 	});

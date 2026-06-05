@@ -10,6 +10,7 @@ import type {
 } from './database';
 import type {
 	AnyPaymeshPlugin,
+	LazyPluginExtension,
 	PaymeshPluginsClient,
 	PaymeshRoutesClient,
 	PluginEventDefinitions,
@@ -129,6 +130,17 @@ type UnionToIntersection<T> = (
 	? TResult
 	: never;
 
+type UnwrapLazyExtensions<T> =
+	T extends LazyPluginExtension<infer TValue>
+		? UnwrapLazyExtensions<TValue>
+		: T extends (...args: never[]) => unknown
+			? T
+			: T extends readonly unknown[]
+				? T
+				: T extends object
+					? { [K in keyof T]: UnwrapLazyExtensions<T[K]> }
+					: T;
+
 type PluginEventHooksFromDefinition<TEvents> =
 	TEvents extends PluginEventDefinitions
 		? string extends keyof TEvents
@@ -144,8 +156,8 @@ export type PluginClientExtensions<
 			Plugins[number] extends {
 				extends?: (...args: never[]) => infer TExtension;
 			}
-				? TExtension extends Record<string, unknown>
-					? TExtension
+				? UnwrapLazyExtensions<TExtension> extends Record<string, unknown>
+					? UnwrapLazyExtensions<TExtension>
 					: Record<never, never>
 				: Record<never, never>
 		>;

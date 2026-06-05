@@ -1,4 +1,4 @@
-import { definePlugin } from 'paymesh';
+import { definePlugin, lazy } from 'paymesh';
 import { createDashboardMiddleware, createDashboardRoutes } from './routes';
 import { createDashboardConfig, normalizeDashPath } from './shared';
 import type { DashOptions } from './types';
@@ -78,7 +78,7 @@ export function dash(options: DashOptions) {
 		],
 		extends() {
 			return {
-				__paymeshDash: createDashboardConfig(path),
+				__paymeshDash: lazy(() => createDashboardConfig(path)),
 			};
 		},
 	});

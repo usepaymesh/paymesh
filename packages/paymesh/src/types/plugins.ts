@@ -23,6 +23,9 @@ export type PluginSchema = Omit<DatabaseSchemaOptions, 'prefix'>;
 
 export interface PluginEventDefinition<Payload = never> {
 	description?: string;
+	example?: Payload;
+	async?: boolean;
+	deprecated?: boolean | string;
 	readonly __payload?: Payload;
 }
 
@@ -39,6 +42,11 @@ export interface PluginHookEvent<
 	type: Type;
 	data: Payload;
 	createdAt: string;
+}
+
+export interface LazyPluginExtension<TValue extends object> {
+	readonly __type: 'paymesh.lazy_extension';
+	load(): TValue;
 }
 
 export type PluginHook<TEvent = unknown> = {
@@ -151,6 +159,12 @@ export interface PluginSetupContext<
 	): Promise<void>;
 }
 
+export type PluginExtensionContext<
+	TClient extends PluginRuntimeClient = PluginRuntimeClient,
+	TEvents extends PluginEventDefinitions = Record<never, never>,
+	TPluginId extends string = string,
+> = PluginSetupContext<TClient, TEvents, TPluginId> & TClient;
+
 export interface PluginRouteContext<
 	TClient extends PluginRuntimeClient = PluginRuntimeClient,
 	TEvents extends PluginEventDefinitions = Record<never, never>,
@@ -219,7 +233,13 @@ export interface PaymeshPlugin<
 		TId
 	>[];
 	config?: PluginConfigRequirements<TProviderId>;
-	extends?(client: PluginRuntimeClient<TProviderId>): TExtends;
+	extends?(
+		context: PluginExtensionContext<
+			PluginRuntimeClient<TProviderId>,
+			TEvents,
+			TId
+		>,
+	): TExtends | LazyPluginExtension<TExtends>;
 }
 
 export type AnyPaymeshPlugin = Omit<

@@ -11,6 +11,7 @@ import type {
 } from '../types/database';
 import type {
 	AnyPaymeshPlugin,
+	LazyPluginExtension,
 	PaymeshPluginsClient,
 	PaymeshRoutesClient,
 	PluginHook,
@@ -381,7 +382,16 @@ export function bootstrapPlugins<
 
 	return {
 		createHookDispatcher,
-		extensions: collectExtensions(plugins, client, provider.id),
+		extensions: collectExtensions(
+			plugins,
+			client,
+			provider,
+			database,
+			schema,
+			pluginMetadataById,
+			pluginEventOwners,
+			() => createHookDispatcher(),
+		),
 		pluginsClient: {
 			byId: pluginMetadataById as PaymeshPluginsClient<Plugins>['byId'],
 			list() {
@@ -449,32 +459,77 @@ function collectExtensions<
 	Schema extends DatabaseSchemaOptions,
 	Plugins extends readonly AnyPaymeshPlugin[],
 	TClient extends PaymeshClient<IncludeRaw, Schema, Plugins>,
->(plugins: Plugins, client: TClient, providerId: string) {
+>(
+	plugins: Plugins,
+	client: TClient,
+	provider: Provider<string>,
+	database: PaymeshDatabaseDriver | undefined,
+	schema: ResolvedDatabaseSchema,
+	pluginMetadataById: Record<string, RegisteredPaymeshPlugin>,
+	pluginEventOwners: Map<string, string>,
+	createDispatcher: () => (hook: string, event: unknown) => Promise<void>,
+) {
 	const mergedExtensions: Record<string, unknown> = {};
 
 	for (const plugin of plugins) {
-		const extension = plugin.extends?.(client as never);
+		const pluginMetadata = pluginMetadataById[plugin.id];
+		if (!pluginMetadata) {
+			throw new PaymeshError({
+				code: 'plugin_error',
+				message: `Plugin "${plugin.id}" metadata could not be resolved.`,
+				provider: provider.id,
+			});
+		}
+
+		const emit = createPluginEmitter({
+			dispatchHook: createDispatcher(),
+			plugin,
+			pluginEventOwners,
+			providerId: provider.id,
+		});
+		const extension = plugin.extends?.(
+			Object.assign({}, client, {
+				client,
+				plugin: pluginMetadata,
+				provider,
+				database,
+				schema,
+				emit,
+			}) as never,
+		);
 		if (!extension) {
 			continue;
 		}
 
-		if (!isPlainObject(extension)) {
+		if (!isExtensionContainer(extension)) {
 			throw new PaymeshError({
 				code: 'plugin_configuration_error',
 				message: `Plugin "${plugin.id}" must return an object from extends().`,
-				provider: providerId,
+				provider: provider.id,
 			});
 		}
 
 		const pendingPairs = [
-			{ source: extension, target: mergedExtensions, path: [] as string[] },
+			{
+				source: resolveLazyExtension(extension),
+				target: mergedExtensions,
+				path: [] as string[],
+			},
 		];
 		for (const pair of pendingPairs) {
 			for (const [key, value] of Object.entries(pair.source)) {
 				const path = [...pair.path, key];
-				const existingValue = pair.target[key];
+				const existingDescriptor = Object.getOwnPropertyDescriptor(
+					pair.target,
+					key,
+				);
+				const existingValue = existingDescriptor?.value ?? pair.target[key];
 				if (existingValue === undefined) {
-					pair.target[key] = value;
+					if (isLazyExtension(value)) {
+						defineLazyProperty(pair.target, key, value);
+					} else {
+						pair.target[key] = value;
+					}
 					continue;
 				}
 
@@ -490,7 +545,7 @@ function collectExtensions<
 				throw new PaymeshError({
 					code: 'plugin_configuration_error',
 					message: `Plugin extension cannot overwrite "${path.join('.')}".`,
-					provider: providerId,
+					provider: provider.id,
 				});
 			}
 		}
@@ -538,6 +593,64 @@ function getErrorMessage(error: unknown) {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isLazyExtension(value: unknown): value is LazyPluginExtension<object> {
+	return isPlainObject(value) && value.__type === 'paymesh.lazy_extension';
+}
+
+function isExtensionContainer(value: unknown) {
+	return isPlainObject(value) || isLazyExtension(value);
+}
+
+function resolveLazyExtension(
+	value: Record<string, unknown> | LazyPluginExtension<object>,
+) {
+	const resolvedValue = isLazyExtension(value) ? value.load() : value;
+	if (!isPlainObject(resolvedValue)) {
+		throw new PaymeshError({
+			code: 'plugin_configuration_error',
+			message: 'Lazy plugin extension must resolve to an object.',
+		});
+	}
+
+	return resolvedValue;
+}
+
+function defineLazyProperty(
+	target: Record<string, unknown>,
+	key: string,
+	value: LazyPluginExtension<object>,
+) {
+	let loaded = false;
+	let cachedValue: object | undefined;
+
+	Object.defineProperty(target, key, {
+		configurable: true,
+		enumerable: true,
+		get() {
+			if (!loaded) {
+				const resolvedValue = value.load();
+				if (!isPlainObject(resolvedValue)) {
+					throw new PaymeshError({
+						code: 'plugin_configuration_error',
+						message: 'Lazy plugin extension must resolve to an object.',
+					});
+				}
+
+				cachedValue = resolvedValue;
+				loaded = true;
+				Object.defineProperty(target, key, {
+					configurable: true,
+					enumerable: true,
+					writable: false,
+					value: cachedValue,
+				});
+			}
+
+			return cachedValue;
+		},
+	});
 }
 
 function compileRouteMatcher(path: string, providerId: string): RouteMatcher {
