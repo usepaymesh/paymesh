@@ -11,7 +11,7 @@ export function dash(options: DashOptions) {
 		name: '@paymesh/dash',
 		description: 'Standalone localhost-ready admin dashboard for Paymesh.',
 		config: {
-			requiredDatabase: true,
+			database: true,
 		},
 		schema: {
 			customTables: {

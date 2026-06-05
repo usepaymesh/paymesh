@@ -1,15 +1,15 @@
 import type { PaymeshPlugin, PluginEventDefinitions } from '../types/plugins';
 
 export function definePlugin<
-	const TId extends string,
-	const TEvents extends PluginEventDefinitions = Record<never, never>,
-	TExtends extends Record<string, unknown> = Record<never, never>,
-	TProviderId extends string = string,
->(definition: PaymeshPlugin<TId, TEvents, TExtends, TProviderId>) {
+	const Id extends string,
+	const Events extends PluginEventDefinitions = Record<never, never>,
+	Extends extends Record<string, unknown> = Record<never, never>,
+	ProviderId extends string = string,
+>(definition: PaymeshPlugin<Id, Events, Extends, ProviderId>) {
 	return {
 		...definition,
 		type: 'plugin',
-	} as PaymeshPlugin<TId, TEvents, TExtends, TProviderId> & {
+	} as PaymeshPlugin<Id, Events, Extends, ProviderId> & {
 		readonly type: 'plugin';
 	};
 }

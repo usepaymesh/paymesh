@@ -64,9 +64,9 @@ export type PluginRouteParams = Record<string, string>;
 export type PluginRouteLocals = Record<string, unknown>;
 
 export interface PluginConfigRequirements<TProviderId extends string = string> {
-	requiredDatabase?: boolean;
-	requiredProviders?: readonly TProviderId[];
-	requiredCapabilities?: readonly ProviderCapability[];
+	database?: boolean;
+	providers?: readonly TProviderId[];
+	capabilities?: readonly ProviderCapability[];
 }
 
 export interface RegisteredPluginRoute<TPluginId extends string = string> {
@@ -84,7 +84,6 @@ export interface RegisteredPaymeshPlugin<
 	name?: string;
 	version?: string;
 	description?: string;
-	dependsOn: readonly string[];
 	status: PluginSetupStatus;
 	error?: unknown;
 	routes: RegisteredPluginRoute<TPluginId>[];
@@ -202,7 +201,6 @@ export interface PaymeshPlugin<
 	name?: string;
 	version?: string;
 	description?: string;
-	dependsOn?: readonly string[];
 	options?: unknown;
 	setup?(
 		context: PluginSetupContext<PluginRuntimeClient<TProviderId>, TEvents, TId>,

@@ -329,7 +329,6 @@ export function getPluginsData(context: DashboardRequestContext) {
 			id: table.id,
 			name: table.name,
 		})),
-		dependsOn: plugin.dependsOn,
 		description: plugin.description ?? null,
 		error:
 			plugin.error instanceof Error

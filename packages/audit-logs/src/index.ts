@@ -67,7 +67,7 @@ export function auditLog(options: AuditLogOptions = {}) {
 		version: '0.0.0',
 		description: 'Persists normalized Paymesh events as audit log entries.',
 		config: {
-			requiredDatabase: true,
+			database: true,
 		},
 		schema: {
 			customTables: {

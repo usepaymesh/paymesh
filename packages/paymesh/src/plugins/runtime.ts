@@ -20,7 +20,7 @@ import type {
 } from '../types/plugins';
 import type { Provider } from '../types/providers';
 
-const BUILT_IN_HOOK_NAMES = new Set([
+const BUILT_IN_HOOK_NAMES = [
 	'onEvent',
 	'onPaymentCreated',
 	'onPaymentSucceeded',
@@ -34,7 +34,7 @@ const BUILT_IN_HOOK_NAMES = new Set([
 	'onSubscriptionUpdated',
 	'onSubscriptionCanceled',
 	'onCheckoutCompleted',
-]);
+];
 
 type RuntimeHookHandler = PluginHook<unknown>;
 
@@ -121,7 +121,7 @@ export function bootstrapPlugins<
 			});
 		}
 
-		if (plugin.config?.requiredDatabase && !database) {
+		if (plugin.config?.database && !database) {
 			throw new PaymeshError({
 				code: 'plugin_configuration_error',
 				message: `Plugin "${plugin.id}" requires a configured database.`,
@@ -130,17 +130,17 @@ export function bootstrapPlugins<
 		}
 
 		if (
-			plugin.config?.requiredProviders &&
-			!plugin.config.requiredProviders.includes(provider.id)
+			plugin.config?.providers &&
+			!plugin.config.providers.includes(provider.id)
 		) {
 			throw new PaymeshError({
 				code: 'plugin_configuration_error',
-				message: `Plugin "${plugin.id}" requires one of the providers: ${plugin.config.requiredProviders.join(', ')}.`,
+				message: `Plugin "${plugin.id}" requires one of the providers: ${plugin.config.providers.join(', ')}.`,
 				provider: provider.id,
 			});
 		}
 
-		for (const capability of plugin.config?.requiredCapabilities ?? []) {
+		for (const capability of plugin.config?.capabilities ?? []) {
 			if (!provider.capabilities[capability]) {
 				throw new PaymeshError({
 					code: 'plugin_configuration_error',
@@ -156,7 +156,6 @@ export function bootstrapPlugins<
 			name: plugin.name,
 			version: plugin.version,
 			description: plugin.description,
-			dependsOn: [...(plugin.dependsOn ?? [])],
 			status: 'pending',
 			routes: [],
 			eventHooks: Object.keys(plugin.events ?? {}) as Array<
@@ -169,26 +168,16 @@ export function bootstrapPlugins<
 	}
 
 	for (const plugin of plugins) {
-		for (const dependency of plugin.dependsOn ?? []) {
-			if (!pluginsById.has(dependency)) {
-				throw new PaymeshError({
-					code: 'plugin_configuration_error',
-					message: `Plugin "${plugin.id}" depends on "${dependency}", but it is not registered.`,
-					provider: provider.id,
-				});
-			}
-		}
-
 		for (const hookName of Object.keys(plugin.events ?? {})) {
-			if (BUILT_IN_HOOK_NAMES.has(hookName)) {
+			if (BUILT_IN_HOOK_NAMES.includes(hookName))
 				throw new PaymeshError({
 					code: 'plugin_configuration_error',
 					message: `Plugin "${plugin.id}" cannot reuse the built-in hook name "${hookName}".`,
 					provider: provider.id,
 				});
-			}
 
 			const owner = pluginEventOwners.get(hookName);
+
 			if (owner) {
 				throw new PaymeshError({
 					code: 'plugin_configuration_error',
