@@ -439,7 +439,7 @@ describe('database support', () => {
 		expect(deliveries).toBe(1);
 	});
 
-	test('dispatches onEvent alongside the specific webhook hook', async () => {
+	test('dispatches the specific webhook hook instead of onEvent when both exist', async () => {
 		const database = createMockDatabase();
 		const calls: string[] = [];
 		const provider = defineProvider({
@@ -553,10 +553,10 @@ describe('database support', () => {
 		});
 
 		expect(result.status).toBe(200);
-		expect(calls).toEqual(['event:customer.created', 'specific:cus_123']);
+		expect(calls).toEqual(['specific:cus_123']);
 	});
 
-	test('dispatches onEvent even when the provider returns no specific hook', async () => {
+	test('dispatches onEvent when there is no specific hook handler', async () => {
 		const database = createMockDatabase();
 		const calls: string[] = [];
 		const provider = defineProvider({
@@ -619,6 +619,7 @@ describe('database support', () => {
 
 					return {
 						deliveryId: 'evt_no_specific',
+						hook: 'onSubscriptionUpdated',
 						event: withRaw(
 							{
 								id: 'evt_no_specific',
@@ -664,7 +665,114 @@ describe('database support', () => {
 		expect(calls).toEqual(['subscription.updated']);
 	});
 
-	test('returns hook_error when onEvent fails', async () => {
+	test('dispatches onUnhandledEvent when no specific hook or onEvent exists', async () => {
+		const database = createMockDatabase();
+		const calls: string[] = [];
+		const provider = defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async (_data, options) =>
+					withRaw(
+						{
+							id: 'chk_123',
+							provider: 'stub',
+							amount: 1000,
+							currency: 'usd',
+							status: 'pending' as const,
+						},
+						{ id: 'raw_checkout' },
+						options?.includeRaw,
+					),
+			},
+			customers: {
+				get: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				upsert: async (_data, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				delete: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							deleted: true,
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+			},
+			webhooks: {
+				verify: async () => true,
+				handle: async ({ request, includeRaw }) => {
+					const payload = (await request.json()) as Record<string, unknown>;
+
+					return {
+						deliveryId: 'evt_unhandled',
+						hook: 'onSubscriptionUpdated',
+						event: withRaw(
+							{
+								id: 'evt_unhandled',
+								type: 'subscription.updated' as const,
+								provider: 'stub',
+								data: withRaw(
+									{
+										id: 'sub_123',
+										status: payload.status,
+									},
+									payload,
+									includeRaw,
+								),
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		});
+		const client = createClient({
+			provider,
+			database,
+		});
+
+		const result = await client.webhooks.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				body: JSON.stringify({ status: 'active' }),
+				headers: {
+					'content-type': 'application/json',
+				},
+			}),
+			hooks: {
+				onUnhandledEvent: async (event) => {
+					calls.push(`${event.type}:${event.context.hook}`);
+				},
+			},
+		});
+
+		expect(result.status).toBe(200);
+		expect(calls).toEqual(['subscription.updated:onSubscriptionUpdated']);
+	});
+
+	test('returns hook_error when the selected fallback hook fails', async () => {
 		const database = createMockDatabase();
 		const provider = defineProvider({
 			id: 'stub',
@@ -764,7 +872,6 @@ describe('database support', () => {
 				onEvent: async () => {
 					throw new Error('global hook failed');
 				},
-				onCustomerCreated: async () => {},
 			},
 		});
 

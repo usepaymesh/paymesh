@@ -236,6 +236,8 @@ export const createClient = <
 					dispatchHook: bootstrappedPlugins.createHookDispatcher(
 						webhookOptions.hooks as never,
 					),
+					hasHook: (hook) =>
+						bootstrappedPlugins.hasHook(hook, webhookOptions.hooks as never),
 					includeRaw: (webhookOptions.includeRaw ??
 						baseIncludeRaw ??
 						false) as CallIncludeRaw,

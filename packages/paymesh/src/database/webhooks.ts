@@ -12,6 +12,7 @@ interface HandleClientWebhookOptions<IncludeRaw extends boolean = false> {
 	schema: ResolvedDatabaseSchema;
 	request: Request;
 	dispatchHook?: (hook: string, event: unknown) => Promise<void>;
+	hasHook?: (hook: string) => boolean;
 	includeRaw?: IncludeRaw;
 	skipVerify?: boolean;
 }
@@ -22,6 +23,7 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 	schema,
 	request,
 	dispatchHook,
+	hasHook,
 	includeRaw,
 	skipVerify,
 }: HandleClientWebhookOptions<IncludeRaw>): Promise<
@@ -97,16 +99,17 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 				dispatchedAt: new Date().toISOString(),
 				hook: handled.hook,
 			};
-			const dispatches: Promise<void>[] = [
-				dispatchHook('onEvent', withHookContext(event, context)),
-			];
+			const hookedEvent = withHookContext(event, context);
+			const specificHook =
+				handled.hook && hasHook?.(handled.hook) ? handled.hook : undefined;
 
-			if (handled.hook)
-				dispatches.push(
-					dispatchHook(handled.hook, withHookContext(event, context)),
-				);
-
-			await Promise.all(dispatches);
+			if (specificHook) {
+				await dispatchHook(specificHook, hookedEvent);
+			} else if (hasHook?.('onEvent')) {
+				await dispatchHook('onEvent', hookedEvent);
+			} else if (hasHook?.('onUnhandledEvent')) {
+				await dispatchHook('onUnhandledEvent', hookedEvent);
+			}
 		}
 
 		if (database) {

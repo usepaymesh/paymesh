@@ -146,6 +146,31 @@ describe('client', () => {
 		expectType<typeof client>(client);
 	});
 
+	test('types onUnhandledEvent as a discriminated union of normalized webhook events', () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			hooks: {
+				onUnhandledEvent(event) {
+					expectType<string | undefined>(event.context.hook);
+					expectType<string>(event.context.deliveryId);
+
+					if (event.type === 'checkout.completed') {
+						expectType<string>(event.data.id);
+						expectType<number>(event.data.amount);
+					}
+
+					if (event.type === 'customer.deleted') {
+						expectType<boolean>(event.data.deleted);
+						// @ts-expect-error customer.deleted payload does not expose amount
+						expectType<number>(event.data.amount);
+					}
+				},
+			},
+		});
+
+		expectType<typeof client>(client);
+	});
+
 	test('lists customers from the configured database with typed extra fields', async () => {
 		const database = createListDatabase();
 		const client = createClient({

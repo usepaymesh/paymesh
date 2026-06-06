@@ -82,6 +82,7 @@ export type AnyWebhookEvent<IncludeRaw extends boolean = false> =
 
 export interface BuiltInPaymeshHooks<IncludeRaw extends boolean = false> {
 	onEvent?: PaymeshHook<WebhookHookEvent<AnyWebhookEvent<IncludeRaw>>>;
+	onUnhandledEvent?: PaymeshHook<WebhookHookEvent<AnyWebhookEvent<IncludeRaw>>>;
 	onPaymentCreated?: PaymeshHook<
 		WebhookHookEvent<PaymentEvent<'payment.created', IncludeRaw>>
 	>;

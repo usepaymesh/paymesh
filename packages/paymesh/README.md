@@ -72,7 +72,11 @@ console.log(payment.checkoutUrl, customer.email);
 <h2 align="center">Built-in Hooks</h2>
 
 <p align="center">
-  Paymesh exposes one unified webhook hook model across providers and framework adapters. Built-in hooks include <code>onEvent</code>, <code>onPaymentCreated</code>, <code>onPaymentSucceeded</code>, <code>onPaymentFailed</code>, <code>onPaymentCanceled</code>, <code>onPaymentRefunded</code>, <code>onCustomerCreated</code>, <code>onCustomerUpdated</code>, <code>onCustomerDeleted</code>, <code>onSubscriptionCreated</code>, <code>onSubscriptionUpdated</code>, <code>onSubscriptionCanceled</code>, and <code>onCheckoutCompleted</code>.
+  Paymesh exposes one unified webhook hook model across providers and framework adapters. Built-in hooks include <code>onEvent</code>, <code>onUnhandledEvent</code>, <code>onPaymentCreated</code>, <code>onPaymentSucceeded</code>, <code>onPaymentFailed</code>, <code>onPaymentCanceled</code>, <code>onPaymentRefunded</code>, <code>onCustomerCreated</code>, <code>onCustomerUpdated</code>, <code>onCustomerDeleted</code>, <code>onSubscriptionCreated</code>, <code>onSubscriptionUpdated</code>, <code>onSubscriptionCanceled</code>, and <code>onCheckoutCompleted</code>.
+</p>
+
+<p align="center">
+  Dispatch prefers the specific normalized hook first, falls back to <code>onEvent</code> when no specific handler exists, and uses <code>onUnhandledEvent</code> only when neither is defined.
 </p>
 
 <h2 align="center">Why Paymesh</h2>

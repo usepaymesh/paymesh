@@ -23,6 +23,7 @@ import type { Provider } from '../types/providers';
 
 const BUILT_IN_HOOK_NAMES = [
 	'onEvent',
+	'onUnhandledEvent',
 	'onPaymentCreated',
 	'onPaymentSucceeded',
 	'onPaymentFailed',
@@ -67,6 +68,10 @@ interface BootstrappedPlugins<
 	createHookDispatcher(
 		localHooks?: RuntimeHooks<IncludeRaw, Plugins>,
 	): (hook: string, event: unknown) => Promise<void>;
+	hasHook(
+		hook: string,
+		localHooks?: RuntimeHooks<IncludeRaw, Plugins>,
+	): boolean;
 	extensions: PluginClientExtensions<Plugins>;
 	pluginsClient: PaymeshPluginsClient<Plugins>;
 	routesClient: PaymeshRoutesClient<IncludeRaw, Plugins>;
@@ -259,6 +264,23 @@ export function bootstrapPlugins<
 		};
 	};
 
+	const hasHook = (
+		hook: string,
+		localHooks?: RuntimeHooks<IncludeRaw, Plugins>,
+	) => {
+		if ((pluginHooksByName.get(hook)?.length ?? 0) > 0) return true;
+
+		const selectedHook =
+			(
+				localHooks as Record<string, RuntimeHookHandler | undefined> | undefined
+			)?.[hook] ??
+			(
+				baseHooks as Record<string, RuntimeHookHandler | undefined> | undefined
+			)?.[hook];
+
+		return typeof selectedHook === 'function';
+	};
+
 	for (const plugin of plugins) {
 		const pluginMetadata = pluginMetadataById[plugin.id];
 		if (!pluginMetadata) {
@@ -382,6 +404,7 @@ export function bootstrapPlugins<
 
 	return {
 		createHookDispatcher,
+		hasHook,
 		extensions: collectExtensions(
 			plugins,
 			client,
