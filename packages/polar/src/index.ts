@@ -4,113 +4,33 @@ import {
 	defineProvider,
 	type Payment,
 	type PaymentCreateData,
-	type PaymentStatus,
 	PaymeshError,
 	type PaymeshEvent,
-	type PaymeshEventType,
-	type ProviderCapabilities,
-	type ProviderDashboardSyncInput,
 	type ProviderRequestOptions,
 	type ProviderWebhookHandleOptions,
 	type ProviderWebhookHandleResult,
 	request,
 	withRaw,
 } from 'paymesh';
+import { readPolarProducts, readVersion } from './shared/catalog';
+import { POLAR_BASE_URL, POLAR_CAPABILITIES } from './shared/constants';
+import { mapPolarCustomer } from './shared/mapper';
+import { syncPolarPayment, syncPolarSubscription } from './shared/sync';
+import {
+	resolvePolarWebhookData,
+	resolvePolarWebhookHook,
+	resolvePolarWebhookId,
+	resolvePolarWebhookType,
+} from './shared/webhooks';
 import type {
 	PolarCheckout,
 	PolarCustomer,
-	PolarOrder,
-	PolarProduct,
 	PolarProductListResponse,
 	PolarProviderOptions,
-	PolarSubscription,
 	PolarWebhookEvent,
 } from './types';
 
 export type * from './types';
-
-const POLAR_BASE_URL = 'https://api.polar.sh';
-
-const POLAR_CAPABILITIES = {
-	checkout: true,
-	coupons: true,
-	pix: false,
-	refunds: true,
-	subscriptions: true,
-	webhooks: true,
-	customerPortal: true,
-	customers: true,
-} satisfies ProviderCapabilities;
-
-function mapPolarCustomer(customer: PolarCustomer) {
-	return {
-		id: customer.id,
-		provider: 'polar' as const,
-		externalId: customer.external_id ?? undefined,
-		name: customer.name ?? undefined,
-		email: customer.email ?? undefined,
-		metadata: customer.metadata ?? undefined,
-	};
-}
-
-function mapPolarCheckoutPayment(checkout: PolarCheckout) {
-	let status: PaymentStatus = 'pending';
-	if (checkout.status === 'succeeded') status = 'paid';
-	if (checkout.status === 'expired') status = 'canceled';
-	if (checkout.status === 'failed') status = 'failed';
-
-	return {
-		id: checkout.id,
-		provider: 'polar' as const,
-		amount: checkout.total_amount ?? checkout.amount ?? 0,
-		currency: checkout.currency ?? 'usd',
-		status,
-		checkoutUrl: checkout.url ?? undefined,
-		customer:
-			checkout.customer_id != null ||
-			checkout.external_customer_id != null ||
-			checkout.customer_name != null ||
-			checkout.customer_email != null
-				? {
-						id: checkout.customer_id ?? undefined,
-						externalId: checkout.external_customer_id ?? undefined,
-						name: checkout.customer_name ?? undefined,
-						email: checkout.customer_email ?? undefined,
-					}
-				: undefined,
-		metadata: checkout.metadata ?? undefined,
-	};
-}
-
-function mapPolarOrderPayment(order: PolarOrder) {
-	const status: PaymentStatus =
-		order.status === 'refunded'
-			? 'refunded'
-			: order.status === 'void'
-				? 'canceled'
-				: order.paid
-					? 'paid'
-					: 'pending';
-
-	return {
-		id: order.id,
-		provider: 'polar' as const,
-		amount: order.total_amount ?? 0,
-		currency: order.currency ?? 'usd',
-		status,
-		customer: order.customer
-			? {
-					id: order.customer.id,
-					externalId: order.customer.external_id ?? undefined,
-					name: order.customer.name ?? undefined,
-					email: order.customer.email ?? undefined,
-				}
-			: order.customer_id
-				? { id: order.customer_id }
-				: undefined,
-		metadata: order.metadata ?? undefined,
-	};
-}
 
 /**
  * Creates a Polar provider configured for Paymesh.
@@ -136,7 +56,7 @@ export const polar = ({
 		'content-type': 'application/json',
 	};
 
-	const requestOptions = {
+	const baseRequestOptions = {
 		baseUrl,
 		fetch,
 		headers,
@@ -144,76 +64,15 @@ export const polar = ({
 		timeout,
 	};
 
-	const syncPolarPayment = async ({
-		database,
-		id,
-		schema,
-	}: ProviderDashboardSyncInput) => {
-		try {
-			const order = await request<PolarOrder>(
-				`/v1/orders/${encodeURIComponent(id)}`,
-				{
-					provider: 'polar',
-					...requestOptions,
-				},
-			);
-			const normalized = withRaw(mapPolarOrderPayment(order), order, true);
-
-			await database.repositories.invoices.upsert(schema, normalized);
-			return normalized;
-		} catch (error) {
-			if (!(error instanceof PaymeshError) || error.status !== 404) {
-				throw error;
-			}
-		}
-
-		const checkout = await request<PolarCheckout>(
-			`/v1/checkouts/${encodeURIComponent(id)}`,
-			{
-				provider: 'polar',
-				...requestOptions,
-			},
-		);
-		const normalized = withRaw(
-			mapPolarCheckoutPayment(checkout),
-			checkout,
-			true,
-		);
-
-		await database.repositories.checkouts.upsert(schema, normalized);
-		return normalized;
-	};
-
-	const syncPolarSubscription = async ({
-		database,
-		id,
-		schema,
-	}: ProviderDashboardSyncInput) => {
-		const subscription = await request<PolarSubscription>(
-			`/v1/subscriptions/${encodeURIComponent(id)}`,
-			{
-				provider: 'polar',
-				...requestOptions,
-			},
-		);
-		const type =
-			subscription.canceled_at || subscription.ended_at
-				? ('subscription.canceled' as const)
-				: ('subscription.updated' as const);
-		const event = withRaw(
-			{
-				id,
-				provider: 'polar',
-				type,
-				data: withRaw(subscription, subscription, true),
-			},
-			subscription,
-			true,
-		);
-
-		await database.repositories.subscriptions.upsert(schema, event);
-		return event.data as unknown as Record<string, unknown>;
-	};
+	const resolveRequestOptions = <IncludeRaw extends boolean = false>(
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => ({
+		baseUrl: options?.baseUrl ?? baseRequestOptions.baseUrl,
+		timeout: options?.timeout ?? baseRequestOptions.timeout,
+		retry: options?.retry ?? baseRequestOptions.retry,
+		fetch: options?.fetch ?? baseRequestOptions.fetch,
+		headers: baseRequestOptions.headers,
+	});
 
 	return defineProvider({
 		id: 'polar',
@@ -240,12 +99,8 @@ export const polar = ({
 
 				const checkout = await request<PolarCheckout>('/v1/checkouts', {
 					provider: 'polar',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
+					...resolveRequestOptions(options),
 					method: 'POST',
-					headers,
 					body: {
 						products: data.productIds,
 						amount: data.amount,
@@ -261,7 +116,34 @@ export const polar = ({
 				});
 
 				return withRaw(
-					mapPolarCheckoutPayment(checkout),
+					{
+						id: checkout.id,
+						provider: 'polar',
+						amount: checkout.total_amount ?? checkout.amount ?? 0,
+						currency: checkout.currency ?? 'usd',
+						status:
+							checkout.status === 'succeeded'
+								? 'paid'
+								: checkout.status === 'expired'
+									? 'canceled'
+									: checkout.status === 'failed'
+										? 'failed'
+										: 'pending',
+						checkoutUrl: checkout.url ?? undefined,
+						customer:
+							checkout.customer_id != null ||
+							checkout.external_customer_id != null ||
+							checkout.customer_name != null ||
+							checkout.customer_email != null
+								? {
+										id: checkout.customer_id ?? undefined,
+										externalId: checkout.external_customer_id ?? undefined,
+										name: checkout.customer_name ?? undefined,
+										email: checkout.customer_email ?? undefined,
+									}
+								: undefined,
+						metadata: checkout.metadata ?? undefined,
+					},
 					checkout,
 					options?.includeRaw,
 				);
@@ -293,12 +175,8 @@ export const polar = ({
 						: '/v1/customers',
 					{
 						provider: 'polar',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: data.id ? 'PATCH' : 'POST',
-						headers,
 						body: data.id
 							? {
 									email: data.email,
@@ -330,11 +208,7 @@ export const polar = ({
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
 						provider: 'polar',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
-						headers,
+						...resolveRequestOptions(options),
 					},
 				);
 
@@ -350,14 +224,8 @@ export const polar = ({
 			) {
 				await request<void>(`/v1/customers/${encodeURIComponent(id)}`, {
 					provider: 'polar',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
+					...resolveRequestOptions(options),
 					method: 'DELETE',
-					headers: {
-						authorization: `Bearer ${accessToken}`,
-					},
 				});
 
 				return withRaw(
@@ -377,11 +245,7 @@ export const polar = ({
 					'/v1/products',
 					{
 						provider: 'polar',
-						baseUrl,
-						timeout,
-						retry,
-						fetch,
-						headers,
+						...baseRequestOptions,
 						query: {
 							limit: 100,
 						},
@@ -429,8 +293,16 @@ export const polar = ({
 			getResourceUrl() {
 				return 'https://polar.sh/dashboard';
 			},
-			syncPayment: syncPolarPayment,
-			syncSubscription: syncPolarSubscription,
+			syncPayment: (input) =>
+				syncPolarPayment({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
+			syncSubscription: (input) =>
+				syncPolarSubscription({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
 		},
 		webhooks: {
 			async verify({ request }) {
@@ -466,7 +338,8 @@ export const polar = ({
 			async handle<IncludeRaw extends boolean = false>(
 				options: ProviderWebhookHandleOptions<IncludeRaw>,
 			): Promise<ProviderWebhookHandleResult<IncludeRaw>> {
-				const { request, includeRaw } = options;
+				const { request, includeRaw = false } = options;
+
 				const payload = await request.json();
 				const webhookId = request.headers.get('webhook-id');
 
@@ -476,161 +349,10 @@ export const polar = ({
 
 				const body = payload as Record<string, unknown>;
 				const event = body as unknown as PolarWebhookEvent;
-				let type: PaymeshEventType = 'payment.created';
-
-				switch (event.type) {
-					case 'checkout.created':
-						type = 'payment.created';
-						break;
-					case 'checkout.updated': {
-						const checkout = event.data as PolarCheckout;
-						type =
-							checkout.status === 'succeeded'
-								? 'checkout.completed'
-								: checkout.status === 'expired'
-									? 'payment.canceled'
-									: 'payment.created';
-						break;
-					}
-					case 'order.created':
-						type = 'payment.created';
-						break;
-					case 'order.paid':
-						type = 'payment.succeeded';
-						break;
-					case 'order.refunded':
-						type = 'payment.refunded';
-						break;
-					case 'customer.created':
-						type = 'customer.created';
-						break;
-					case 'customer.updated':
-					case 'customer.state_changed':
-						type = 'customer.updated';
-						break;
-					case 'customer.deleted':
-						type = 'customer.deleted';
-						break;
-					case 'subscription.created':
-						type = 'subscription.created';
-						break;
-					case 'subscription.canceled':
-					case 'subscription.revoked':
-						type = 'subscription.canceled';
-						break;
-					case 'subscription.updated': {
-						const subscription = event.data as PolarSubscription;
-						type =
-							subscription.canceled_at || subscription.ended_at
-								? 'subscription.canceled'
-								: 'subscription.updated';
-						break;
-					}
-				}
-
-				let data: unknown = event.data;
-
-				if (
-					type === 'checkout.completed' ||
-					type === 'payment.created' ||
-					type === 'payment.succeeded' ||
-					type === 'payment.refunded' ||
-					type === 'payment.canceled'
-				) {
-					if ('status' in (event.data as PolarCheckout)) {
-						const checkout = event.data as PolarCheckout;
-						data = withRaw(
-							mapPolarCheckoutPayment(checkout),
-							checkout,
-							includeRaw,
-						);
-					} else {
-						const order = event.data as PolarOrder;
-						data = withRaw(mapPolarOrderPayment(order), order, includeRaw);
-					}
-				} else if (type === 'customer.created' || type === 'customer.updated') {
-					const customer = event.data as PolarCustomer;
-
-					data = withRaw(
-						{
-							id: customer.id,
-							provider: 'polar',
-							externalId: customer.external_id ?? undefined,
-							name: customer.name ?? undefined,
-							email: customer.email ?? undefined,
-							metadata: customer.metadata ?? undefined,
-						},
-						customer,
-						includeRaw,
-					);
-				} else if (type === 'customer.deleted') {
-					const customer = event.data as PolarCustomer;
-
-					data = withRaw(
-						{
-							id: customer.id,
-							provider: 'polar',
-							deleted: true,
-						},
-						customer,
-						includeRaw,
-					);
-				} else if (
-					type === 'subscription.created' ||
-					type === 'subscription.updated' ||
-					type === 'subscription.canceled'
-				) {
-					const subscription = event.data as PolarSubscription;
-					data = withRaw(subscription, subscription, includeRaw);
-				}
-
-				let id = `${event.type}:${event.timestamp}`;
-				if (
-					event.data &&
-					typeof event.data === 'object' &&
-					'id' in event.data &&
-					typeof event.data.id === 'string'
-				) {
-					id = event.data.id;
-				}
-
-				let hook: string | undefined;
-
-				switch (type) {
-					case 'payment.created':
-						hook = 'onPaymentCreated';
-						break;
-					case 'payment.succeeded':
-						hook = 'onPaymentSucceeded';
-						break;
-					case 'payment.canceled':
-						hook = 'onPaymentCanceled';
-						break;
-					case 'payment.refunded':
-						hook = 'onPaymentRefunded';
-						break;
-					case 'customer.created':
-						hook = 'onCustomerCreated';
-						break;
-					case 'customer.updated':
-						hook = 'onCustomerUpdated';
-						break;
-					case 'customer.deleted':
-						hook = 'onCustomerDeleted';
-						break;
-					case 'subscription.created':
-						hook = 'onSubscriptionCreated';
-						break;
-					case 'subscription.updated':
-						hook = 'onSubscriptionUpdated';
-						break;
-					case 'subscription.canceled':
-						hook = 'onSubscriptionCanceled';
-						break;
-					case 'checkout.completed':
-						hook = 'onCheckoutCompleted';
-						break;
-				}
+				const type = resolvePolarWebhookType(event);
+				const data = resolvePolarWebhookData(type, event, includeRaw);
+				const id = resolvePolarWebhookId(event);
+				const hook = resolvePolarWebhookHook(type);
 
 				return {
 					deliveryId: webhookId ?? undefined,
@@ -650,18 +372,3 @@ export const polar = ({
 		},
 	});
 };
-
-function readPolarProducts(response: PolarProductListResponse) {
-	if (Array.isArray(response)) return response;
-	if (Array.isArray(response.items)) return response.items;
-	if (Array.isArray(response.data)) return response.data;
-	if (Array.isArray(response.result)) return response.result;
-	return [];
-}
-
-function readVersion(metadata: PolarProduct['metadata']) {
-	const version = metadata?.version;
-	return typeof version === 'string' && version.length > 0
-		? version
-		: undefined;
-}

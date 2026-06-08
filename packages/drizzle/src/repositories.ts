@@ -1,16 +1,44 @@
 import {
-	type DatabaseTableKey,
 	type PaymeshDatabaseRepositories,
 	PaymeshError,
 	type ResolvedDatabaseSchema,
 	type SqlValue,
 	withRaw,
 } from 'paymesh';
+import { decodeCustomerCursor, encodeCustomerCursor } from './shared/cursor';
+import {
+	getExtraFieldValues,
+	hydrateStoredData,
+	withoutSchemaFields,
+} from './shared/db';
+import {
+	asRecord,
+	getInternalRaw,
+	getPersistableCatalogRaw,
+	getPersistableRaw,
+	getVersion,
+	withoutRaw,
+} from './shared/raw';
+import {
+	findDataByProviderId,
+	quoteIdentifier,
+	tableName,
+	upsertByProviderId,
+	upsertManyByProviderId,
+} from './shared/sql';
+import { toIsoString, toNullableNumber } from './shared/values';
 import type { SqlExecutor } from './types';
 
 export function createRepositories(
 	executor: SqlExecutor,
 ): PaymeshDatabaseRepositories {
+	const migrationsTableSql = (schema: ResolvedDatabaseSchema) =>
+		`CREATE TABLE IF NOT EXISTS ${tableName(schema, 'migrations')} (
+			id BIGSERIAL PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`;
+
 	return {
 		customers: {
 			async findByProviderId(schema, provider, id, options) {
@@ -32,11 +60,7 @@ export function createRepositories(
 
 				if (!row) return null;
 
-				const data = { ...(row.data ?? {}) };
-				for (const field of fields) {
-					const value = row[field.key];
-					if (value !== null && value !== undefined) data[field.key] = value;
-				}
+				const data = hydrateStoredData(row.data, fields, row);
 
 				return withRaw(
 					{
@@ -66,53 +90,10 @@ export function createRepositories(
 					});
 				}
 
-				const cursorValue = options?.before ?? options?.after;
-				let cursor: {
-					mode: 'after' | 'before';
-					value: {
-						createdAt: string;
-						providerId: string;
-					};
-				} | null = null;
-
-				if (cursorValue) {
-					if (!cursorValue.startsWith('pc1.')) {
-						throw new PaymeshError({
-							code: 'invalid_request',
-							message: 'Invalid customer list cursor',
-						});
-					}
-
-					try {
-						const parsed = JSON.parse(
-							Buffer.from(cursorValue.slice(4), 'base64url').toString('utf8'),
-						) as Record<string, unknown>;
-
-						if (
-							typeof parsed.createdAt !== 'string' ||
-							typeof parsed.providerId !== 'string' ||
-							parsed.createdAt.length === 0 ||
-							parsed.providerId.length === 0
-						)
-							throw new PaymeshError({
-								code: 'database_error',
-								message: 'Invalid cursor payload',
-							});
-
-						cursor = {
-							mode: options?.before ? 'before' : 'after',
-							value: {
-								createdAt: parsed.createdAt,
-								providerId: parsed.providerId,
-							},
-						};
-					} catch {
-						throw new PaymeshError({
-							code: 'invalid_request',
-							message: 'Invalid customer list cursor',
-						});
-					}
-				}
+				const cursor = decodeCustomerCursor(
+					options?.before ?? options?.after,
+					options?.before ? 'before' : 'after',
+				);
 				const includeRaw = options?.includeRaw;
 				const [totalRow] = await executor.query<{ total: number | string }>({
 					sql: `SELECT COUNT(*) AS total
@@ -158,11 +139,7 @@ export function createRepositories(
 				const pageRows =
 					cursor?.mode === 'before' ? [...windowRows].reverse() : windowRows;
 				const data = pageRows.map((row) => {
-					const data = { ...(row.data ?? {}) };
-					for (const field of fields) {
-						const value = row[field.key];
-						if (value !== null && value !== undefined) data[field.key] = value;
-					}
+					const data = hydrateStoredData(row.data, fields, row);
 
 					return withRaw(
 						{
@@ -174,20 +151,6 @@ export function createRepositories(
 						includeRaw,
 					) as never;
 				});
-				const encodeCursor = (row: {
-					created_at: Date | string;
-					provider_id: string;
-				}) =>
-					`pc1.${Buffer.from(
-						JSON.stringify({
-							createdAt:
-								row.created_at instanceof Date
-									? row.created_at.toISOString()
-									: String(row.created_at),
-							providerId: row.provider_id,
-						}),
-					).toString('base64url')}`;
-
 				return {
 					data,
 					total: Number(totalRow?.total ?? 0),
@@ -196,18 +159,18 @@ export function createRepositories(
 							? null
 							: cursor?.mode === 'before'
 								? hasExtra
-									? encodeCursor(pageRows[0]!)
+									? encodeCustomerCursor(pageRows[0]!)
 									: null
 								: cursor
-									? encodeCursor(pageRows[0]!)
+									? encodeCustomerCursor(pageRows[0]!)
 									: null,
 					next:
 						data.length === 0
 							? null
 							: cursor?.mode === 'before'
-								? encodeCursor(pageRows[pageRows.length - 1]!)
+								? encodeCustomerCursor(pageRows[pageRows.length - 1]!)
 								: hasExtra
-									? encodeCursor(pageRows[pageRows.length - 1]!)
+									? encodeCustomerCursor(pageRows[pageRows.length - 1]!)
 									: null,
 				};
 			},
@@ -510,20 +473,12 @@ export function createRepositories(
 		migrations: {
 			ensureTable: (schema) =>
 				executor.execute({
-					sql: `CREATE TABLE IF NOT EXISTS ${tableName(schema, 'migrations')} (
-						id BIGSERIAL PRIMARY KEY,
-						name TEXT NOT NULL UNIQUE,
-						applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-					)`,
+					sql: migrationsTableSql(schema),
 					params: [],
 				}),
 			listApplied: async (schema) => {
 				await executor.execute({
-					sql: `CREATE TABLE IF NOT EXISTS ${tableName(schema, 'migrations')} (
-						id BIGSERIAL PRIMARY KEY,
-						name TEXT NOT NULL UNIQUE,
-						applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-					)`,
+					sql: migrationsTableSql(schema),
 					params: [],
 				});
 				const rows = await executor.query<{ name: string }>({
@@ -534,11 +489,7 @@ export function createRepositories(
 			},
 			recordApplied: async (schema, name) => {
 				await executor.execute({
-					sql: `CREATE TABLE IF NOT EXISTS ${tableName(schema, 'migrations')} (
-						id BIGSERIAL PRIMARY KEY,
-						name TEXT NOT NULL UNIQUE,
-						applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-					)`,
+					sql: migrationsTableSql(schema),
 					params: [],
 				});
 				await executor.execute({
@@ -548,178 +499,4 @@ export function createRepositories(
 			},
 		},
 	};
-}
-
-async function findDataByProviderId(
-	executor: SqlExecutor,
-	schema: ResolvedDatabaseSchema,
-	tableKey: DatabaseTableKey,
-	provider: string,
-	id: string,
-) {
-	const [row] = await executor.query<{ data: Record<string, unknown> | null }>({
-		sql: `SELECT data
-				FROM ${tableName(schema, tableKey)}
-				WHERE provider = $1 AND provider_id = $2
-				LIMIT 1`,
-		params: [provider, id],
-	});
-
-	return row?.data ?? null;
-}
-
-function upsertByProviderId(
-	executor: SqlExecutor,
-	schema: ResolvedDatabaseSchema,
-	tableKey: DatabaseTableKey,
-	row: Record<string, SqlValue>,
-) {
-	const entries = Object.entries(row);
-	const updates = entries
-		.filter(([column]) => column !== 'provider' && column !== 'provider_id')
-		.map(
-			([column]) =>
-				`${quoteIdentifier(column)} = EXCLUDED.${quoteIdentifier(column)}`,
-		);
-
-	return executor.execute({
-		sql: `INSERT INTO ${tableName(schema, tableKey)} (${entries.map(([column]) => quoteIdentifier(column)).join(', ')})
-			VALUES (${entries.map((_, index) => `$${index + 1}`).join(', ')})
-			ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
-		params: entries.map(([, value]) => value),
-	});
-}
-
-function upsertManyByProviderId(
-	executor: SqlExecutor,
-	schema: ResolvedDatabaseSchema,
-	tableKey: DatabaseTableKey,
-	rows: Array<Record<string, SqlValue>>,
-) {
-	if (rows.length === 0) return Promise.resolve();
-
-	const columns = Object.keys(rows[0] ?? {});
-	const params: SqlValue[] = [];
-	const values = rows.map((row) => {
-		const placeholders = columns.map((column) => {
-			params.push(row[column] as SqlValue);
-			return `$${params.length}`;
-		});
-
-		return `(${placeholders.join(', ')})`;
-	});
-	const updates = columns
-		.filter((column) => column !== 'provider' && column !== 'provider_id')
-		.map(
-			(column) =>
-				`${quoteIdentifier(column)} = EXCLUDED.${quoteIdentifier(column)}`,
-		);
-
-	return executor.execute({
-		sql: `INSERT INTO ${tableName(schema, tableKey)} (${columns.map((column) => quoteIdentifier(column)).join(', ')})
-			VALUES ${values.join(', ')}
-			ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
-		params,
-	});
-}
-
-function withoutRaw(value: unknown) {
-	if (typeof value !== 'object' || value === null) return {};
-
-	const { raw: _raw, ...data } = value as Record<string, unknown>;
-	return data;
-}
-
-function withoutSchemaFields(
-	value: Record<string, unknown>,
-	fields: ResolvedDatabaseSchema['tables'][DatabaseTableKey]['fields'],
-) {
-	if (Object.keys(fields).length === 0) return value;
-
-	const data = { ...value };
-
-	for (const key of Object.keys(fields)) {
-		delete data[key];
-	}
-
-	return data;
-}
-
-function getExtraFieldValues(
-	schema: ResolvedDatabaseSchema,
-	tableKey: DatabaseTableKey,
-	value: unknown,
-) {
-	if (typeof value !== 'object' || value === null) return {};
-
-	const record = value as Record<string, unknown>;
-	return Object.fromEntries(
-		Object.values(schema.tables[tableKey].fields)
-			.filter((field) => Object.hasOwn(record, field.key))
-			.map((field) => [field.column, record[field.key] as SqlValue]),
-	) as Record<string, SqlValue>;
-}
-
-function getPersistableRaw(
-	executor: Pick<SqlExecutor, 'persistRaw'>,
-	value: unknown,
-) {
-	return executor.persistRaw
-		? ((getInternalRaw(value) ?? null) as SqlValue)
-		: null;
-}
-
-function getPersistableCatalogRaw(
-	executor: Pick<SqlExecutor, 'persistRaw'>,
-	value: unknown,
-) {
-	return executor.persistRaw ? ((value ?? null) as SqlValue) : null;
-}
-
-function getVersion(value: unknown, raw: unknown) {
-	for (const candidate of [value, raw]) {
-		const record = asRecord(candidate);
-		if (typeof record.version === 'string' && record.version.length > 0) {
-			return record.version;
-		}
-
-		const metadata = asRecord(record.metadata);
-		if (typeof metadata.version === 'string' && metadata.version.length > 0) {
-			return metadata.version;
-		}
-	}
-
-	return 'v1';
-}
-
-function asRecord(value: unknown) {
-	return typeof value === 'object' && value !== null
-		? (value as Record<string, unknown>)
-		: {};
-}
-
-function toNullableNumber(value: number | string | null) {
-	if (typeof value === 'number') return value;
-	if (typeof value === 'string' && value.length > 0) return Number(value);
-	return null;
-}
-
-function toIsoString(value: Date | string | null) {
-	if (!value) return null;
-	return value instanceof Date ? value.toISOString() : String(value);
-}
-
-function tableName(schema: ResolvedDatabaseSchema, key: DatabaseTableKey) {
-	return quoteIdentifier(schema.tables[key].name);
-}
-
-function quoteIdentifier(identifier: string) {
-	return `"${identifier.replaceAll('"', '""')}"`;
-}
-
-function getInternalRaw(value: unknown) {
-	if (typeof value !== 'object' || value === null) return null;
-
-	const rawKey = Symbol.for('paymesh.raw');
-	return (value as Record<PropertyKey, unknown>)[rawKey] ?? null;
 }

@@ -27,9 +27,9 @@ export function Webhooks<IncludeRaw extends boolean = false>({
 }: WebhooksOptions<IncludeRaw>) {
 	return async (context: Context) => {
 		const result = await client.webhooks.handle({
-			request: context.req.raw,
-			includeRaw,
 			hooks,
+			includeRaw,
+			request: context.req.raw,
 		});
 
 		return context.json(result.body, result.status);

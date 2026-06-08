@@ -5,31 +5,9 @@ import {
 	PaymeshError,
 } from 'paymesh';
 import { createRepositories } from './repositories';
+import type { PrismaDatabase, PrismaDatabaseOptions } from './types';
 
-/**
- * Options for the Prisma adapter.
- */
-export interface PrismaDatabaseOptions {
-	/** Keeps raw provider payloads attached to stored rows when enabled. Defaults to `false`. */
-	persistRaw?: boolean;
-}
-
-/**
- * Minimal Prisma client contract required by the adapter.
- */
-export interface PrismaDatabase {
-	$queryRawUnsafe<Row = unknown>(
-		query: string,
-		...values: CompiledQuery['params']
-	): Promise<Row[]>;
-	$executeRawUnsafe(
-		query: string,
-		...values: CompiledQuery['params']
-	): Promise<number>;
-	$transaction<T>(
-		callback: (database: PrismaDatabase) => Promise<T>,
-	): Promise<T>;
-}
+export * from './types';
 
 /**
  * Creates a Paymesh database adapter backed by a Prisma client.
@@ -41,10 +19,8 @@ export interface PrismaDatabase {
  */
 export function prisma(
 	database: PrismaDatabase,
-	options?: PrismaDatabaseOptions,
+	{ persistRaw = false }: PrismaDatabaseOptions = {},
 ): PaymeshDatabaseDriver {
-	const persistRaw = options?.persistRaw ?? false;
-
 	return defineDatabaseAdapter({
 		persistRaw,
 		id: 'prisma',
@@ -101,9 +77,8 @@ export function prisma(
 }
 
 function formatDatabaseErrorMessage(prefix: string, error: unknown) {
-	if (error instanceof Error && error.message.length > 0) {
+	if (error instanceof Error && error.message.length > 0)
 		return `${prefix}: ${error.message}`;
-	}
 
 	return prefix;
 }

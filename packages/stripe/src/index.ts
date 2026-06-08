@@ -1,23 +1,36 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
-	type BaseAnyPayment,
-	type BasePayment,
 	type CustomerUpsertData,
 	defineProvider,
 	type PaymentCreateData,
 	type PaymentStatus,
 	PaymeshError,
 	type PaymeshEvent,
-	type PaymeshEventType,
 	type PixCreateData,
-	type ProviderCapabilities,
-	type ProviderDashboardSyncInput,
 	type ProviderRequestOptions,
 	type ProviderWebhookHandleOptions,
 	type ProviderWebhookHandleResult,
 	request,
 	withRaw,
 } from 'paymesh';
+import {
+	STRIPE_BASE_URL,
+	STRIPE_CAPABILITIES,
+	STRIPE_EVENTS,
+	STRIPE_HOOKS,
+	STRIPE_PAYMENT_STATUSES,
+} from './shared/constants';
+import {
+	mapStripeCustomer,
+	mapStripePaymentObject,
+	mapStripePixIntent,
+} from './shared/mapper';
+import {
+	syncStripePayment,
+	syncStripePix,
+	syncStripeSubscription,
+} from './shared/sync';
+import { isStripePixPaymentIntent } from './shared/utils';
 import type {
 	StripeBalance,
 	StripeCheckoutSession,
@@ -29,206 +42,9 @@ import type {
 	StripePrice,
 	StripeProduct,
 	StripeProviderOptions,
-	StripeSubscription,
 } from './types';
 
 export type * from './types';
-
-const STRIPE_BASE_URL = 'https://api.stripe.com';
-
-const STRIPE_CAPABILITIES = {
-	checkout: true,
-	coupons: true,
-	pix: true,
-	refunds: true,
-	subscriptions: true,
-	webhooks: true,
-	customerPortal: true,
-	customers: true,
-} satisfies ProviderCapabilities;
-
-const STRIPE_EVENTS: Record<string, PaymeshEventType> = {
-	'checkout.session.completed': 'checkout.completed',
-	'checkout.session.expired': 'payment.canceled',
-	'payment_intent.created': 'payment.created',
-	'payment_intent.succeeded': 'payment.succeeded',
-	'payment_intent.payment_failed': 'payment.failed',
-	'payment_intent.canceled': 'payment.canceled',
-	'charge.refunded': 'payment.refunded',
-	'customer.created': 'customer.created',
-	'customer.updated': 'customer.updated',
-	'customer.deleted': 'customer.deleted',
-};
-
-const STRIPE_HOOKS: Record<PaymeshEventType, string> = {
-	'payment.created': 'onPaymentCreated',
-	'payment.succeeded': 'onPaymentSucceeded',
-	'payment.failed': 'onPaymentFailed',
-	'payment.canceled': 'onPaymentCanceled',
-	'payment.refunded': 'onPaymentRefunded',
-	'customer.created': 'onCustomerCreated',
-	'customer.updated': 'onCustomerUpdated',
-	'customer.deleted': 'onCustomerDeleted',
-	'subscription.created': 'onSubscriptionCreated',
-	'subscription.updated': 'onSubscriptionUpdated',
-	'subscription.canceled': 'onSubscriptionCanceled',
-	'checkout.completed': 'onCheckoutCompleted',
-};
-
-const STRIPE_PAYMENT_STATUSES: Record<string, PaymentStatus> = {
-	processing: 'processing',
-	paid: 'paid',
-	expired: 'canceled',
-	requires_action: 'pending',
-	requires_payment_method: 'failed',
-	succeeded: 'paid',
-	failed: 'failed',
-	canceled: 'canceled',
-};
-
-function getStripeExternalId(metadata?: Record<string, string> | null) {
-	return typeof metadata?.externalId === 'string' &&
-		metadata.externalId.length > 0
-		? metadata.externalId
-		: undefined;
-}
-
-function mapStripeCustomer(customer: StripeCustomer) {
-	return {
-		id: customer.id,
-		provider: 'stripe' as const,
-		externalId: getStripeExternalId(customer.metadata),
-		name: customer.name ?? undefined,
-		email: customer.email ?? undefined,
-		phone: customer.phone ?? undefined,
-		metadata: customer.metadata ?? undefined,
-	};
-}
-
-function isStripePixPaymentIntent(
-	payment: Extract<StripePaymentObject, { object: 'payment_intent' }>,
-) {
-	return (
-		payment.payment_method_types?.includes('pix') === true ||
-		payment.payment_method_options?.pix != null ||
-		payment.next_action?.type === 'pix_display_qr_code'
-	);
-}
-
-function mapStripePixIntent(
-	payment: Extract<StripePaymentObject, { object: 'payment_intent' }>,
-): Extract<BaseAnyPayment, { method: 'pix' }> {
-	const status: PaymentStatus =
-		STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ?? 'pending';
-	const qrCode = payment.next_action?.pix_display_qr_code;
-
-	return {
-		id: payment.id,
-		provider: 'stripe' as const,
-		amount: payment.amount,
-		copyPasteCode: qrCode?.data ?? undefined,
-		currency: payment.currency ?? 'brl',
-		customer:
-			typeof payment.customer === 'string' ||
-			typeof payment.receipt_email === 'string' ||
-			getStripeExternalId(payment.metadata)
-				? {
-						id:
-							typeof payment.customer === 'string'
-								? payment.customer
-								: undefined,
-						email: payment.receipt_email ?? undefined,
-						externalId: getStripeExternalId(payment.metadata),
-					}
-				: undefined,
-		expiresAt:
-			typeof qrCode?.expires_at === 'number'
-				? new Date(qrCode.expires_at * 1000).toISOString()
-				: typeof payment.payment_method_options?.pix?.expires_at === 'number'
-					? new Date(
-							payment.payment_method_options.pix.expires_at * 1000,
-						).toISOString()
-					: undefined,
-		instructionsUrl: qrCode?.hosted_instructions_url ?? undefined,
-		metadata: payment.metadata ?? undefined,
-		method: 'pix' as const,
-		qrCodeImageUrlPng: qrCode?.image_url_png ?? undefined,
-		qrCodeImageUrlSvg: qrCode?.image_url_svg ?? undefined,
-		status,
-	};
-}
-
-function mapStripePaymentObject(payment: StripeCheckoutSession): BasePayment;
-function mapStripePaymentObject(payment: StripePaymentObject): BaseAnyPayment;
-function mapStripePaymentObject(payment: StripePaymentObject): BaseAnyPayment {
-	if (
-		payment.object === 'payment_intent' &&
-		isStripePixPaymentIntent(payment)
-	) {
-		return mapStripePixIntent(payment);
-	}
-
-	const status: PaymentStatus =
-		('payment_status' in payment &&
-			STRIPE_PAYMENT_STATUSES[
-				payment.payment_status ?? payment.status ?? ''
-			]) ||
-		('refunded' in payment && payment.refunded && 'refunded') ||
-		STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ||
-		'pending';
-
-	let customer:
-		| {
-				email?: string;
-				externalId?: string;
-				id?: string;
-				name?: string;
-				phone?: string;
-		  }
-		| undefined;
-
-	if ('customer_details' in payment) {
-		customer = {
-			id: typeof payment.customer === 'string' ? payment.customer : undefined,
-			externalId:
-				'client_reference_id' in payment
-					? (payment.client_reference_id ?? undefined)
-					: undefined,
-			name: payment.customer_details?.name ?? undefined,
-			email:
-				payment.customer_details?.email ?? payment.customer_email ?? undefined,
-			phone: payment.customer_details?.phone ?? undefined,
-		};
-	} else if (payment.object === 'payment_intent') {
-		if (
-			typeof payment.customer === 'string' ||
-			typeof payment.receipt_email === 'string' ||
-			getStripeExternalId(payment.metadata)
-		) {
-			customer = {
-				id: typeof payment.customer === 'string' ? payment.customer : undefined,
-				email: payment.receipt_email ?? undefined,
-				externalId: getStripeExternalId(payment.metadata),
-			};
-		}
-	}
-
-	return {
-		id: payment.id,
-		provider: 'stripe' as const,
-		amount:
-			'amount_total' in payment
-				? (payment.amount_total ?? 0)
-				: 'amount' in payment
-					? payment.amount
-					: 0,
-		currency: payment.currency ?? 'usd',
-		status,
-		checkoutUrl: 'url' in payment ? (payment.url ?? undefined) : undefined,
-		customer,
-		metadata: payment.metadata ?? undefined,
-	};
-}
 
 /**
  * Creates a Stripe provider configured for Paymesh.
@@ -242,19 +58,19 @@ function mapStripePaymentObject(payment: StripePaymentObject): BaseAnyPayment {
  * ```
  */
 export const stripe = ({
+	retry,
+	fetch,
+	timeout,
+	baseUrl = STRIPE_BASE_URL,
 	secret = process.env.STRIPE_API_KEY,
 	webhookSecret = process.env.STRIPE_WEBHOOK_SECRET,
-	baseUrl = STRIPE_BASE_URL,
-	retry,
-	timeout,
-	fetch,
 }: StripeProviderOptions = {}) => {
 	const headers = {
 		authorization: `Bearer ${secret}`,
 		'content-type': 'application/x-www-form-urlencoded',
 	};
 
-	const requestOptions = {
+	const baseRequestOptions = {
 		baseUrl,
 		fetch,
 		headers,
@@ -262,144 +78,15 @@ export const stripe = ({
 		timeout,
 	};
 
-	const readStripePayment = async (id: string) => {
-		if (id.startsWith('cs_')) {
-			return {
-				kind: 'checkout' as const,
-				raw: await request<StripeCheckoutSession>(
-					`/v1/checkout/sessions/${encodeURIComponent(id)}`,
-					{
-						provider: 'stripe',
-						...requestOptions,
-					},
-				),
-			};
-		}
-
-		if (id.startsWith('pi_')) {
-			return {
-				kind: 'invoice' as const,
-				raw: await request<
-					Extract<StripePaymentObject, { object: 'payment_intent' }>
-				>(`/v1/payment_intents/${encodeURIComponent(id)}`, {
-					provider: 'stripe',
-					...requestOptions,
-				}),
-			};
-		}
-
-		return {
-			kind: 'invoice' as const,
-			raw: await request<Extract<StripePaymentObject, { object: 'charge' }>>(
-				`/v1/charges/${encodeURIComponent(id)}`,
-				{
-					provider: 'stripe',
-					...requestOptions,
-				},
-			),
-		};
-	};
-
-	const syncStripePayment = async ({
-		database,
-		id,
-		schema,
-	}: ProviderDashboardSyncInput) => {
-		const payment = await readStripePayment(id);
-
-		if (payment.kind === 'checkout') {
-			const normalized = withRaw(
-				mapStripePaymentObject(payment.raw),
-				payment.raw,
-				true,
-			);
-			await database.repositories.checkouts.upsert(schema, normalized);
-			return normalized;
-		}
-
-		const normalized = withRaw(
-			mapStripePaymentObject(payment.raw),
-			payment.raw,
-			true,
-		);
-		await database.repositories.invoices.upsert(schema, normalized);
-		if (normalized.method === 'pix') {
-			await database.repositories.pix.upsert(schema, normalized);
-		}
-
-		return normalized;
-	};
-
-	const syncStripePix = async ({
-		database,
-		id,
-		schema,
-	}: ProviderDashboardSyncInput) => {
-		if (!id.startsWith('pi_')) {
-			throw new PaymeshError({
-				code: 'invalid_request',
-				message:
-					'Provider "stripe" requires a PaymentIntent id when fetching PIX payments',
-				provider: 'stripe',
-			});
-		}
-		const paymentIntent = await request<
-			Extract<StripePaymentObject, { object: 'payment_intent' }>
-		>(`/v1/payment_intents/${encodeURIComponent(id)}`, {
-			provider: 'stripe',
-			...requestOptions,
-		});
-
-		if (!isStripePixPaymentIntent(paymentIntent)) {
-			throw new PaymeshError({
-				code: 'provider_not_found',
-				message: `PIX payment "${id}" was not found on Stripe`,
-				provider: 'stripe',
-			});
-		}
-
-		const normalized = withRaw(
-			mapStripePixIntent(paymentIntent),
-			paymentIntent,
-			true,
-		);
-
-		await database.repositories.pix.upsert(schema, normalized);
-		await database.repositories.invoices.upsert(schema, normalized);
-
-		return normalized;
-	};
-
-	const syncStripeSubscription = async ({
-		database,
-		id,
-		schema,
-	}: ProviderDashboardSyncInput) => {
-		const subscription = await request<StripeSubscription>(
-			`/v1/subscriptions/${encodeURIComponent(id)}`,
-			{
-				provider: 'stripe',
-				...requestOptions,
-			},
-		);
-		const eventType =
-			subscription.status === 'canceled'
-				? ('subscription.canceled' as const)
-				: ('subscription.updated' as const);
-		const event = withRaw(
-			{
-				id,
-				provider: 'stripe',
-				type: eventType,
-				data: withRaw(subscription, subscription, true),
-			},
-			subscription,
-			true,
-		);
-
-		await database.repositories.subscriptions.upsert(schema, event);
-		return event.data as unknown as Record<string, unknown>;
-	};
+	const resolveRequestOptions = <IncludeRaw extends boolean = false>(
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => ({
+		baseUrl: options?.baseUrl ?? baseRequestOptions.baseUrl,
+		timeout: options?.timeout ?? baseRequestOptions.timeout,
+		retry: options?.retry ?? baseRequestOptions.retry,
+		fetch: options?.fetch ?? baseRequestOptions.fetch,
+		headers: baseRequestOptions.headers,
+	});
 
 	return defineProvider({
 		id: 'stripe',
@@ -440,12 +127,8 @@ export const stripe = ({
 					'/v1/checkout/sessions',
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: 'POST',
-						headers,
 						body,
 					},
 				);
@@ -552,12 +235,8 @@ export const stripe = ({
 					Extract<StripePaymentObject, { object: 'payment_intent' }>
 				>('/v1/payment_intents', {
 					provider: 'stripe',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
+					...resolveRequestOptions(options),
 					method: 'POST',
-					headers,
 					body,
 				});
 
@@ -575,11 +254,7 @@ export const stripe = ({
 					Extract<StripePaymentObject, { object: 'payment_intent' }>
 				>(`/v1/payment_intents/${encodeURIComponent(id)}`, {
 					provider: 'stripe',
-					baseUrl: options?.baseUrl ?? baseUrl,
-					timeout: options?.timeout ?? timeout,
-					retry: options?.retry ?? retry,
-					fetch: options?.fetch ?? fetch,
-					headers,
+					...resolveRequestOptions(options),
 				});
 
 				if (!isStripePixPaymentIntent(paymentIntent)) {
@@ -619,12 +294,8 @@ export const stripe = ({
 						: '/v1/customers',
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: 'POST',
-						headers,
 						body,
 					},
 				);
@@ -643,11 +314,7 @@ export const stripe = ({
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
-						headers,
+						...resolveRequestOptions(options),
 					},
 				);
 
@@ -665,12 +332,8 @@ export const stripe = ({
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: 'DELETE',
-						headers,
 					},
 				);
 
@@ -690,22 +353,14 @@ export const stripe = ({
 				const [products, prices] = await Promise.all([
 					request<StripeListResponse<StripeProduct>>('/v1/products', {
 						provider: 'stripe',
-						baseUrl,
-						timeout,
-						retry,
-						fetch,
-						headers,
+						...baseRequestOptions,
 						query: {
 							limit: 100,
 						},
 					}),
 					request<StripeListResponse<StripePrice>>('/v1/prices', {
 						provider: 'stripe',
-						baseUrl,
-						timeout,
-						retry,
-						fetch,
-						headers,
+						...baseRequestOptions,
 						query: {
 							limit: 100,
 						},
@@ -743,7 +398,7 @@ export const stripe = ({
 			async getBalance() {
 				const balance = await request<StripeBalance>('/v1/balance', {
 					provider: 'stripe',
-					...requestOptions,
+					...baseRequestOptions,
 				});
 
 				return {
@@ -779,9 +434,21 @@ export const stripe = ({
 
 				return null;
 			},
-			syncPayment: syncStripePayment,
-			syncPix: syncStripePix,
-			syncSubscription: syncStripeSubscription,
+			syncPayment: (input) =>
+				syncStripePayment({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
+			syncPix: (input) =>
+				syncStripePix({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
+			syncSubscription: (input) =>
+				syncStripeSubscription({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
 		},
 		webhooks: {
 			async verify({ request }) {
@@ -818,6 +485,7 @@ export const stripe = ({
 				const event = body as unknown as StripeEvent;
 				const object = event.data?.object;
 				const type = STRIPE_EVENTS[event.type] ?? 'payment.created';
+
 				let data: unknown = body;
 
 				if (object) {
