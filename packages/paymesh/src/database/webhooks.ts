@@ -160,62 +160,63 @@ async function persistEvent(
 	schema: ResolvedDatabaseSchema,
 	event: PaymeshEvent<unknown, boolean>,
 ) {
-	if (event.type === 'customer.created' || event.type === 'customer.updated') {
-		await database.repositories.customers.upsert(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['customers']['upsert']
-			>[1],
-		);
-		return;
+	switch (event.type) {
+		case 'customer.created':
+		case 'customer.updated':
+			await database.repositories.customers.upsert(
+				schema,
+				event.data as Parameters<
+					PaymeshDatabaseDriver['repositories']['customers']['upsert']
+				>[1],
+			);
+			return;
+		case 'customer.deleted':
+			await database.repositories.customers.markDeleted(
+				schema,
+				event.data as Parameters<
+					PaymeshDatabaseDriver['repositories']['customers']['markDeleted']
+				>[1],
+			);
+			return;
+		case 'checkout.completed':
+			await database.repositories.checkouts.upsert(
+				schema,
+				event.data as Parameters<
+					PaymeshDatabaseDriver['repositories']['checkouts']['upsert']
+				>[1],
+			);
+			return;
+		case 'payment.created':
+		case 'payment.succeeded':
+		case 'payment.failed':
+		case 'payment.canceled':
+		case 'payment.refunded':
+			await persistPayment(database, schema, event.data as AnyPayment<boolean>);
+
+			return;
+		case 'subscription.created':
+		case 'subscription.updated':
+		case 'subscription.canceled':
+			await database.repositories.subscriptions.upsert(
+				schema,
+				event as PaymeshEvent<unknown, boolean>,
+			);
+			return;
+		default:
+			return;
+	}
+}
+
+async function persistPayment(
+	database: PaymeshDatabaseDriver,
+	schema: ResolvedDatabaseSchema,
+	payment: AnyPayment<boolean>,
+) {
+	const tasks = [database.repositories.invoices.upsert(schema, payment)];
+
+	if (payment.method === 'pix') {
+		tasks.push(database.repositories.pix.upsert(schema, payment));
 	}
 
-	if (event.type === 'customer.deleted') {
-		await database.repositories.customers.markDeleted(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['customers']['markDeleted']
-			>[1],
-		);
-		return;
-	}
-
-	if (event.type === 'checkout.completed') {
-		await database.repositories.checkouts.upsert(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['checkouts']['upsert']
-			>[1],
-		);
-		return;
-	}
-
-	if (
-		event.type === 'payment.created' ||
-		event.type === 'payment.succeeded' ||
-		event.type === 'payment.failed' ||
-		event.type === 'payment.canceled' ||
-		event.type === 'payment.refunded'
-	) {
-		const payment = event.data as AnyPayment<boolean>;
-
-		await database.repositories.invoices.upsert(schema, payment);
-
-		if (payment.method === 'pix') {
-			await database.repositories.pix.upsert(schema, payment);
-		}
-
-		return;
-	}
-
-	if (
-		event.type === 'subscription.created' ||
-		event.type === 'subscription.updated' ||
-		event.type === 'subscription.canceled'
-	) {
-		await database.repositories.subscriptions.upsert(
-			schema,
-			event as PaymeshEvent<unknown, boolean>,
-		);
-	}
+	await Promise.all(tasks);
 }
