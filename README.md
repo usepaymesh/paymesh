@@ -96,6 +96,10 @@ npm install paymesh @paymesh/stripe @paymesh/prisma @prisma/client
 </p>
 
 <p align="center">
+  Native PIX flows live under <code>paymesh.pix</code>. Use <code>paymesh.payments</code> for generic checkout sessions and <code>paymesh.pix</code> when you need QR code, copia-e-cola, and expiration data as first-class fields.
+</p>
+
+<p align="center">
   Database packages: <a href="./packages/postgres/README.md">@paymesh/postgres</a>, <a href="./packages/drizzle/README.md">@paymesh/drizzle</a>, and <a href="./packages/prisma/README.md">@paymesh/prisma</a>. Operational tooling: <a href="./packages/cli/README.md">@paymesh/cli</a>.
 </p>
 

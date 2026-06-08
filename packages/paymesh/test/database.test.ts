@@ -1141,6 +1141,12 @@ function createMockDatabase({
 					});
 				},
 			},
+			pix: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
+			},
 			checkouts: {
 				async findByProviderId() {
 					return null;

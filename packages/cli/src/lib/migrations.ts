@@ -339,6 +339,7 @@ function createInitialMigrationSql(schema: ResolvedDatabaseSchema) {
 	return [
 		createMigrationsTableSql(schema),
 		createCustomersTableSql(schema),
+		createPixTableSql(schema),
 		createCheckoutsTableSql(schema),
 		createInvoicesTableSql(schema),
 		createPaymentMethodsTableSql(schema),
@@ -455,6 +456,10 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 		createIndexSql(schema, 'customers', ['provider', 'external_id']),
 		createIndexSql(schema, 'customers', ['provider', 'email']),
 		createIndexSql(schema, 'customers', ['provider', 'deleted_at']),
+		createIndexSql(schema, 'pix', ['provider', 'customer_provider_id']),
+		createIndexSql(schema, 'pix', ['provider', 'status']),
+		createIndexSql(schema, 'pix', ['provider', 'expires_at']),
+		createIndexSql(schema, 'pix', ['provider', 'created_at']),
 		createIndexSql(schema, 'checkouts', ['provider', 'customer_provider_id']),
 		createIndexSql(schema, 'checkouts', ['provider', 'status']),
 		createIndexSql(schema, 'checkouts', ['provider', 'created_at']),
@@ -511,6 +516,12 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 			'webhookEvents',
 			'attempts_valid',
 			'attempts >= 1',
+		),
+		createCheckConstraintSql(
+			schema,
+			'pix',
+			'amount_valid',
+			'amount IS NULL OR amount >= 0',
 		),
 		createCheckConstraintSql(
 			schema,
@@ -574,6 +585,33 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'customers')} (
 	raw JSONB,
 	deleted_at TIMESTAMPTZ,
 ${extraTableColumnsSql(schema, 'customers')}
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	UNIQUE (provider, provider_id)
+);`.trim();
+}
+
+function createPixTableSql(schema: ResolvedDatabaseSchema) {
+	return `
+CREATE TABLE IF NOT EXISTS ${table(schema, 'pix')} (
+	id BIGSERIAL PRIMARY KEY,
+	provider TEXT NOT NULL,
+	provider_id TEXT NOT NULL,
+	version TEXT NOT NULL DEFAULT 'v1',
+	customer_provider_id TEXT,
+	amount BIGINT,
+	currency TEXT,
+	status TEXT,
+	method TEXT,
+	copy_paste_code TEXT,
+	qr_code_image_url_png TEXT,
+	qr_code_image_url_svg TEXT,
+	instructions_url TEXT,
+	expires_at TIMESTAMPTZ,
+	metadata JSONB,
+	data JSONB NOT NULL DEFAULT '{}'::jsonb,
+	raw JSONB,
+${extraTableColumnsSql(schema, 'pix')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, provider_id)

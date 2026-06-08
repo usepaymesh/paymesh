@@ -17,6 +17,7 @@ import type {
 	PluginEventHooks,
 } from './plugins';
 import type {
+	AnyPayment,
 	Customer,
 	CustomerDeleteResult,
 	CustomerUpsertData,
@@ -24,6 +25,8 @@ import type {
 	PaymentCreateData,
 	PaymeshEvent,
 	PaymeshEventType,
+	Pix,
+	PixCreateData,
 	Provider,
 	ProviderCapabilities,
 	ProviderRequestOptions,
@@ -36,7 +39,7 @@ export type PaymeshHook<Event = PaymeshEvent> = {
 export type PaymentEvent<
 	Type extends PaymeshEventType,
 	IncludeRaw extends boolean = false,
-> = PaymeshEvent<Payment<IncludeRaw>, IncludeRaw> & { type: Type };
+> = PaymeshEvent<AnyPayment<IncludeRaw>, IncludeRaw> & { type: Type };
 
 export type CustomerEvent<
 	Type extends PaymeshEventType,
@@ -217,6 +220,15 @@ export type PaymeshPayment<
 	Payment<IncludeRaw> & DatabaseTableOutputExtraFields<Schema, 'checkouts'>
 >;
 
+export type PaymeshPixCreateData<
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<PixCreateData & DatabaseTableInputExtraFields<Schema, 'pix'>>;
+
+export type PaymeshPix<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<Pix<IncludeRaw> & DatabaseTableOutputExtraFields<Schema, 'pix'>>;
+
 export type PaymeshCustomerUpsertData<
 	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
 > = Simplify<
@@ -245,6 +257,20 @@ export interface PaymeshPaymentsClient<
 		data: PaymeshPaymentCreateData<Schema>,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
 	): Promise<PaymeshPayment<CallIncludeRaw, Schema>>;
+}
+
+export interface PaymeshPixClient<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> {
+	create<CallIncludeRaw extends boolean = IncludeRaw>(
+		data: PaymeshPixCreateData<Schema>,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<PaymeshPix<CallIncludeRaw, Schema>>;
+	get<CallIncludeRaw extends boolean = IncludeRaw>(
+		id: string,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<PaymeshPix<CallIncludeRaw, Schema>>;
 }
 
 export interface PaymeshCustomersClient<
@@ -279,6 +305,7 @@ export interface PaymeshClient<
 	database?: PaymeshDatabaseDriver;
 	schema: ResolvedDatabaseSchema;
 	payments: PaymeshPaymentsClient<IncludeRaw, Schema>;
+	pix: PaymeshPixClient<IncludeRaw, Schema>;
 	customers: PaymeshCustomersClient<IncludeRaw, Schema>;
 	webhooks: PaymeshWebhookHandler<IncludeRaw, Plugins>;
 	routes: PaymeshRoutesClient<IncludeRaw, Plugins>;

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { CompiledQuery, PaymeshDatabaseDriver } from 'paymesh';
+import {
+	type CompiledQuery,
+	type PaymeshDatabaseDriver,
+	resolveDatabaseSchema,
+} from 'paymesh';
 import { stripe } from '../src';
 
 describe('stripe dashboard adapter', () => {
@@ -77,9 +81,72 @@ describe('stripe dashboard adapter', () => {
 		expect(synced?.id).toBe('pi_123');
 		expect(syncedInvoiceId).toBe('pi_123');
 	});
+
+	test('syncs PIX resources through the dashboard adapter', async () => {
+		let syncedInvoiceId: string | undefined;
+		let syncedPixId: string | undefined;
+		const provider = stripe({
+			secret: 'sk_test_123',
+			baseUrl: 'https://stripe.dashboard.test',
+			fetch: (async (input) => {
+				if (String(input).endsWith('/v1/payment_intents/pi_pix_123')) {
+					return Response.json({
+						id: 'pi_pix_123',
+						object: 'payment_intent',
+						amount: 3100,
+						currency: 'brl',
+						metadata: {
+							orderId: 'ord_pix_123',
+						},
+						next_action: {
+							type: 'pix_display_qr_code',
+							pix_display_qr_code: {
+								data: '000201DASHPIX',
+							},
+						},
+						payment_method_types: ['pix'],
+						status: 'processing',
+					});
+				}
+
+				return new Response('not found', { status: 404 });
+			}) as typeof fetch,
+		});
+
+		const synced = await provider.dashboard?.syncPix?.({
+			database: createDatabaseStub({
+				onInvoiceUpsert(id) {
+					syncedInvoiceId = id;
+				},
+				onPixUpsert(id) {
+					syncedPixId = id;
+				},
+			}),
+			id: 'pi_pix_123',
+			schema: createSchema(),
+		});
+
+		expect(
+			provider.dashboard?.getResourceUrl?.({
+				type: 'pix',
+				id: 'pi_pix_123',
+			}),
+		).toBe('https://dashboard.stripe.com/payments/pi_pix_123');
+		expect(synced).toMatchObject({
+			id: 'pi_pix_123',
+			status: 'processing',
+			method: 'pix',
+			copyPasteCode: '000201DASHPIX',
+		});
+		expect(syncedInvoiceId).toBe('pi_pix_123');
+		expect(syncedPixId).toBe('pi_pix_123');
+	});
 });
 
-function createDatabaseStub(options: { onInvoiceUpsert(id: string): void }) {
+function createDatabaseStub(options: {
+	onInvoiceUpsert(id: string): void;
+	onPixUpsert?(id: string): void;
+}) {
 	return {
 		id: 'stub-db',
 		type: 'database',
@@ -95,6 +162,14 @@ function createDatabaseStub(options: { onInvoiceUpsert(id: string): void }) {
 					return { data: [], next: null, previous: null, total: 0 };
 				},
 				async markDeleted() {},
+			},
+			pix: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert(_schema: unknown, pix: { id: string }) {
+					options.onPixUpsert?.(pix.id);
+				},
 			},
 			checkouts: {
 				async findByProviderId() {
@@ -150,37 +225,5 @@ function createDatabaseStub(options: { onInvoiceUpsert(id: string): void }) {
 }
 
 function createSchema() {
-	return {
-		customTables: {},
-		prefix: 'paymesh_',
-		tables: {
-			checkouts: { fields: {}, key: 'checkouts', name: 'paymesh_checkouts' },
-			customers: { fields: {}, key: 'customers', name: 'paymesh_customers' },
-			entitlements: {
-				fields: {},
-				key: 'entitlements',
-				name: 'paymesh_entitlements',
-			},
-			invoices: { fields: {}, key: 'invoices', name: 'paymesh_invoices' },
-			migrations: { fields: {}, key: 'migrations', name: 'paymesh_migrations' },
-			paymentMethods: {
-				fields: {},
-				key: 'paymentMethods',
-				name: 'paymesh_payment_methods',
-			},
-			prices: { fields: {}, key: 'prices', name: 'paymesh_prices' },
-			products: { fields: {}, key: 'products', name: 'paymesh_products' },
-			subscriptions: {
-				fields: {},
-				key: 'subscriptions',
-				name: 'paymesh_subscriptions',
-			},
-			usage: { fields: {}, key: 'usage', name: 'paymesh_usage' },
-			webhookEvents: {
-				fields: {},
-				key: 'webhookEvents',
-				name: 'paymesh_webhook_events',
-			},
-		},
-	} as const;
+	return resolveDatabaseSchema();
 }

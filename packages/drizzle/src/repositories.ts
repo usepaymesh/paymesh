@@ -1,5 +1,4 @@
 import {
-	type CompiledQuery,
 	type DatabaseTableKey,
 	type PaymeshDatabaseRepositories,
 	PaymeshError,
@@ -7,12 +6,7 @@ import {
 	type SqlValue,
 	withRaw,
 } from 'paymesh';
-
-interface SqlExecutor {
-	persistRaw: boolean;
-	query<Row = unknown>(query: CompiledQuery): Promise<Row[]>;
-	execute(query: CompiledQuery): Promise<void>;
-}
+import type { SqlExecutor } from './types';
 
 export function createRepositories(
 	executor: SqlExecutor,
@@ -250,6 +244,88 @@ export function createRepositories(
 					],
 				}),
 		},
+		pix: {
+			async findByProviderId(schema, provider, id, options) {
+				const fields = Object.values(schema.tables.pix.fields);
+				const [row] = await executor.query<
+					{
+						amount: number | string | null;
+						copy_paste_code: string | null;
+						currency: string | null;
+						customer_provider_id: string | null;
+						data: Record<string, unknown> | null;
+						expires_at: Date | string | null;
+						instructions_url: string | null;
+						metadata: Record<string, unknown> | null;
+						method: string | null;
+						provider: string;
+						provider_id: string;
+						qr_code_image_url_png: string | null;
+						qr_code_image_url_svg: string | null;
+						raw: unknown;
+						status: string | null;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'pix')}
+						WHERE provider = $1 AND provider_id = $2
+						LIMIT 1`,
+					params: [provider, id],
+				});
+
+				if (!row) return null;
+
+				const data = { ...(row.data ?? {}) };
+				for (const field of fields) {
+					const value = row[field.key];
+					if (value !== null && value !== undefined) data[field.key] = value;
+				}
+
+				return withRaw(
+					{
+						...data,
+						id: row.provider_id,
+						provider: row.provider,
+						amount: toNullableNumber(row.amount) ?? 0,
+						copyPasteCode: row.copy_paste_code ?? undefined,
+						currency: row.currency ?? 'usd',
+						customer: row.customer_provider_id
+							? { id: row.customer_provider_id }
+							: undefined,
+						expiresAt: toIsoString(row.expires_at) ?? undefined,
+						instructionsUrl: row.instructions_url ?? undefined,
+						metadata: row.metadata ?? undefined,
+						method: row.method ?? 'pix',
+						qrCodeImageUrlPng: row.qr_code_image_url_png ?? undefined,
+						qrCodeImageUrlSvg: row.qr_code_image_url_svg ?? undefined,
+						status: row.status ?? 'pending',
+					},
+					row.raw,
+					options?.includeRaw,
+				) as never;
+			},
+			upsert: (schema, pix) =>
+				upsertByProviderId(executor, schema, 'pix', {
+					provider: pix.provider,
+					provider_id: pix.id,
+					version: getVersion(pix, getInternalRaw(pix)),
+					customer_provider_id: pix.customer?.id ?? null,
+					amount: pix.amount,
+					currency: pix.currency,
+					status: pix.status,
+					method: pix.method,
+					copy_paste_code: pix.copyPasteCode ?? null,
+					qr_code_image_url_png: pix.qrCodeImageUrlPng ?? null,
+					qr_code_image_url_svg: pix.qrCodeImageUrlSvg ?? null,
+					instructions_url: pix.instructionsUrl ?? null,
+					expires_at: pix.expiresAt ?? null,
+					metadata: pix.metadata ?? null,
+					data: withoutSchemaFields(withoutRaw(pix), schema.tables.pix.fields),
+					raw: getPersistableRaw(executor, pix),
+					updated_at: new Date().toISOString(),
+					...getExtraFieldValues(schema, 'pix', pix),
+				}),
+		},
 		checkouts: {
 			findByProviderId: (schema, provider, id) =>
 				findDataByProviderId(executor, schema, 'checkouts', provider, id).then(
@@ -474,22 +550,22 @@ export function createRepositories(
 	};
 }
 
-function findDataByProviderId(
+async function findDataByProviderId(
 	executor: SqlExecutor,
 	schema: ResolvedDatabaseSchema,
 	tableKey: DatabaseTableKey,
 	provider: string,
 	id: string,
 ) {
-	return executor
-		.query<{ data: Record<string, unknown> | null }>({
-			sql: `SELECT data
+	const [row] = await executor.query<{ data: Record<string, unknown> | null }>({
+		sql: `SELECT data
 				FROM ${tableName(schema, tableKey)}
 				WHERE provider = $1 AND provider_id = $2
 				LIMIT 1`,
-			params: [provider, id],
-		})
-		.then(([row]) => row?.data ?? null);
+		params: [provider, id],
+	});
+
+	return row?.data ?? null;
 }
 
 function upsertByProviderId(
@@ -620,6 +696,17 @@ function asRecord(value: unknown) {
 	return typeof value === 'object' && value !== null
 		? (value as Record<string, unknown>)
 		: {};
+}
+
+function toNullableNumber(value: number | string | null) {
+	if (typeof value === 'number') return value;
+	if (typeof value === 'string' && value.length > 0) return Number(value);
+	return null;
+}
+
+function toIsoString(value: Date | string | null) {
+	if (!value) return null;
+	return value instanceof Date ? value.toISOString() : String(value);
 }
 
 function tableName(schema: ResolvedDatabaseSchema, key: DatabaseTableKey) {

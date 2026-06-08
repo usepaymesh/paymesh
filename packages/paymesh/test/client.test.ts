@@ -9,6 +9,7 @@ import {
 	lazy,
 	type Payment,
 	PaymeshError,
+	type Pix,
 	type ProviderRequestOptions,
 	withRaw,
 } from '../src';
@@ -119,6 +120,39 @@ describe('client', () => {
 		expect(callRawCustomer.raw).toMatchObject({ id: 'raw_cus_123' });
 	});
 
+	test('supports raw PIX payloads globally and per call', async () => {
+		const provider = createStubProvider();
+		const defaultClient = createClient({ provider });
+		const rawClient = createClient({ provider, includeRaw: true });
+
+		const defaultPix = await defaultClient.pix.create({
+			amount: 2200,
+			currency: 'BRL',
+		});
+		const callRawPix = await defaultClient.pix.create(
+			{
+				amount: 2200,
+				currency: 'BRL',
+			},
+			{ includeRaw: true },
+		);
+		const globalRawPix = await rawClient.pix.get('pix_123');
+		const callNullPix = await rawClient.pix.get('pix_123', {
+			includeRaw: false,
+		});
+
+		expectType<null>(defaultPix.raw);
+		expectType<unknown>(callRawPix.raw);
+		expectType<unknown>(globalRawPix.raw);
+		expectType<null>(callNullPix.raw);
+
+		expect(defaultPix.raw).toBeNull();
+		expect(callRawPix.raw).toMatchObject({ id: 'raw_pix_123' });
+		expect(globalRawPix.raw).toMatchObject({ id: 'raw_pix_123' });
+		expect(callNullPix.raw).toBeNull();
+		expect(defaultPix.method).toBe('pix');
+	});
+
 	test('types onEvent as a discriminated union of normalized webhook events', () => {
 		const client = createClient({
 			provider: createStubProvider(),
@@ -163,6 +197,27 @@ describe('client', () => {
 						expectType<boolean>(event.data.deleted);
 						// @ts-expect-error customer.deleted payload does not expose amount
 						expectType<number>(event.data.amount);
+					}
+				},
+			},
+		});
+
+		expectType<typeof client>(client);
+	});
+
+	test('narrows payment webhook payloads to PIX when method is pix', () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			hooks: {
+				onPaymentCreated(event) {
+					expectType<'pix' | undefined>(event.data.method);
+
+					if (event.data.method === 'pix') {
+						expectType<string | undefined>(event.data.copyPasteCode);
+						expectType<string | undefined>(event.data.qrCodeImageUrlPng);
+					} else {
+						// @ts-expect-error non-PIX payments do not expose PIX fields
+						expectType<string | undefined>(event.data.copyPasteCode);
 					}
 				},
 			},
@@ -344,6 +399,168 @@ describe('client', () => {
 				currency: 'USD',
 			}),
 		).rejects.toBeInstanceOf(PaymeshError);
+	});
+
+	test('checks pix capability before calling the provider', async () => {
+		const client = createClient({
+			provider: defineProvider({
+				id: 'stub',
+				capabilities: {
+					checkout: true,
+					customers: true,
+					pix: false,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('should not be called');
+					},
+				},
+				customers: {
+					get: async () => {
+						throw new Error('should not be called');
+					},
+					upsert: async () => {
+						throw new Error('should not be called');
+					},
+					delete: async () => {
+						throw new Error('should not be called');
+					},
+				},
+			}),
+		});
+
+		await expect(
+			client.pix.create({
+				amount: 1000,
+				currency: 'BRL',
+			}),
+		).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support "pix" capability',
+			provider: 'stub',
+		});
+	});
+
+	test('infers pix schema extra fields and strips them from provider calls', async () => {
+		let pixInput: Record<string, unknown> | undefined;
+		let persistedPix: Record<string, unknown> | undefined;
+		const database = defineDatabaseAdapter({
+			id: 'pix-db',
+			dialect: 'postgres',
+			persistRaw: true,
+			repositories: {
+				customers: {
+					async findByProviderId() {
+						return null;
+					},
+					async list() {
+						return { data: [], total: 0, previous: null, next: null };
+					},
+					async upsert() {},
+					async markDeleted() {},
+				},
+				pix: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert(_schema, pix) {
+						persistedPix = pix as Record<string, unknown>;
+					},
+				},
+				checkouts: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				invoices: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				subscriptions: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				webhookEvents: {
+					async acquire() {
+						return { duplicate: false };
+					},
+					async markProcessed() {},
+					async markFailed() {},
+				},
+				products: {
+					async upsertMany() {},
+				},
+				prices: {
+					async upsertMany() {},
+				},
+				migrations: {
+					async ensureTable() {},
+					async listApplied() {
+						return [];
+					},
+					async recordApplied() {},
+				},
+			},
+			async query<Row = unknown>() {
+				return [] as Row[];
+			},
+			async execute() {},
+			async transaction(callback) {
+				return callback(database);
+			},
+		});
+		const client = createClient({
+			provider: createStubProvider({
+				onPixCreate(data, options) {
+					pixInput = data as Record<string, unknown>;
+					return Promise.resolve(
+						withRaw(
+							{
+								id: 'pix_extra',
+								provider: 'stub',
+								amount: 1800,
+								currency: 'brl',
+								status: 'pending' as const,
+								method: 'pix' as const,
+							},
+							{ id: 'raw_pix_extra' },
+							options?.includeRaw,
+						),
+					);
+				},
+			}),
+			database,
+			schema: {
+				tables: {
+					pix: {
+						fields: {
+							channel: {
+								type: 'string',
+							},
+						},
+					},
+				},
+			},
+		});
+
+		const pix = await client.pix.create({
+			amount: 1800,
+			currency: 'BRL',
+			channel: 'qr',
+		});
+
+		expect(pixInput).toMatchObject({
+			amount: 1800,
+			currency: 'BRL',
+		});
+		expect(pixInput).not.toHaveProperty('channel');
+		expect(pix.channel).toBe('qr');
+		expect(persistedPix?.channel).toBe('qr');
 	});
 
 	test('infers schema extra fields and strips them from provider calls', async () => {
@@ -686,12 +903,25 @@ describe('client', () => {
 
 function createStubProvider({
 	onPaymentCreate,
+	onPixCreate,
+	onPixGet,
 	onCustomerUpsert,
 }: {
 	onPaymentCreate?: <IncludeRaw extends boolean = false>(
 		data: { amount: number; currency: string },
 		options?: ProviderRequestOptions<IncludeRaw>,
 	) => Promise<Payment<IncludeRaw>>;
+	onPixCreate?: <IncludeRaw extends boolean = false>(
+		data: {
+			amount: number;
+			currency: string;
+		},
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => Promise<Pix<IncludeRaw>>;
+	onPixGet?: <IncludeRaw extends boolean = false>(
+		id: string,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => Promise<Pix<IncludeRaw>>;
 	onCustomerUpsert?: <IncludeRaw extends boolean = false>(
 		data: Record<string, unknown>,
 		options?: ProviderRequestOptions<IncludeRaw>,
@@ -702,6 +932,7 @@ function createStubProvider({
 		capabilities: {
 			checkout: true,
 			customers: true,
+			pix: true,
 		},
 		payments: {
 			create: onPaymentCreate
@@ -717,6 +948,43 @@ function createStubProvider({
 							},
 							{
 								id: 'raw_pay_123',
+							},
+							options?.includeRaw,
+						),
+		},
+		pix: {
+			create: onPixCreate
+				? onPixCreate
+				: async (_data, options) =>
+						withRaw(
+							{
+								id: 'pix_123',
+								provider: 'stub',
+								amount: 2200,
+								currency: 'brl',
+								status: 'pending' as const,
+								method: 'pix' as const,
+							},
+							{
+								id: 'raw_pix_123',
+							},
+							options?.includeRaw,
+						),
+			get: onPixGet
+				? onPixGet
+				: async (_id, options) =>
+						withRaw(
+							{
+								id: 'pix_123',
+								provider: 'stub',
+								amount: 2200,
+								currency: 'brl',
+								status: 'pending' as const,
+								method: 'pix' as const,
+								copyPasteCode: '000201',
+							},
+							{
+								id: 'raw_pix_123',
 							},
 							options?.includeRaw,
 						),
@@ -803,6 +1071,12 @@ function createListDatabase() {
 				},
 				async upsert() {},
 				async markDeleted() {},
+			},
+			pix: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
 			},
 			checkouts: {
 				async findByProviderId() {

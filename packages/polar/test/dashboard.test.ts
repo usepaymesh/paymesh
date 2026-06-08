@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { CompiledQuery, PaymeshDatabaseDriver } from 'paymesh';
+import {
+	type CompiledQuery,
+	type PaymeshDatabaseDriver,
+	resolveDatabaseSchema,
+} from 'paymesh';
 import { polar } from '../src';
 
 describe('polar dashboard adapter', () => {
@@ -91,6 +95,12 @@ function createDatabaseStub(options: {
 				},
 				async markDeleted() {},
 			},
+			pix: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
+			},
 			checkouts: {
 				async findByProviderId() {
 					return null;
@@ -147,37 +157,5 @@ function createDatabaseStub(options: {
 }
 
 function createSchema() {
-	return {
-		customTables: {},
-		prefix: 'paymesh_',
-		tables: {
-			checkouts: { fields: {}, key: 'checkouts', name: 'paymesh_checkouts' },
-			customers: { fields: {}, key: 'customers', name: 'paymesh_customers' },
-			entitlements: {
-				fields: {},
-				key: 'entitlements',
-				name: 'paymesh_entitlements',
-			},
-			invoices: { fields: {}, key: 'invoices', name: 'paymesh_invoices' },
-			migrations: { fields: {}, key: 'migrations', name: 'paymesh_migrations' },
-			paymentMethods: {
-				fields: {},
-				key: 'paymentMethods',
-				name: 'paymesh_payment_methods',
-			},
-			prices: { fields: {}, key: 'prices', name: 'paymesh_prices' },
-			products: { fields: {}, key: 'products', name: 'paymesh_products' },
-			subscriptions: {
-				fields: {},
-				key: 'subscriptions',
-				name: 'paymesh_subscriptions',
-			},
-			usage: { fields: {}, key: 'usage', name: 'paymesh_usage' },
-			webhookEvents: {
-				fields: {},
-				key: 'webhookEvents',
-				name: 'paymesh_webhook_events',
-			},
-		},
-	} as const;
+	return resolveDatabaseSchema();
 }

@@ -48,7 +48,29 @@ export interface StripePaymentIntent {
 	object: 'payment_intent';
 	amount: number;
 	currency: string;
+	customer?: string | null;
+	description?: string | null;
 	metadata?: Record<string, string> | null;
+	next_action?: {
+		type?: string | null;
+		pix_display_qr_code?: {
+			data?: string | null;
+			expires_at?: number | null;
+			hosted_instructions_url?: string | null;
+			image_url_png?: string | null;
+			image_url_svg?: string | null;
+		} | null;
+	} | null;
+	payment_method_options?: {
+		pix?: {
+			amount_includes_iof?: 'always' | 'never' | null;
+			expires_after_seconds?: number | null;
+			expires_at?: number | null;
+			setup_future_usage?: string | null;
+		} | null;
+	} | null;
+	payment_method_types?: string[] | null;
+	receipt_email?: string | null;
 	status: string;
 }
 

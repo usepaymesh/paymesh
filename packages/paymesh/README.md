@@ -69,6 +69,27 @@ const customer = await paymesh.customers.get("cus_123");
 console.log(payment.checkoutUrl, customer.email);
 ```
 
+<p align="center">
+  For native PIX flows, use <code>paymesh.pix</code>. This is separate from <code>paymesh.payments</code> so providers can expose QR code, copia-e-cola, and expiration details directly.
+</p>
+
+```ts
+const pix = await paymesh.pix.create({
+  amount: 3500,
+  currency: "BRL",
+  description: "Invoice #42",
+  customer: {
+    email: "ada@example.com",
+    externalId: "user_123",
+  },
+  pix: {
+    expiresAfterSeconds: 900,
+  },
+});
+
+console.log(pix.copyPasteCode, pix.instructionsUrl);
+```
+
 <h2 align="center">Built-in Hooks</h2>
 
 <p align="center">

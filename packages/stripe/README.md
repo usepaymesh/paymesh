@@ -62,7 +62,7 @@ console.log(checkout.id, checkout.checkoutUrl, customer.id);
 <h2 align="center">What You Get</h2>
 
 <p align="center">
-  <code>@paymesh/stripe</code> implements checkout creation, customers, provider catalog sync, webhook verification, and normalized Stripe event handling through the standard Paymesh contracts.
+  <code>@paymesh/stripe</code> implements checkout creation, native PIX creation and lookup, customers, provider catalog sync, webhook verification, and normalized Stripe event handling through the standard Paymesh contracts.
 </p>
 
 <h2 align="center">Why Use It</h2>

@@ -15,6 +15,8 @@ import type {
 	PaymeshCustomerUpsertData,
 	PaymeshPayment,
 	PaymeshPaymentCreateData,
+	PaymeshPix,
+	PaymeshPixCreateData,
 	PluginClientExtensions,
 } from './types/client';
 import type {
@@ -113,6 +115,79 @@ export const createClient = <
 					await database.repositories.checkouts.upsert(schema, resolvedPayment);
 
 				return resolvedPayment;
+			},
+		},
+		pix: {
+			create: async <CallIncludeRaw extends boolean = IncludeRaw>(
+				data: PaymeshPixCreateData<Schema>,
+				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
+			) => {
+				assertCapability('pix');
+
+				if (!provider.pix)
+					throw new PaymeshError({
+						code: 'unsupported_capability',
+						message: `Provider "${provider.id}" does not support "pix" capability`,
+						provider: provider.id,
+					});
+
+				const { input, extra } = splitExtraFields(
+					data,
+					schema.tables.pix.fields,
+				);
+
+				const pix = await provider.pix.create(
+					input as Parameters<NonNullable<P['pix']>['create']>[0],
+					mergeOptions(requestOptions),
+				);
+
+				const resolvedPix = Object.assign(pix, extra) as PaymeshPix<
+					CallIncludeRaw,
+					Schema
+				>;
+
+				if (database)
+					await database.repositories.pix.upsert(schema, resolvedPix);
+
+				return resolvedPix;
+			},
+			get: async <CallIncludeRaw extends boolean = IncludeRaw>(
+				id: string,
+				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
+			) => {
+				assertCapability('pix');
+
+				if (!provider.pix)
+					throw new PaymeshError({
+						code: 'unsupported_capability',
+						message: `Provider "${provider.id}" does not support "pix" capability`,
+						provider: provider.id,
+					});
+
+				const mergedOptions = mergeOptions(requestOptions);
+
+				if (database) {
+					const pix = await database.repositories.pix.findByProviderId(
+						schema,
+						provider.id,
+						id,
+						{
+							includeRaw: mergedOptions.includeRaw,
+						},
+					);
+
+					if (pix) return pix as PaymeshPix<CallIncludeRaw, Schema>;
+
+					throw new PaymeshError({
+						code: 'provider_not_found',
+						message: `Pix payment "${id}" was not found in the configured database`,
+						provider: provider.id,
+					});
+				}
+
+				return provider.pix.get(id, mergedOptions) as Promise<
+					PaymeshPix<CallIncludeRaw, Schema>
+				>;
 			},
 		},
 		customers: {

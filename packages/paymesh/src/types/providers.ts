@@ -56,7 +56,24 @@ export interface PaymentCreateData {
 	returnUrl?: string;
 }
 
-export interface BasePayment {
+export interface PixOptions {
+	amountIncludesIof?: 'always' | 'never';
+	expiresAfterSeconds?: number;
+	expiresAt?: Date | string;
+}
+
+export interface PixCreateData {
+	amount: number;
+	currency: string;
+
+	customer?: PaymentCustomer;
+
+	description?: string;
+	metadata?: Record<string, string | number | boolean | null>;
+	pix?: PixOptions;
+}
+
+interface BasePaymentRecord {
 	id: string;
 	provider: string;
 
@@ -71,10 +88,34 @@ export interface BasePayment {
 	metadata?: Record<string, unknown>;
 }
 
+export interface BasePayment extends BasePaymentRecord {
+	method?: undefined;
+}
+
 export type Payment<IncludeRaw extends boolean = false> = WithRaw<
 	BasePayment,
 	IncludeRaw
 >;
+
+export interface BasePix extends BasePaymentRecord {
+	method: 'pix';
+	copyPasteCode?: string;
+	qrCodeImageUrlPng?: string;
+	qrCodeImageUrlSvg?: string;
+	instructionsUrl?: string;
+	expiresAt?: string;
+}
+
+export type Pix<IncludeRaw extends boolean = false> = WithRaw<
+	BasePix,
+	IncludeRaw
+>;
+
+export type BaseAnyPayment = BasePayment | BasePix;
+
+export type AnyPayment<IncludeRaw extends boolean = false> =
+	| Payment<IncludeRaw>
+	| Pix<IncludeRaw>;
 
 export interface BaseCustomer {
 	id: string;
@@ -168,7 +209,7 @@ export interface ProviderBalanceSnapshot {
 }
 
 export interface ProviderDashboardResourceLinkInput {
-	type: 'customer' | 'payment' | 'subscription' | 'webhook';
+	type: 'customer' | 'payment' | 'pix' | 'subscription' | 'webhook';
 	id: string;
 }
 
@@ -188,7 +229,8 @@ export interface ProviderDashboardAdapter {
 	): Promise<Customer<true> | null>;
 	syncPayment?(
 		input: ProviderDashboardSyncInput,
-	): Promise<Payment<true> | null>;
+	): Promise<AnyPayment<true> | null>;
+	syncPix?(input: ProviderDashboardSyncInput): Promise<Pix<true> | null>;
 	syncSubscription?(
 		input: ProviderDashboardSyncInput,
 	): Promise<Record<string, unknown> | null>;
@@ -199,6 +241,17 @@ export interface ProviderPayments {
 		data: PaymentCreateData,
 		options?: ProviderRequestOptions<IncludeRaw>,
 	): Promise<Payment<IncludeRaw>>;
+}
+
+export interface ProviderPix {
+	create<IncludeRaw extends boolean = false>(
+		data: PixCreateData,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Pix<IncludeRaw>>;
+	get<IncludeRaw extends boolean = false>(
+		id: string,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Pix<IncludeRaw>>;
 }
 
 export interface ProviderCustomers {
@@ -284,6 +337,7 @@ export interface ProviderDefinition<Name extends string = string> {
 	id: Name;
 
 	payments: ProviderPayments;
+	pix?: ProviderPix;
 
 	customers: ProviderCustomers;
 

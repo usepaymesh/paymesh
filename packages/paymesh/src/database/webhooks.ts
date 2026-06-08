@@ -4,7 +4,7 @@ import type {
 	PaymeshDatabaseDriver,
 	ResolvedDatabaseSchema,
 } from '../types/database';
-import type { PaymeshEvent, Provider } from '../types/providers';
+import type { AnyPayment, PaymeshEvent, Provider } from '../types/providers';
 
 interface HandleClientWebhookOptions<IncludeRaw extends boolean = false> {
 	provider: Provider<string>;
@@ -197,12 +197,14 @@ async function persistEvent(
 		event.type === 'payment.canceled' ||
 		event.type === 'payment.refunded'
 	) {
-		await database.repositories.invoices.upsert(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['invoices']['upsert']
-			>[1],
-		);
+		const payment = event.data as AnyPayment<boolean>;
+
+		await database.repositories.invoices.upsert(schema, payment);
+
+		if (payment.method === 'pix') {
+			await database.repositories.pix.upsert(schema, payment);
+		}
+
 		return;
 	}
 

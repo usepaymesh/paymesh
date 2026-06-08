@@ -494,6 +494,38 @@ document.addEventListener('submit', async (event) => {
 			window.location.reload();
 		});
 	}
+
+	if (event.target?.matches('[data-form="pix-create"]')) {
+		event.preventDefault();
+		const form = new FormData(event.target);
+		const pix = {
+			amountIncludesIof: optional(form.get('amountIncludesIof')),
+			expiresAfterSeconds: numericOptional(form.get('expiresAfterSeconds')),
+			expiresAt: optional(form.get('expiresAt'))
+		};
+		await mutate('/pix', {
+			method: 'POST',
+			body: JSON.stringify({
+				amount: Number(form.get('amount')),
+				currency: String(form.get('currency') || 'BRL'),
+				customer: {
+					email: optional(form.get('customerEmail')),
+					externalId: optional(form.get('customerExternalId')),
+					id: optional(form.get('customerId')),
+					name: optional(form.get('customerName'))
+				},
+				description: optional(form.get('description')),
+				pix: Object.values(pix).some((value) => value != null) ? pix : undefined
+			})
+		}, (payload) => {
+			notify('PIX payment created');
+			if (payload?.id) {
+				window.location.href = config.basePath + '/pix/' + encodeURIComponent(payload.id);
+				return;
+			}
+			window.location.reload();
+		});
+	}
 });
 
 document.addEventListener('click', async (event) => {
@@ -543,6 +575,14 @@ document.addEventListener('click', async (event) => {
 		return;
 	}
 
+	if (action === 'sync-pix') {
+		await mutate('/pix/' + encodeURIComponent(id) + '/sync', { method: 'POST' }, () => {
+			notify('PIX sync requested');
+			window.location.reload();
+		});
+		return;
+	}
+
 	if (action === 'sync-subscription') {
 		await mutate('/subscriptions/' + encodeURIComponent(id) + '/sync', { method: 'POST' }, () => {
 			notify('Subscription sync requested');
@@ -587,6 +627,18 @@ async function render() {
 	if (pagePath.startsWith('/payments/')) {
 		const payload = await api('/payments/' + encodeURIComponent(decodeURIComponent(pagePath.split('/')[2] || '')));
 		renderDetail('Payment', payload, { kind: 'payment' });
+		return;
+	}
+
+	if (pagePath === '/pix') {
+		const payload = await api('/pix');
+		renderPix(payload);
+		return;
+	}
+
+	if (pagePath.startsWith('/pix/')) {
+		const payload = await api('/pix/' + encodeURIComponent(decodeURIComponent(pagePath.split('/')[2] || '')));
+		renderDetail('PIX', payload, { kind: 'pix' });
 		return;
 	}
 
@@ -677,6 +729,18 @@ function renderPayments(payload) {
 			statusBadge(item.status),
 			formatMoney(item.amount, item.currency),
 			item.source
+		])
+	])));
+}
+
+function renderPix(payload) {
+	root.innerHTML = shell('PIX', 'Native PIX payment records persisted by Paymesh.', panel('Create PIX payment', pixForm()) + panel('PIX list', table([
+		['ID', 'Status', 'Amount', 'Expires'],
+		...payload.map((item) => [
+			link(config.basePath + '/pix/' + encodeURIComponent(item.id), item.id),
+			statusBadge(item.status),
+			formatMoney(item.amount, item.currency),
+			item.expiresAt || 'Unknown'
 		])
 	])));
 }
@@ -823,8 +887,32 @@ function paymentForm() {
 	'</form>';
 }
 
+function pixForm() {
+	return '<form class="dash-form" data-form="pix-create">' +
+		field('Amount', 'amount', 'number') +
+		field('Currency', 'currency', 'text', 'BRL') +
+		field('Description', 'description') +
+		field('Customer email', 'customerEmail', 'email') +
+		field('Customer ID', 'customerId') +
+		field('Customer external ID', 'customerExternalId') +
+		field('Customer name', 'customerName') +
+		selectField('Amount includes IOF', 'amountIncludesIof', [
+			['', 'Stripe default'],
+			['never', 'Never'],
+			['always', 'Always']
+		]) +
+		field('Expires after seconds', 'expiresAfterSeconds', 'number') +
+		field('Expires at (ISO-8601)', 'expiresAt') +
+		'<div class="dash-form__wide"><button class="dash-button" data-kind="primary" type="submit">Create PIX payment</button></div>' +
+	'</form>';
+}
+
 function field(label, name, type = 'text', value = '') {
 	return '<label>' + escapeHtml(label) + '<input name="' + escapeHtml(name) + '" type="' + escapeHtml(type) + '" value="' + escapeHtml(value) + '" /></label>';
+}
+
+function selectField(label, name, options) {
+	return '<label>' + escapeHtml(label) + '<select name="' + escapeHtml(name) + '">' + options.map(([value, text]) => '<option value="' + escapeHtml(value) + '">' + escapeHtml(text) + '</option>').join('') + '</select></label>';
 }
 
 function textareaField(label, name) {
@@ -922,6 +1010,14 @@ function optional(value) {
 	return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function numericOptional(value) {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	if (trimmed.length === 0) return undefined;
+	const parsed = Number(trimmed);
+	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function splitLines(value) {
 	if (typeof value !== 'string') return undefined;
 	const lines = value.split('\n').map((line) => line.trim()).filter(Boolean);
@@ -944,6 +1040,7 @@ export function renderDashboardDocument(config: DashboardAssetConfig) {
 		['/', 'Overview'],
 		['/customers', 'Customers'],
 		['/payments', 'Payments'],
+		['/pix', 'PIX'],
 		['/subscriptions', 'Subscriptions'],
 		['/webhooks', 'Webhooks'],
 		['/providers', 'Providers'],

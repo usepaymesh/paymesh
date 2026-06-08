@@ -56,11 +56,12 @@ export function registerStatusCommand(program: Command) {
 					`Catalog: ${status.catalog.supported ? `supported (${status.catalog.productCount ?? 0} products / ${status.catalog.priceCount ?? 0} prices)` : 'not supported'}`,
 				);
 				console.log(
-					`Webhooks: ${status.webhooks.supported ? `supported (${status.webhooks.processedCount ?? 0} events persisted)` : 'not supported'}`,
+					`PIX: ${status.pix.supported ? `supported (${status.pix.count ?? 0} persisted)` : 'not supported'}`,
 				);
 				console.log(
-					`Schema prefix: ${status.schema.prefix} | customers table: ${status.schema.tables.customers.name}`,
+					`Webhooks: ${status.webhooks.supported ? `supported (${status.webhooks.processedCount ?? 0} events persisted)` : 'not supported'}`,
 				);
+				console.log(`Schema prefix: ${status.schema.prefix}`);
 			} finally {
 				await client.database?.close?.();
 			}

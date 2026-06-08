@@ -7,22 +7,26 @@ import { type PaymeshClient, PaymeshError } from 'paymesh';
 import {
 	createCustomer,
 	createPayment,
+	createPix,
 	deleteCustomer,
 	getCustomerData,
 	getDatabaseData,
 	getOverviewData,
 	getPaymentData,
+	getPixData,
 	getPluginsData,
 	getProviderData,
 	getSubscriptionData,
 	getWebhookData,
 	listCustomersData,
 	listPaymentsData,
+	listPixData,
 	listSubscriptionsData,
 	listWebhooksData,
 	retryWebhook,
 	syncCustomer,
 	syncPayment,
+	syncPix,
 	syncSubscription,
 	writeAuditEntry,
 } from './data';
@@ -85,6 +89,8 @@ export function createDashboardRoutes(path: string): PluginRouteDefinition[] {
 		`${path}/customers/:id`,
 		`${path}/payments`,
 		`${path}/payments/:id`,
+		`${path}/pix`,
+		`${path}/pix/:id`,
 		`${path}/subscriptions`,
 		`${path}/subscriptions/:id`,
 		`${path}/webhooks`,
@@ -264,6 +270,26 @@ export function createDashboardRoutes(path: string): PluginRouteDefinition[] {
 			},
 		},
 		{
+			method: 'GET',
+			path: `${path}/api/pix`,
+			async handler(context) {
+				return json(await listPixData(getDashboardContext(context)));
+			},
+		},
+		{
+			method: 'GET',
+			path: `${path}/api/pix/:id`,
+			async handler(context) {
+				const pixId = requireParam(context, 'id');
+				const pix = await getPixData(getDashboardContext(context), pixId);
+				if (!pix) {
+					return notFound('pix');
+				}
+
+				return json(pix);
+			},
+		},
+		{
 			method: 'POST',
 			path: `${path}/api/payments`,
 			async handler(context) {
@@ -303,6 +329,45 @@ export function createDashboardRoutes(path: string): PluginRouteDefinition[] {
 		},
 		{
 			method: 'POST',
+			path: `${path}/api/pix`,
+			async handler(context) {
+				const body = await parseJson<{
+					amount: number;
+					currency: string;
+					customer?: {
+						email?: string;
+						externalId?: string;
+						id?: string;
+						name?: string;
+						phone?: string;
+					};
+					description?: string;
+					metadata?: Record<string, string | number | boolean | null>;
+					pix?: {
+						amountIncludesIof?: 'always' | 'never';
+						expiresAfterSeconds?: number;
+						expiresAt?: string;
+					};
+				}>(context.request);
+
+				return mutate(
+					context,
+					{
+						action: 'pix.create',
+						resourceType: 'pix',
+					},
+					async (dashboardContext) => {
+						const pix = await createPix(dashboardContext, body);
+						return {
+							id: pix.id,
+							status: pix.status,
+						};
+					},
+				);
+			},
+		},
+		{
+			method: 'POST',
 			path: `${path}/api/payments/:id/sync`,
 			async handler(context) {
 				const paymentId = requireParam(context, 'id');
@@ -317,6 +382,27 @@ export function createDashboardRoutes(path: string): PluginRouteDefinition[] {
 						const payment = await syncPayment(dashboardContext, paymentId);
 						return {
 							id: payment?.id ?? paymentId,
+						};
+					},
+				);
+			},
+		},
+		{
+			method: 'POST',
+			path: `${path}/api/pix/:id/sync`,
+			async handler(context) {
+				const pixId = requireParam(context, 'id');
+				return mutate(
+					context,
+					{
+						action: 'pix.sync',
+						resourceId: pixId,
+						resourceType: 'pix',
+					},
+					async (dashboardContext) => {
+						const pix = await syncPix(dashboardContext, pixId);
+						return {
+							id: pix?.id ?? pixId,
 						};
 					},
 				);
@@ -447,7 +533,7 @@ async function mutate(
 	audit: {
 		action: string;
 		resourceId?: string;
-		resourceType: 'customer' | 'payment' | 'subscription' | 'webhook';
+		resourceType: 'customer' | 'payment' | 'pix' | 'subscription' | 'webhook';
 	},
 	action: (context: DashboardRequestContext) => Promise<unknown>,
 ) {

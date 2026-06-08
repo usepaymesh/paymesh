@@ -42,6 +42,7 @@ describe('@paymesh/dash', () => {
 		expect(await overview.json()).toMatchObject({
 			counts: {
 				customers: 3,
+				pix: 2,
 				webhooks: 1,
 			},
 			provider: {
@@ -135,16 +136,76 @@ describe('@paymesh/dash', () => {
 			resource_id: 'cus_created',
 		});
 	});
+
+	test('creates PIX payments through the dashboard API and writes an audit entry', async () => {
+		const database = createDashboardDatabase();
+		let createdPixAmount: number | undefined;
+		const client = createClient({
+			provider: createDashboardProvider({
+				onPixCreate(data) {
+					createdPixAmount = data.amount;
+				},
+			}),
+			database,
+			plugins: [
+				dash({
+					auth() {
+						return {
+							id: 'usr_pix',
+							email: 'finance@example.com',
+						};
+					},
+				}),
+			] as const,
+		});
+		const handler = Dashboard({ client });
+
+		const response = await handler(
+			new Request('https://app.test/admin/paymesh/api/pix', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					amount: 2300,
+					currency: 'BRL',
+					customer: {
+						email: 'pix@example.com',
+					},
+					description: 'PIX order',
+					pix: {
+						expiresAfterSeconds: 900,
+					},
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			id: 'pix_created',
+			status: 'pending',
+		});
+		expect(createdPixAmount).toBe(2300);
+		expect(database.auditLog).toContainEqual(
+			expect.objectContaining({
+				action: 'pix.create',
+				actor_id: 'usr_pix',
+				resource_id: 'pix_created',
+			}),
+		);
+	});
 });
 
 function createDashboardProvider(options?: {
 	onCustomerUpsert?(data: { email?: string; name?: string }): void;
+	onPixCreate?(data: { amount: number }): void;
 }) {
 	return defineProvider({
 		id: 'stub',
 		capabilities: {
 			checkout: true,
 			customers: true,
+			pix: true,
 			subscriptions: true,
 			webhooks: true,
 		},
@@ -157,6 +218,36 @@ function createDashboardProvider(options?: {
 					currency: 'usd',
 					status: 'pending' as const,
 					checkoutUrl: 'https://checkout.test/pay_created',
+					raw: null,
+				};
+			},
+		},
+		pix: {
+			async create(data) {
+				options?.onPixCreate?.({
+					amount: data.amount,
+				});
+
+				return {
+					id: 'pix_created',
+					provider: 'stub',
+					amount: data.amount,
+					copyPasteCode: '000201PIXDASH',
+					currency: data.currency.toLowerCase(),
+					method: 'pix' as const,
+					status: 'pending' as const,
+					raw: null,
+				};
+			},
+			async get(id) {
+				return {
+					id,
+					provider: 'stub',
+					amount: 2300,
+					copyPasteCode: '000201PIXDASH',
+					currency: 'brl',
+					method: 'pix' as const,
+					status: 'pending' as const,
 					raw: null,
 				};
 			},
@@ -227,6 +318,12 @@ function createDashboardDatabase() {
 				async upsert() {},
 				async markDeleted() {},
 			},
+			pix: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
+			},
 			checkouts: {
 				async findByProviderId() {
 					return null;
@@ -275,6 +372,7 @@ function createDashboardDatabase() {
 						customer_count: '3',
 						failed_webhook_count: '0',
 						invoice_count: '2',
+						pix_count: '2',
 						price_count: '4',
 						product_count: '2',
 						subscription_count: '1',

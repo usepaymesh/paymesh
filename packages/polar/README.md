@@ -59,6 +59,10 @@ const customer = await paymesh.customers.upsert({
 console.log(checkout.id, checkout.checkoutUrl, customer.id);
 ```
 
+<p align="center">
+  <code>@paymesh/polar</code> currently does not expose the <code>pix</code> capability. Use <code>paymesh.payments</code> for Polar checkout flows; <code>paymesh.pix</code> is currently Stripe-only inside Paymesh.
+</p>
+
 <h2 align="center">What You Get</h2>
 
 <p align="center">

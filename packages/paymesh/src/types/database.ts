@@ -1,15 +1,20 @@
 import type {
+	AnyPayment,
+	BaseAnyPayment,
 	BaseCustomer,
 	BaseCustomerDeleteResult,
 	BasePayment,
 	BasePaymeshEvent,
+	BasePix,
 	Customer,
+	Pix,
 	ProviderCatalogPrice,
 	ProviderCatalogProduct,
 } from './providers';
 
 export type DatabaseTableKey =
 	| 'customers'
+	| 'pix'
 	| 'checkouts'
 	| 'invoices'
 	| 'paymentMethods'
@@ -336,16 +341,37 @@ export interface PaymeshCheckoutsRepository {
 	): Promise<void>;
 }
 
+export interface PaymeshPixRepository {
+	findByProviderId<
+		IncludeRaw extends boolean = false,
+		TPix extends Pix<IncludeRaw> = Pix<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		id: string,
+		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
+	): Promise<TPix | null>;
+	upsert<TPix extends BasePix = BasePix>(
+		schema: ResolvedDatabaseSchema,
+		pix: TPix,
+	): Promise<void>;
+}
+
 export interface PaymeshInvoicesRepository {
-	findByProviderId<TPayment extends BasePayment = BasePayment>(
+	findByProviderId<
+		TPayment extends BaseAnyPayment | AnyPayment<boolean> =
+			| BaseAnyPayment
+			| AnyPayment<boolean>,
+	>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
 		id: string,
 	): Promise<TPayment | null>;
-	upsert<TPayment extends BasePayment = BasePayment>(
-		schema: ResolvedDatabaseSchema,
-		payment: TPayment,
-	): Promise<void>;
+	upsert<
+		TPayment extends BaseAnyPayment | AnyPayment<boolean> =
+			| BaseAnyPayment
+			| AnyPayment<boolean>,
+	>(schema: ResolvedDatabaseSchema, payment: TPayment): Promise<void>;
 }
 
 export interface PaymeshSubscriptionsRepository {
@@ -403,6 +429,7 @@ export interface PaymeshMigrationsRepository {
 
 export interface PaymeshDatabaseRepositories {
 	customers: PaymeshCustomersRepository;
+	pix: PaymeshPixRepository;
 	checkouts: PaymeshCheckoutsRepository;
 	invoices: PaymeshInvoicesRepository;
 	subscriptions: PaymeshSubscriptionsRepository;
