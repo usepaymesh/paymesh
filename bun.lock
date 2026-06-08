@@ -30,6 +30,16 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/audit-logs": {
+      "name": "@paymesh/audit-logs",
+      "version": "0.0.0",
+      "devDependencies": {
+        "paymesh": "workspace:*",
+      },
+      "peerDependencies": {
+        "paymesh": ">=0.0.0",
+      },
+    },
     "packages/cli": {
       "name": "@paymesh/cli",
       "version": "0.0.0",
@@ -38,7 +48,18 @@
       },
       "dependencies": {
         "commander": "^14.0.2",
+        "picocolors": "^1.1.1",
       },
+      "devDependencies": {
+        "paymesh": "workspace:*",
+      },
+      "peerDependencies": {
+        "paymesh": ">=0.0.0",
+      },
+    },
+    "packages/dash": {
+      "name": "@paymesh/dash",
+      "version": "0.0.0",
       "devDependencies": {
         "paymesh": "workspace:*",
       },
@@ -355,7 +376,11 @@
 
     "@oxc-project/types": ["@oxc-project/types@0.96.0", "", {}, "sha512-r/xkmoXA0xEpU6UGtn18CNVjXH6erU3KCpCDbpLmbVxBFor1U9MqN5Z2uMmCHJuXjJzlnDR+hWY+yPoLo8oHDw=="],
 
+    "@paymesh/audit-logs": ["@paymesh/audit-logs@workspace:packages/audit-logs"],
+
     "@paymesh/cli": ["@paymesh/cli@workspace:packages/cli"],
+
+    "@paymesh/dash": ["@paymesh/dash@workspace:packages/dash"],
 
     "@paymesh/drizzle": ["@paymesh/drizzle@workspace:packages/drizzle"],
 

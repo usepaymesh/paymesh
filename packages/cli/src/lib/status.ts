@@ -24,6 +24,10 @@ export interface CliStatus {
 		productCount?: number;
 		priceCount?: number;
 	};
+	pix: {
+		supported: boolean;
+		count?: number;
+	};
 	webhooks: {
 		supported: boolean;
 		processedCount?: number;
@@ -63,6 +67,11 @@ export async function getPaymeshStatus(
 		catalog: {
 			supported: Boolean(client.provider.catalog),
 		},
+		pix: {
+			supported: Boolean(
+				client.provider.capabilities.pix && client.provider.pix,
+			),
+		},
 		webhooks: {
 			supported: Boolean(
 				client.provider.webhooks && client.provider.capabilities.webhooks,
@@ -74,19 +83,27 @@ export async function getPaymeshStatus(
 	if (!client.database) return status;
 
 	const [counts] = await client.database.query<{
+		pix_count: string;
 		product_count: string;
 		price_count: string;
 		webhook_event_count: string;
 	}>(
 		compileQuery(
 			`SELECT
-				(SELECT COUNT(*)::text FROM ${tableName(client.schema, 'products')}) AS product_count,
-				(SELECT COUNT(*)::text FROM ${tableName(client.schema, 'prices')}) AS price_count,
-				(SELECT COUNT(*)::text FROM ${tableName(client.schema, 'webhookEvents')}) AS webhook_event_count`,
+				pix.pix_count,
+				products.product_count,
+				prices.price_count,
+				webhook_events.webhook_event_count
+			FROM
+				(SELECT COUNT(*)::text AS pix_count FROM ${tableName(client.schema, 'pix')}) pix,
+				(SELECT COUNT(*)::text AS product_count FROM ${tableName(client.schema, 'products')}) products,
+				(SELECT COUNT(*)::text AS price_count FROM ${tableName(client.schema, 'prices')}) prices,
+				(SELECT COUNT(*)::text AS webhook_event_count FROM ${tableName(client.schema, 'webhookEvents')}) webhook_events`,
 		),
 	);
 
 	status.database.connected = true;
+	status.pix.count = Number(counts?.pix_count ?? 0);
 	status.catalog.productCount = Number(counts?.product_count ?? 0);
 	status.catalog.priceCount = Number(counts?.price_count ?? 0);
 	status.webhooks.processedCount = Number(counts?.webhook_event_count ?? 0);

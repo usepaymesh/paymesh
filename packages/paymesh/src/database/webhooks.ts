@@ -1,19 +1,18 @@
 import { PaymeshError } from '../errors';
-import type { HandleWebhookResult, PaymeshHooks } from '../types/client';
+import type { HandleWebhookResult } from '../types/client';
 import type {
 	PaymeshDatabaseDriver,
 	ResolvedDatabaseSchema,
 } from '../types/database';
-import type { PaymeshEvent, Provider } from '../types/providers';
-
-type AnyHook = (event: unknown) => void | Promise<void>;
+import type { AnyPayment, PaymeshEvent, Provider } from '../types/providers';
 
 interface HandleClientWebhookOptions<IncludeRaw extends boolean = false> {
 	provider: Provider<string>;
 	database?: PaymeshDatabaseDriver;
 	schema: ResolvedDatabaseSchema;
 	request: Request;
-	hooks?: PaymeshHooks<IncludeRaw>;
+	dispatchHook?: (hook: string, event: unknown) => Promise<void>;
+	hasHook?: (hook: string) => boolean;
 	includeRaw?: IncludeRaw;
 	skipVerify?: boolean;
 }
@@ -23,7 +22,8 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 	database,
 	schema,
 	request,
-	hooks,
+	dispatchHook,
+	hasHook,
 	includeRaw,
 	skipVerify,
 }: HandleClientWebhookOptions<IncludeRaw>): Promise<
@@ -92,11 +92,25 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 			);
 		}
 
-		await (handled.hook
-			? (hooks as Record<string, AnyHook | undefined> | undefined)?.[
-					handled.hook
-				]
-			: undefined)?.(event);
+		if (dispatchHook) {
+			const context = {
+				request: request.clone(),
+				deliveryId,
+				dispatchedAt: new Date().toISOString(),
+				hook: handled.hook,
+			};
+			const hookedEvent = withHookContext(event, context);
+			const specificHook =
+				handled.hook && hasHook?.(handled.hook) ? handled.hook : undefined;
+
+			if (specificHook) {
+				await dispatchHook(specificHook, hookedEvent);
+			} else if (hasHook?.('onEvent')) {
+				await dispatchHook('onEvent', hookedEvent);
+			} else if (hasHook?.('onUnhandledEvent')) {
+				await dispatchHook('onUnhandledEvent', hookedEvent);
+			}
+		}
 
 		if (database) {
 			await database.repositories.webhookEvents.markProcessed(
@@ -129,65 +143,80 @@ export async function handleClientWebhook<IncludeRaw extends boolean = false>({
 	};
 }
 
+function withHookContext<TEvent extends PaymeshEvent<unknown, boolean>>(
+	event: TEvent,
+	context: {
+		request: Request;
+		deliveryId: string;
+		dispatchedAt: string;
+		hook?: string;
+	},
+) {
+	return Object.assign(event, { context });
+}
+
 async function persistEvent(
 	database: PaymeshDatabaseDriver,
 	schema: ResolvedDatabaseSchema,
 	event: PaymeshEvent<unknown, boolean>,
 ) {
-	if (event.type === 'customer.created' || event.type === 'customer.updated') {
-		await database.repositories.customers.upsert(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['customers']['upsert']
-			>[1],
-		);
-		return;
+	switch (event.type) {
+		case 'customer.created':
+		case 'customer.updated':
+			await database.repositories.customers.upsert(
+				schema,
+				event.data as Parameters<
+					PaymeshDatabaseDriver['repositories']['customers']['upsert']
+				>[1],
+			);
+			return;
+		case 'customer.deleted':
+			await database.repositories.customers.markDeleted(
+				schema,
+				event.data as Parameters<
+					PaymeshDatabaseDriver['repositories']['customers']['markDeleted']
+				>[1],
+			);
+			return;
+		case 'checkout.completed':
+			await database.repositories.checkouts.upsert(
+				schema,
+				event.data as Parameters<
+					PaymeshDatabaseDriver['repositories']['checkouts']['upsert']
+				>[1],
+			);
+			return;
+		case 'payment.created':
+		case 'payment.succeeded':
+		case 'payment.failed':
+		case 'payment.canceled':
+		case 'payment.refunded':
+			await persistPayment(database, schema, event.data as AnyPayment<boolean>);
+
+			return;
+		case 'subscription.created':
+		case 'subscription.updated':
+		case 'subscription.canceled':
+			await database.repositories.subscriptions.upsert(
+				schema,
+				event as PaymeshEvent<unknown, boolean>,
+			);
+			return;
+		default:
+			return;
+	}
+}
+
+async function persistPayment(
+	database: PaymeshDatabaseDriver,
+	schema: ResolvedDatabaseSchema,
+	payment: AnyPayment<boolean>,
+) {
+	const tasks = [database.repositories.invoices.upsert(schema, payment)];
+
+	if (payment.method === 'pix') {
+		tasks.push(database.repositories.pix.upsert(schema, payment));
 	}
 
-	if (event.type === 'customer.deleted') {
-		await database.repositories.customers.markDeleted(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['customers']['markDeleted']
-			>[1],
-		);
-		return;
-	}
-
-	if (event.type === 'checkout.completed') {
-		await database.repositories.checkouts.upsert(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['checkouts']['upsert']
-			>[1],
-		);
-		return;
-	}
-
-	if (
-		event.type === 'payment.created' ||
-		event.type === 'payment.succeeded' ||
-		event.type === 'payment.failed' ||
-		event.type === 'payment.canceled' ||
-		event.type === 'payment.refunded'
-	) {
-		await database.repositories.invoices.upsert(
-			schema,
-			event.data as Parameters<
-				PaymeshDatabaseDriver['repositories']['invoices']['upsert']
-			>[1],
-		);
-		return;
-	}
-
-	if (
-		event.type === 'subscription.created' ||
-		event.type === 'subscription.updated' ||
-		event.type === 'subscription.canceled'
-	) {
-		await database.repositories.subscriptions.upsert(
-			schema,
-			event as PaymeshEvent<unknown, boolean>,
-		);
-	}
+	await Promise.all(tasks);
 }

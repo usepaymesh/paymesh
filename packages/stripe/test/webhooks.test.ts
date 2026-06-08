@@ -90,6 +90,70 @@ describe('provider webhooks', () => {
 		expect(handled?.hook).toBe('onCustomerUpdated');
 	});
 
+	test('Stripe maps PIX payment intent webhook events', async () => {
+		const provider = stripe({ webhookSecret: 'whsec_test' });
+		const handled = await provider.webhooks?.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					id: 'evt_pix_created',
+					type: 'payment_intent.created',
+					data: {
+						object: {
+							id: 'pi_pix_webhook',
+							object: 'payment_intent',
+							amount: 2300,
+							currency: 'brl',
+							metadata: {
+								externalId: 'user_456',
+							},
+							next_action: {
+								type: 'pix_display_qr_code',
+								pix_display_qr_code: {
+									data: '000201PIXWEBHOOK',
+									image_url_png: 'https://stripe.test/webhook.png',
+								},
+							},
+							payment_method_types: ['pix'],
+							receipt_email: 'pix@example.com',
+							status: 'requires_action',
+						},
+					},
+				}),
+			}),
+			includeRaw: true,
+		});
+		const event = handled?.event;
+
+		expect(event).toMatchObject({
+			id: 'evt_pix_created',
+			type: 'payment.created',
+			data: {
+				id: 'pi_pix_webhook',
+				amount: 2300,
+				currency: 'brl',
+				status: 'pending',
+				method: 'pix',
+				copyPasteCode: '000201PIXWEBHOOK',
+				qrCodeImageUrlPng: 'https://stripe.test/webhook.png',
+				customer: {
+					email: 'pix@example.com',
+					externalId: 'user_456',
+				},
+				raw: {
+					id: 'pi_pix_webhook',
+				},
+			},
+			raw: {
+				id: 'evt_pix_created',
+			},
+		});
+		expect(handled?.hook).toBe('onPaymentCreated');
+	});
+
 	test('Stripe rejects invalid signatures', async () => {
 		const provider = stripe({ webhookSecret: 'whsec_test' });
 

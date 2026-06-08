@@ -2,6 +2,14 @@ import type { WithRaw } from '../types/providers';
 
 const PAYMESH_INTERNAL_RAW = Symbol.for('paymesh.raw');
 
+/**
+ * Attaches the raw upstream payload to an object when `includeRaw` is enabled.
+ *
+ * @example
+ * ```ts
+ * const payment = withRaw({ id: 'pay_123', provider: 'stripe' }, raw, true);
+ * ```
+ */
 export function withRaw<TObject extends object, IncludeRaw extends boolean>(
 	object: TObject,
 	raw: unknown,
@@ -24,6 +32,9 @@ export function withRaw<TObject extends object, IncludeRaw extends boolean>(
 	return value;
 }
 
+/**
+ * Reads the internal raw payload that was stored by `withRaw`.
+ */
 export function getInternalRaw(value: unknown) {
 	if (typeof value !== 'object' || value === null) return null;
 

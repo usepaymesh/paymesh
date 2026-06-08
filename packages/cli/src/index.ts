@@ -1,8 +1,11 @@
 import { Command } from 'commander';
 import { registerGenerateCommand } from './commands/generate';
+import { registerListenCommand } from './commands/listen';
 import { registerMigrateCommand } from './commands/migrate';
+import { registerPluginsCommand } from './commands/plugins';
 import { registerPushCommand } from './commands/push';
 import { registerStatusCommand } from './commands/status';
+import { registerTriggerCommand } from './commands/trigger';
 
 export { pushProviderCatalog } from './lib/catalog';
 export { loadClient, resolveClientPath } from './lib/client';
@@ -19,6 +22,7 @@ export {
 	type PaymeshMigrationHistory,
 	type PaymeshMigrationHistoryEntry,
 	type PaymeshMigrationHistoryStatus,
+	planGenerateMigrations,
 	readMigrationFiles,
 	readMigrationHistory,
 	resolveHistoryPath,
@@ -42,9 +46,12 @@ export function createProgram() {
 		.showHelpAfterError();
 
 	registerGenerateCommand(program);
+	registerListenCommand(program);
 	registerMigrateCommand(program);
 	registerPushCommand(program);
 	registerStatusCommand(program);
+	registerPluginsCommand(program);
+	registerTriggerCommand(program);
 
 	return program;
 }

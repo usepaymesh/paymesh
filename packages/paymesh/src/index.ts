@@ -1,259 +1,76 @@
+import { createClientManagers } from './client/managers';
 import { defineDatabaseAdapter } from './database/adapter';
 import { resolveDatabaseSchema } from './database/schema';
-import { handleClientWebhook } from './database/webhooks';
 import { PaymeshError } from './errors';
+import { definePlugin, event, lazy } from './plugins';
+import { defineProvider } from './providers';
+import { resolveClientSchemaOptions } from './shared/database/schema';
+import { withRaw } from './shared/raw';
+import { request } from './shared/request';
 import type {
 	ClientOptions,
-	HandleWebhookOptions,
 	PaymeshClient,
-	PaymeshCustomer,
-	PaymeshCustomerList,
-	PaymeshCustomerUpsertData,
-	PaymeshHooks,
-	PaymeshPayment,
-	PaymeshPaymentCreateData,
+	PluginClientExtensions,
 } from './types/client';
-import type {
-	DatabaseSchemaOptions,
-	PaymeshCustomerListOptions,
-	ResolvedDatabaseExtraTableFields,
-} from './types/database';
-import type {
-	Provider,
-	ProviderCapability,
-	ProviderRequestOptions,
-} from './types/providers';
+import type { DatabaseSchemaOptions } from './types/database';
+import type { AnyPaymeshPlugin } from './types/plugins';
+import type { Provider } from './types/providers';
 
 export type * from './errors';
-export { PaymeshError } from './errors';
-export { defineProvider } from './providers';
-export { withRaw } from './shared/raw';
 export type { RetryOptions } from './shared/request';
-export { request } from './shared/request';
 export type * from './types/client';
 export type * from './types/database';
+export type * from './types/plugins';
 export type * from './types/providers';
-export { defineDatabaseAdapter, resolveDatabaseSchema };
+export {
+	defineDatabaseAdapter,
+	definePlugin,
+	defineProvider,
+	event,
+	lazy,
+	PaymeshError,
+	request,
+	resolveDatabaseSchema,
+	withRaw,
+};
 
-export const createClient = <
+/**
+ * Creates a Paymesh client from a provider, optional database adapter, and plugin list.
+ *
+ * @example
+ * ```ts
+ * const client = createClient({
+ *   provider: stripe({ secret: process.env.STRIPE_API_KEY }),
+ *   database: postgres(process.env.DATABASE_URL),
+ *   includeRaw: false,
+ * });
+ * ```
+ */
+export function createClient<
 	const Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
 	P extends Provider<string> = Provider<string>,
 	IncludeRaw extends boolean = false,
+	const Plugins extends readonly AnyPaymeshPlugin[] = readonly [],
 >({
 	provider,
 	...options
-}: ClientOptions<P, IncludeRaw, Schema>): PaymeshClient<IncludeRaw, Schema> => {
-	const database = options.database;
-	const schema = resolveDatabaseSchema(options.schema);
+}: ClientOptions<P, IncludeRaw, Schema, Plugins>): PaymeshClient<
+	IncludeRaw,
+	Schema,
+	Plugins
+> &
+	PluginClientExtensions<Plugins> {
+	const plugins = options.plugins ?? ([] as unknown as Plugins);
+	const schema = resolveDatabaseSchema(
+		resolveClientSchemaOptions(options.schema, plugins),
+	);
 
-	const assertCapability = (capability: ProviderCapability) => {
-		if (!provider.capabilities[capability])
-			throw new PaymeshError({
-				provider: provider.id,
-				code: 'unsupported_capability',
-				message: `Provider "${provider.id}" does not support "${capability}" capability`,
-			});
-	};
-
-	const mergeOptions = <CallIncludeRaw extends boolean = IncludeRaw>(
-		requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-	): ProviderRequestOptions<CallIncludeRaw> => ({
-		baseUrl: requestOptions?.baseUrl ?? options.baseUrl,
-		timeout: requestOptions?.timeout ?? options.timeout,
-		retry: requestOptions?.retry ?? options.retry,
-		fetch: requestOptions?.fetch ?? options.fetch,
-		includeRaw: (requestOptions?.includeRaw ??
-			options.includeRaw ??
-			false) as CallIncludeRaw,
-	});
-	const baseHooks = options.hooks;
-	const baseIncludeRaw = options.includeRaw;
-
-	return {
+	return createClientManagers({
 		provider,
-		database,
+		options: {
+			...options,
+			plugins,
+		},
 		schema,
-		hooks: options.hooks,
-		includeRaw: options.includeRaw,
-		payments: {
-			create: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				data: PaymeshPaymentCreateData<Schema>,
-				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => {
-				assertCapability('checkout');
-				const { input, extra } = splitExtraFields(
-					data,
-					schema.tables.checkouts.fields,
-				);
-
-				const payment = await provider.payments.create(
-					input as Parameters<P['payments']['create']>[0],
-					mergeOptions(requestOptions),
-				);
-				const resolvedPayment = Object.assign(payment, extra) as PaymeshPayment<
-					CallIncludeRaw,
-					Schema
-				>;
-
-				if (database) {
-					await database.repositories.checkouts.upsert(schema, resolvedPayment);
-				}
-
-				return resolvedPayment;
-			},
-		},
-		customers: {
-			upsert: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				data: PaymeshCustomerUpsertData<Schema>,
-				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => {
-				assertCapability('customers');
-				const { input, extra } = splitExtraFields(
-					data,
-					schema.tables.customers.fields,
-				);
-
-				const customer = await provider.customers.upsert(
-					input as Parameters<P['customers']['upsert']>[0],
-					mergeOptions(requestOptions),
-				);
-				const resolvedCustomer = Object.assign(
-					customer,
-					extra,
-				) as PaymeshCustomer<CallIncludeRaw, Schema>;
-
-				if (database) {
-					await database.repositories.customers.upsert(
-						schema,
-						resolvedCustomer,
-					);
-				}
-
-				return resolvedCustomer;
-			},
-			get: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				id: Parameters<P['customers']['get']>[0],
-				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => {
-				assertCapability('customers');
-
-				const mergedOptions = mergeOptions(requestOptions);
-
-				if (database) {
-					const customer =
-						await database.repositories.customers.findByProviderId(
-							schema,
-							provider.id,
-							id,
-							{
-								includeRaw: mergedOptions.includeRaw,
-							},
-						);
-
-					if (customer) {
-						return customer as PaymeshCustomer<CallIncludeRaw, Schema>;
-					}
-
-					throw new PaymeshError({
-						code: 'provider_not_found',
-						message: `Customer "${id}" was not found in the configured database`,
-						provider: provider.id,
-					});
-				}
-
-				return provider.customers.get(id, mergedOptions) as Promise<
-					PaymeshCustomer<CallIncludeRaw, Schema>
-				>;
-			},
-			list: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				options?: PaymeshCustomerListOptions<CallIncludeRaw>,
-			) => {
-				if (!database)
-					throw new PaymeshError({
-						code: 'unsupported_capability',
-						message: `Provider "${provider.id}" does not support "customers.list" without a configured database`,
-						provider: provider.id,
-					});
-
-				const includeRaw = (options?.includeRaw ??
-					baseIncludeRaw ??
-					false) as CallIncludeRaw;
-
-				const result = await database.repositories.customers.list(
-					schema,
-					provider.id,
-					{
-						includeRaw,
-						limit: options?.limit,
-						after: options?.after,
-						before: options?.before,
-					},
-				);
-
-				return {
-					...result,
-					data: result.data as Array<PaymeshCustomer<CallIncludeRaw, Schema>>,
-				} as PaymeshCustomerList<CallIncludeRaw, Schema>;
-			},
-			delete: async <CallIncludeRaw extends boolean = IncludeRaw>(
-				id: Parameters<P['customers']['delete']>[0],
-				requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
-			) => {
-				assertCapability('customers');
-
-				const result = await provider.customers.delete(
-					id,
-					mergeOptions(requestOptions),
-				);
-
-				if (database) {
-					await database.repositories.customers.markDeleted(schema, result);
-				}
-
-				return result;
-			},
-		},
-		webhooks: {
-			handle: <CallIncludeRaw extends boolean = IncludeRaw>(
-				webhookOptions: HandleWebhookOptions<CallIncludeRaw>,
-			) =>
-				handleClientWebhook({
-					provider,
-					database,
-					schema,
-					request: webhookOptions.request,
-					hooks: {
-						...(baseHooks as PaymeshHooks<CallIncludeRaw> | undefined),
-						...(webhookOptions.hooks as
-							| PaymeshHooks<CallIncludeRaw>
-							| undefined),
-					},
-					includeRaw: (webhookOptions.includeRaw ??
-						baseIncludeRaw ??
-						false) as CallIncludeRaw,
-					skipVerify: webhookOptions.skipVerify ?? false,
-				}),
-		},
-		capabilities: provider.capabilities,
-	};
-};
-
-function splitExtraFields(
-	value: unknown,
-	fields: ResolvedDatabaseExtraTableFields,
-) {
-	const extra: Record<string, unknown> = {};
-	if (typeof value !== 'object' || value === null) {
-		return { input: value, extra };
-	}
-
-	const input = { ...(value as Record<string, unknown>) };
-
-	for (const key of Object.keys(fields)) {
-		if (!Object.hasOwn(input, key)) continue;
-		extra[key] = input[key];
-		delete input[key];
-	}
-
-	return { input, extra };
+	});
 }

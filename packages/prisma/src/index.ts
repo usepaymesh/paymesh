@@ -5,31 +5,22 @@ import {
 	PaymeshError,
 } from 'paymesh';
 import { createRepositories } from './repositories';
+import type { PrismaDatabase, PrismaDatabaseOptions } from './types';
 
-export interface PrismaDatabaseOptions {
-	persistRaw?: boolean;
-}
+export * from './types';
 
-export interface PrismaDatabase {
-	$queryRawUnsafe<Row = unknown>(
-		query: string,
-		...values: CompiledQuery['params']
-	): Promise<Row[]>;
-	$executeRawUnsafe(
-		query: string,
-		...values: CompiledQuery['params']
-	): Promise<number>;
-	$transaction<T>(
-		callback: (database: PrismaDatabase) => Promise<T>,
-	): Promise<T>;
-}
-
+/**
+ * Creates a Paymesh database adapter backed by a Prisma client.
+ *
+ * @example
+ * ```ts
+ * export const database = prisma(prismaClient, { persistRaw: true });
+ * ```
+ */
 export function prisma(
 	database: PrismaDatabase,
-	options?: PrismaDatabaseOptions,
+	{ persistRaw = false }: PrismaDatabaseOptions = {},
 ): PaymeshDatabaseDriver {
-	const persistRaw = options?.persistRaw ?? false;
-
 	return defineDatabaseAdapter({
 		persistRaw,
 		id: 'prisma',
@@ -49,7 +40,10 @@ export function prisma(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database query',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database query',
+							error,
+						),
 					});
 				}),
 		execute: (query: CompiledQuery) =>
@@ -59,7 +53,10 @@ export function prisma(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database query',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database query',
+							error,
+						),
 					});
 				}),
 		transaction: <T>(
@@ -70,8 +67,18 @@ export function prisma(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database transaction',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database transaction',
+							error,
+						),
 					});
 				}),
 	});
+}
+
+function formatDatabaseErrorMessage(prefix: string, error: unknown) {
+	if (error instanceof Error && error.message.length > 0)
+		return `${prefix}: ${error.message}`;
+
+	return prefix;
 }

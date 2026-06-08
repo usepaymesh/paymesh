@@ -439,6 +439,446 @@ describe('database support', () => {
 		expect(deliveries).toBe(1);
 	});
 
+	test('dispatches the specific webhook hook instead of onEvent when both exist', async () => {
+		const database = createMockDatabase();
+		const calls: string[] = [];
+		const provider = defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async (_data, options) =>
+					withRaw(
+						{
+							id: 'chk_123',
+							provider: 'stub',
+							amount: 1000,
+							currency: 'usd',
+							status: 'pending' as const,
+						},
+						{ id: 'raw_checkout' },
+						options?.includeRaw,
+					),
+			},
+			customers: {
+				get: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							email: 'ada@example.com',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				upsert: async (_data, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							email: 'ada@example.com',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				delete: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							deleted: true,
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+			},
+			webhooks: {
+				verify: async () => true,
+				handle: async ({ request, includeRaw }) => {
+					const payload = (await request.json()) as Record<string, unknown>;
+
+					return {
+						deliveryId: 'evt_parallel',
+						hook: 'onCustomerCreated',
+						event: withRaw(
+							{
+								id: 'evt_parallel',
+								type: 'customer.created' as const,
+								provider: 'stub',
+								data: withRaw(
+									{
+										id: 'cus_123',
+										provider: 'stub',
+										email: payload.email as string | undefined,
+									},
+									payload,
+									includeRaw,
+								),
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		});
+		const client = createClient({
+			provider,
+			database,
+		});
+
+		const result = await client.webhooks.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				body: JSON.stringify({ email: 'ada@example.com' }),
+				headers: {
+					'content-type': 'application/json',
+				},
+			}),
+			hooks: {
+				onEvent: async (event) => {
+					expect(event.context.deliveryId).toBe('evt_parallel');
+					expect(event.context.request.headers.get('content-type')).toBe(
+						'application/json',
+					);
+					calls.push(`event:${event.type}`);
+				},
+				onCustomerCreated: async (event) => {
+					calls.push(`specific:${event.data.id}`);
+				},
+			},
+		});
+
+		expect(result.status).toBe(200);
+		expect(calls).toEqual(['specific:cus_123']);
+	});
+
+	test('dispatches onEvent when there is no specific hook handler', async () => {
+		const database = createMockDatabase();
+		const calls: string[] = [];
+		const provider = defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async (_data, options) =>
+					withRaw(
+						{
+							id: 'chk_123',
+							provider: 'stub',
+							amount: 1000,
+							currency: 'usd',
+							status: 'pending' as const,
+						},
+						{ id: 'raw_checkout' },
+						options?.includeRaw,
+					),
+			},
+			customers: {
+				get: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							email: 'ada@example.com',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				upsert: async (_data, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							email: 'ada@example.com',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				delete: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							deleted: true,
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+			},
+			webhooks: {
+				verify: async () => true,
+				handle: async ({ request, includeRaw }) => {
+					const payload = (await request.json()) as Record<string, unknown>;
+
+					return {
+						deliveryId: 'evt_no_specific',
+						hook: 'onSubscriptionUpdated',
+						event: withRaw(
+							{
+								id: 'evt_no_specific',
+								type: 'subscription.updated' as const,
+								provider: 'stub',
+								data: withRaw(
+									{
+										id: 'sub_123',
+										status: payload.status,
+									},
+									payload,
+									includeRaw,
+								),
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		});
+		const client = createClient({
+			provider,
+			database,
+		});
+
+		const result = await client.webhooks.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				body: JSON.stringify({ status: 'active' }),
+				headers: {
+					'content-type': 'application/json',
+				},
+			}),
+			hooks: {
+				onEvent: async (event) => {
+					calls.push(event.type);
+				},
+			},
+		});
+
+		expect(result.status).toBe(200);
+		expect(calls).toEqual(['subscription.updated']);
+	});
+
+	test('dispatches onUnhandledEvent when no specific hook or onEvent exists', async () => {
+		const database = createMockDatabase();
+		const calls: string[] = [];
+		const provider = defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async (_data, options) =>
+					withRaw(
+						{
+							id: 'chk_123',
+							provider: 'stub',
+							amount: 1000,
+							currency: 'usd',
+							status: 'pending' as const,
+						},
+						{ id: 'raw_checkout' },
+						options?.includeRaw,
+					),
+			},
+			customers: {
+				get: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				upsert: async (_data, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				delete: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							deleted: true,
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+			},
+			webhooks: {
+				verify: async () => true,
+				handle: async ({ request, includeRaw }) => {
+					const payload = (await request.json()) as Record<string, unknown>;
+
+					return {
+						deliveryId: 'evt_unhandled',
+						hook: 'onSubscriptionUpdated',
+						event: withRaw(
+							{
+								id: 'evt_unhandled',
+								type: 'subscription.updated' as const,
+								provider: 'stub',
+								data: withRaw(
+									{
+										id: 'sub_123',
+										status: payload.status,
+									},
+									payload,
+									includeRaw,
+								),
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		});
+		const client = createClient({
+			provider,
+			database,
+		});
+
+		const result = await client.webhooks.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				body: JSON.stringify({ status: 'active' }),
+				headers: {
+					'content-type': 'application/json',
+				},
+			}),
+			hooks: {
+				onUnhandledEvent: async (event) => {
+					calls.push(`${event.type}:${event.context.hook}`);
+				},
+			},
+		});
+
+		expect(result.status).toBe(200);
+		expect(calls).toEqual(['subscription.updated:onSubscriptionUpdated']);
+	});
+
+	test('returns hook_error when the selected fallback hook fails', async () => {
+		const database = createMockDatabase();
+		const provider = defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async (_data, options) =>
+					withRaw(
+						{
+							id: 'chk_123',
+							provider: 'stub',
+							amount: 1000,
+							currency: 'usd',
+							status: 'pending' as const,
+						},
+						{ id: 'raw_checkout' },
+						options?.includeRaw,
+					),
+			},
+			customers: {
+				get: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				upsert: async (_data, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+				delete: async (_id, options) =>
+					withRaw(
+						{
+							id: 'cus_123',
+							provider: 'stub',
+							deleted: true,
+						},
+						{ id: 'raw_customer' },
+						options?.includeRaw,
+					),
+			},
+			webhooks: {
+				verify: async () => true,
+				handle: async ({ request, includeRaw }) => {
+					const payload = (await request.json()) as Record<string, unknown>;
+
+					return {
+						deliveryId: 'evt_failed_global',
+						hook: 'onCustomerCreated',
+						event: withRaw(
+							{
+								id: 'evt_failed_global',
+								type: 'customer.created' as const,
+								provider: 'stub',
+								data: withRaw(
+									{
+										id: 'cus_123',
+										provider: 'stub',
+										email: payload.email as string | undefined,
+									},
+									payload,
+									includeRaw,
+								),
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		});
+		const client = createClient({
+			provider,
+			database,
+		});
+
+		const result = await client.webhooks.handle({
+			request: new Request('https://app.test/webhooks', {
+				method: 'POST',
+				body: JSON.stringify({ email: 'ada@example.com' }),
+				headers: {
+					'content-type': 'application/json',
+				},
+			}),
+			hooks: {
+				onEvent: async () => {
+					throw new Error('global hook failed');
+				},
+			},
+		});
+
+		expect(result.status).toBe(500);
+		expect(result.body).toEqual({ error: 'hook_error' });
+	});
+
 	test('uses provider-specific webhook delivery ids for idempotency', async () => {
 		const database = createMockDatabase();
 		let deliveries = 0;
@@ -700,6 +1140,12 @@ function createMockDatabase({
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
 				},
+			},
+			pix: {
+				async findByProviderId() {
+					return null;
+				},
+				async upsert() {},
 			},
 			checkouts: {
 				async findByProviderId() {

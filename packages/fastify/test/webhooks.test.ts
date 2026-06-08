@@ -49,6 +49,46 @@ describe('@paymesh/fastify Webhooks', () => {
 		expect(reply.body).toEqual({ received: true });
 		expect(calls).toEqual(['local']);
 	});
+
+	test('accepts onEvent and dispatches it for normalized webhook events', async () => {
+		const calls: string[] = [];
+		const client = createClient({
+			provider: stripe({ webhookSecret: 'whsec_test' }),
+		});
+		const handler = Webhooks({
+			client,
+			onEvent(event) {
+				calls.push(event.type);
+			},
+		});
+		const reply = createReply();
+
+		await handler(
+			createRequest(
+				{
+					id: 'evt_checkout',
+					type: 'checkout.session.completed',
+					data: {
+						object: {
+							id: 'cs_123',
+							object: 'checkout.session',
+							amount_total: 1200,
+							currency: 'usd',
+							customer_details: {
+								email: 'ada@example.com',
+							},
+						},
+					},
+				},
+				'whsec_test',
+			),
+			reply as unknown as FastifyReply,
+		);
+
+		expect(reply.statusCode).toBe(200);
+		expect(reply.body).toEqual({ received: true });
+		expect(calls).toEqual(['checkout.completed']);
+	});
 });
 
 function createRequest(payload: unknown, secret: string) {

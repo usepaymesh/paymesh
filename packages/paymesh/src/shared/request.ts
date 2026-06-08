@@ -1,7 +1,14 @@
 import { PaymeshError } from '../errors';
 
+/**
+ * Retry policy applied to provider requests.
+ */
 export interface RetryOptions {
+	/** Maximum number of retry attempts after the initial request. */
 	max: number;
+	/**
+	 * Optional backoff strategy for a failed response.
+	 */
 	delay?(options: { attempt: number; response: Response }): number;
 }
 
@@ -17,6 +24,18 @@ interface RequestOptions {
 	headers?: Record<string, string>;
 }
 
+/**
+ * Sends a typed HTTP request with retries, timeout handling, and Paymesh error normalization.
+ *
+ * @example
+ * ```ts
+ * const session = await request<StripeCheckoutSession>('/v1/checkout/sessions/cs_123', {
+ *   provider: 'stripe',
+ *   baseUrl: 'https://api.stripe.com',
+ *   headers: { authorization: 'Bearer sk_test_123' },
+ * });
+ * ```
+ */
 export const request = async <Response>(
 	url: string,
 	options: RequestOptions,

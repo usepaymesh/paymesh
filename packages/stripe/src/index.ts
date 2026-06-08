@@ -4,16 +4,35 @@ import {
 	defineProvider,
 	type PaymentCreateData,
 	type PaymentStatus,
+	PaymeshError,
 	type PaymeshEvent,
-	type PaymeshEventType,
-	type ProviderCapabilities,
+	type PixCreateData,
 	type ProviderRequestOptions,
 	type ProviderWebhookHandleOptions,
 	type ProviderWebhookHandleResult,
 	request,
 	withRaw,
 } from 'paymesh';
+import {
+	STRIPE_BASE_URL,
+	STRIPE_CAPABILITIES,
+	STRIPE_EVENTS,
+	STRIPE_HOOKS,
+	STRIPE_PAYMENT_STATUSES,
+} from './shared/constants';
+import {
+	mapStripeCustomer,
+	mapStripePaymentObject,
+	mapStripePixIntent,
+} from './shared/mapper';
+import {
+	syncStripePayment,
+	syncStripePix,
+	syncStripeSubscription,
+} from './shared/sync';
+import { isStripePixPaymentIntent } from './shared/utils';
 import type {
+	StripeBalance,
 	StripeCheckoutSession,
 	StripeCustomer,
 	StripeDeletedCustomer,
@@ -27,83 +46,47 @@ import type {
 
 export type * from './types';
 
-const STRIPE_BASE_URL = 'https://api.stripe.com';
-
-const STRIPE_CAPABILITIES = {
-	checkout: true,
-	coupons: true,
-	pix: false,
-	refunds: true,
-	subscriptions: true,
-	webhooks: true,
-	customerPortal: true,
-	customers: true,
-} satisfies ProviderCapabilities;
-
-const STRIPE_EVENTS: Record<string, PaymeshEventType> = {
-	'checkout.session.completed': 'checkout.completed',
-	'checkout.session.expired': 'payment.canceled',
-	'payment_intent.created': 'payment.created',
-	'payment_intent.succeeded': 'payment.succeeded',
-	'payment_intent.payment_failed': 'payment.failed',
-	'payment_intent.canceled': 'payment.canceled',
-	'charge.refunded': 'payment.refunded',
-	'customer.created': 'customer.created',
-	'customer.updated': 'customer.updated',
-	'customer.deleted': 'customer.deleted',
-};
-
-const STRIPE_HOOKS: Record<PaymeshEventType, string> = {
-	'payment.created': 'onPaymentCreated',
-	'payment.succeeded': 'onPaymentSucceeded',
-	'payment.failed': 'onPaymentFailed',
-	'payment.canceled': 'onPaymentCanceled',
-	'payment.refunded': 'onPaymentRefunded',
-	'customer.created': 'onCustomerCreated',
-	'customer.updated': 'onCustomerUpdated',
-	'customer.deleted': 'onCustomerDeleted',
-	'subscription.created': 'onSubscriptionCreated',
-	'subscription.updated': 'onSubscriptionUpdated',
-	'subscription.canceled': 'onSubscriptionCanceled',
-	'checkout.completed': 'onCheckoutCompleted',
-};
-
-const STRIPE_PAYMENT_STATUSES: Record<string, PaymentStatus> = {
-	paid: 'paid',
-	expired: 'canceled',
-	succeeded: 'paid',
-	failed: 'failed',
-	canceled: 'canceled',
-};
-
-function mapStripeCustomer(customer: StripeCustomer) {
-	return {
-		id: customer.id,
-		provider: 'stripe' as const,
-		externalId:
-			typeof customer.metadata?.externalId === 'string' &&
-			customer.metadata.externalId.length > 0
-				? customer.metadata.externalId
-				: undefined,
-		name: customer.name ?? undefined,
-		email: customer.email ?? undefined,
-		phone: customer.phone ?? undefined,
-		metadata: customer.metadata ?? undefined,
-	};
-}
-
+/**
+ * Creates a Stripe provider configured for Paymesh.
+ *
+ * @example
+ * ```ts
+ * export const provider = stripe({
+ *   secret: process.env.STRIPE_API_KEY,
+ *   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+ * });
+ * ```
+ */
 export const stripe = ({
+	retry,
+	fetch,
+	timeout,
+	baseUrl = STRIPE_BASE_URL,
 	secret = process.env.STRIPE_API_KEY,
 	webhookSecret = process.env.STRIPE_WEBHOOK_SECRET,
-	baseUrl = STRIPE_BASE_URL,
-	retry,
-	timeout,
-	fetch,
 }: StripeProviderOptions = {}) => {
 	const headers = {
 		authorization: `Bearer ${secret}`,
 		'content-type': 'application/x-www-form-urlencoded',
 	};
+
+	const baseRequestOptions = {
+		baseUrl,
+		fetch,
+		headers,
+		retry,
+		timeout,
+	};
+
+	const resolveRequestOptions = <IncludeRaw extends boolean = false>(
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => ({
+		baseUrl: options?.baseUrl ?? baseRequestOptions.baseUrl,
+		timeout: options?.timeout ?? baseRequestOptions.timeout,
+		retry: options?.retry ?? baseRequestOptions.retry,
+		fetch: options?.fetch ?? baseRequestOptions.fetch,
+		headers: baseRequestOptions.headers,
+	});
 
 	return defineProvider({
 		id: 'stripe',
@@ -144,12 +127,8 @@ export const stripe = ({
 					'/v1/checkout/sessions',
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: 'POST',
-						headers,
 						body,
 					},
 				);
@@ -188,6 +167,111 @@ export const stripe = ({
 				);
 			},
 		},
+		pix: {
+			async create<IncludeRaw extends boolean = false>(
+				data: PixCreateData,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
+				const body = new URLSearchParams({
+					amount: String(data.amount),
+					confirm: 'true',
+					currency: data.currency.toLowerCase(),
+					'payment_method_data[type]': 'pix',
+					'payment_method_types[0]': 'pix',
+				});
+
+				if (data.description) body.set('description', data.description);
+				if (data.customer?.id) body.set('customer', data.customer.id);
+				if (data.customer?.email) {
+					body.set('receipt_email', data.customer.email);
+					body.set(
+						'payment_method_data[billing_details][email]',
+						data.customer.email,
+					);
+				}
+				if (data.customer?.name) {
+					body.set(
+						'payment_method_data[billing_details][name]',
+						data.customer.name,
+					);
+				}
+				if (data.customer?.phone) {
+					body.set(
+						'payment_method_data[billing_details][phone]',
+						data.customer.phone,
+					);
+				}
+				if (data.customer?.externalId) {
+					body.set('metadata[externalId]', data.customer.externalId);
+				}
+
+				for (const [key, value] of Object.entries(data.metadata ?? {})) {
+					if (value !== null) body.set(`metadata[${key}]`, String(value));
+				}
+
+				if (data.pix?.amountIncludesIof) {
+					body.set(
+						'payment_method_options[pix][amount_includes_iof]',
+						data.pix.amountIncludesIof,
+					);
+				}
+				if (data.pix?.expiresAt) {
+					const expiresAt =
+						data.pix.expiresAt instanceof Date
+							? Math.floor(data.pix.expiresAt.getTime() / 1000)
+							: Math.floor(new Date(data.pix.expiresAt).getTime() / 1000);
+					body.set(
+						'payment_method_options[pix][expires_at]',
+						String(expiresAt),
+					);
+				} else if (typeof data.pix?.expiresAfterSeconds === 'number') {
+					body.set(
+						'payment_method_options[pix][expires_after_seconds]',
+						String(data.pix.expiresAfterSeconds),
+					);
+				}
+
+				const paymentIntent = await request<
+					Extract<StripePaymentObject, { object: 'payment_intent' }>
+				>('/v1/payment_intents', {
+					provider: 'stripe',
+					...resolveRequestOptions(options),
+					method: 'POST',
+					body,
+				});
+
+				return withRaw(
+					mapStripePixIntent(paymentIntent),
+					paymentIntent,
+					options?.includeRaw,
+				);
+			},
+			async get<IncludeRaw extends boolean = false>(
+				id: string,
+				options?: ProviderRequestOptions<IncludeRaw>,
+			) {
+				const paymentIntent = await request<
+					Extract<StripePaymentObject, { object: 'payment_intent' }>
+				>(`/v1/payment_intents/${encodeURIComponent(id)}`, {
+					provider: 'stripe',
+					...resolveRequestOptions(options),
+				});
+
+				if (!isStripePixPaymentIntent(paymentIntent)) {
+					throw new PaymeshError({
+						code: 'provider_not_found',
+						message: `PIX payment "${id}" was not found on Stripe`,
+						provider: 'stripe',
+					});
+				}
+
+				return withRaw(
+					mapStripePixIntent(paymentIntent),
+					paymentIntent,
+					options?.includeRaw,
+				);
+			},
+		},
 		customers: {
 			async upsert<IncludeRaw extends boolean = false>(
 				data: CustomerUpsertData,
@@ -210,12 +294,8 @@ export const stripe = ({
 						: '/v1/customers',
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: 'POST',
-						headers,
 						body,
 					},
 				);
@@ -234,11 +314,7 @@ export const stripe = ({
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
-						headers,
+						...resolveRequestOptions(options),
 					},
 				);
 
@@ -256,12 +332,8 @@ export const stripe = ({
 					`/v1/customers/${encodeURIComponent(id)}`,
 					{
 						provider: 'stripe',
-						baseUrl: options?.baseUrl ?? baseUrl,
-						timeout: options?.timeout ?? timeout,
-						retry: options?.retry ?? retry,
-						fetch: options?.fetch ?? fetch,
+						...resolveRequestOptions(options),
 						method: 'DELETE',
-						headers,
 					},
 				);
 
@@ -281,22 +353,14 @@ export const stripe = ({
 				const [products, prices] = await Promise.all([
 					request<StripeListResponse<StripeProduct>>('/v1/products', {
 						provider: 'stripe',
-						baseUrl,
-						timeout,
-						retry,
-						fetch,
-						headers,
+						...baseRequestOptions,
 						query: {
 							limit: 100,
 						},
 					}),
 					request<StripeListResponse<StripePrice>>('/v1/prices', {
 						provider: 'stripe',
-						baseUrl,
-						timeout,
-						retry,
-						fetch,
-						headers,
+						...baseRequestOptions,
 						query: {
 							limit: 100,
 						},
@@ -329,6 +393,62 @@ export const stripe = ({
 					})),
 				};
 			},
+		},
+		dashboard: {
+			async getBalance() {
+				const balance = await request<StripeBalance>('/v1/balance', {
+					provider: 'stripe',
+					...baseRequestOptions,
+				});
+
+				return {
+					available: balance.available.map((entry) => ({
+						amount: entry.amount,
+						currency: entry.currency,
+						label: `Available (${entry.currency.toUpperCase()})`,
+					})),
+					pending: balance.pending.map((entry) => ({
+						amount: entry.amount,
+						currency: entry.currency,
+						label: `Pending (${entry.currency.toUpperCase()})`,
+					})),
+					reserved: (balance.connect_reserved ?? []).map((entry) => ({
+						amount: entry.amount,
+						currency: entry.currency,
+						label: `Reserved (${entry.currency.toUpperCase()})`,
+					})),
+				};
+			},
+			getResourceUrl({ id, type }) {
+				if (type === 'customer') {
+					return `https://dashboard.stripe.com/customers/${encodeURIComponent(id)}`;
+				}
+
+				if (type === 'subscription') {
+					return `https://dashboard.stripe.com/subscriptions/${encodeURIComponent(id)}`;
+				}
+
+				if (type === 'payment' || type === 'pix') {
+					return `https://dashboard.stripe.com/payments/${encodeURIComponent(id)}`;
+				}
+
+				return null;
+			},
+			syncPayment: (input) =>
+				syncStripePayment({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
+			syncPix: (input) =>
+				syncStripePix({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
+			syncSubscription: (input) =>
+				syncStripeSubscription({
+					...input,
+					requestOptions: baseRequestOptions,
+				}),
 		},
 		webhooks: {
 			async verify({ request }) {
@@ -365,6 +485,7 @@ export const stripe = ({
 				const event = body as unknown as StripeEvent;
 				const object = event.data?.object;
 				const type = STRIPE_EVENTS[event.type] ?? 'payment.created';
+
 				let data: unknown = body;
 
 				if (object) {
@@ -405,50 +526,8 @@ export const stripe = ({
 						);
 					} else {
 						const payment = object as StripePaymentObject;
-						const status: PaymentStatus =
-							('payment_status' in payment &&
-								STRIPE_PAYMENT_STATUSES[
-									payment.payment_status ?? payment.status ?? ''
-								]) ||
-							('refunded' in payment && payment.refunded && 'refunded') ||
-							STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ||
-							'pending';
-
 						data = withRaw(
-							{
-								id: payment.id,
-								provider: 'stripe',
-								amount:
-									'amount_total' in payment
-										? (payment.amount_total ?? 0)
-										: 'amount' in payment
-											? payment.amount
-											: 0,
-								currency: payment.currency ?? 'usd',
-								status,
-								checkoutUrl:
-									'url' in payment ? (payment.url ?? undefined) : undefined,
-								customer:
-									'customer_details' in payment
-										? {
-												id:
-													typeof payment.customer === 'string'
-														? payment.customer
-														: undefined,
-												externalId:
-													'client_reference_id' in payment
-														? (payment.client_reference_id ?? undefined)
-														: undefined,
-												name: payment.customer_details?.name ?? undefined,
-												email:
-													payment.customer_details?.email ??
-													payment.customer_email ??
-													undefined,
-												phone: payment.customer_details?.phone ?? undefined,
-											}
-										: undefined,
-								metadata: payment.metadata ?? undefined,
-							},
+							mapStripePaymentObject(payment),
 							payment,
 							includeRaw,
 						);

@@ -15,13 +15,17 @@
   <a href="#getting-started">Getting started</a>
 </p>
 
----
+<br>
 
-## What is Paymesh?
+<h2 align="center">What is Paymesh</h2>
 
-Paymesh is a provider-agnostic payments toolkit for TypeScript applications. It gives your app a small, typed abstraction over payment providers so you can create checkout sessions, manage customers, verify webhooks, and react to normalized payment events without spreading provider SDK details across your codebase.
+<p align="center">
+  Paymesh is a provider-agnostic payments toolkit for TypeScript applications. It gives your app a small, typed abstraction over payment providers so you can create checkout sessions, manage customers, verify webhooks, and react to normalized payment events without spreading provider SDK details across your codebase.
+</p>
 
-The core package exposes the client and provider contracts. Provider packages implement those contracts, and framework adapters make webhook handling feel native in your HTTP framework.
+<p align="center">
+  The core package exposes the client and provider contracts. Provider packages implement those contracts, and framework adapters make webhook handling feel native in your HTTP framework.
+</p>
 
 ```ts
 import { drizzle as paymeshDrizzle } from "@paymesh/drizzle";
@@ -63,9 +67,11 @@ const payment = await paymesh.payments.create({
 console.log(payment.checkoutUrl);
 ```
 
-## Getting Started
+<h2 align="center">Getting Started</h2>
 
-Install the core package, a provider, and a database adapter:
+<p align="center">
+  Install the core package, a provider, and a database adapter.
+</p>
 
 ```bash
 npm install paymesh @paymesh/stripe @paymesh/postgres
@@ -75,13 +81,27 @@ npm install paymesh @paymesh/stripe @paymesh/drizzle drizzle-orm
 npm install paymesh @paymesh/stripe @paymesh/prisma @prisma/client
 ```
 
-Available providers currently include `@paymesh/stripe` and `@paymesh/polar`.
-Available database adapters currently include `@paymesh/postgres`, `@paymesh/drizzle`, and `@paymesh/prisma`.
+<p align="center">
+  Available providers currently include <a href="./packages/stripe/README.md">@paymesh/stripe</a> and <a href="./packages/polar/README.md">@paymesh/polar</a>.
+</p>
 
-## Database and CLI
+<p align="center">
+  Available database adapters currently include <a href="./packages/postgres/README.md">@paymesh/postgres</a>, <a href="./packages/drizzle/README.md">@paymesh/drizzle</a>, and <a href="./packages/prisma/README.md">@paymesh/prisma</a>.
+</p>
 
-Paymesh can persist normalized relational data for customers, checkouts, invoices, subscriptions, webhook events, products, and prices.
-When a database is configured, `paymesh.customers.get(id)` reads from the local database instead of calling the provider API.
+<h2 align="center">Database and CLI</h2>
+
+<p align="center">
+  Paymesh can persist normalized relational data for customers, checkouts, invoices, subscriptions, webhook events, products, and prices. When a database is configured, <code>paymesh.customers.get(id)</code> reads from the local database instead of calling the provider API.
+</p>
+
+<p align="center">
+  Native PIX flows live under <code>paymesh.pix</code>. Use <code>paymesh.payments</code> for generic checkout sessions and <code>paymesh.pix</code> when you need QR code, copia-e-cola, and expiration data as first-class fields.
+</p>
+
+<p align="center">
+  Database packages: <a href="./packages/postgres/README.md">@paymesh/postgres</a>, <a href="./packages/drizzle/README.md">@paymesh/drizzle</a>, and <a href="./packages/prisma/README.md">@paymesh/prisma</a>. Operational tooling: <a href="./packages/cli/README.md">@paymesh/cli</a>.
+</p>
 
 You can pass a database adapter instance directly:
 
@@ -120,7 +140,9 @@ const paymesh = createClient({
 });
 ```
 
-The CLI reads the same client module used by your app. Point it at the module with `--client`, `PAYMESH_PATH`, or `package.json.paymesh.path`.
+<p align="center">
+  The <a href="./packages/cli/README.md">@paymesh/cli</a> package reads the same client module used by your app. Point it at the module with <code>--client</code>, <code>PAYMESH_PATH</code>, or <code>package.json.paymesh.path</code>.
+</p>
 
 ```bash
 paymesh generate --client ./src/lib/paymesh.ts
@@ -129,9 +151,13 @@ paymesh push --client ./src/lib/paymesh.ts
 paymesh status --client ./src/lib/paymesh.ts
 ```
 
-`paymesh generate` writes both `paymesh/history.json` and `paymesh/migrations/*.sql`. The history file is the schema manifest used by `migrate` and `status`.
+<p align="center">
+  <code>paymesh generate</code> writes both <code>paymesh/history.json</code> and <code>paymesh/migrations/*.sql</code>. The history file is the schema manifest used by <code>migrate</code> and <code>status</code>.
+</p>
 
-Customer writes go through a single upsert entrypoint:
+<p align="center">
+  Customer writes go through a single upsert entrypoint.
+</p>
 
 ```ts
 await paymesh.customers.upsert({
@@ -145,9 +171,15 @@ await paymesh.customers.upsert({
 });
 ```
 
-## Webhooks
+<h2 align="center">Webhooks</h2>
 
-Paymesh maps provider-specific webhook payloads into normalized events and dispatches them to typed hooks.
+<p align="center">
+  Paymesh maps provider-specific webhook payloads into normalized events and dispatches them to typed hooks.
+</p>
+
+<p align="center">
+  Webhook adapters are available for <a href="./packages/next/README.md">@paymesh/next</a>, <a href="./packages/express/README.md">@paymesh/express</a>, <a href="./packages/fastify/README.md">@paymesh/fastify</a>, <a href="./packages/hono/README.md">@paymesh/hono</a>, and <a href="./packages/elysia/README.md">@paymesh/elysia</a>.
+</p>
 
 For Next.js App Router:
 
@@ -158,6 +190,9 @@ import { paymesh } from "@/lib/paymesh";
 
 export const POST = Webhooks({
   client: paymesh,
+  async onEvent(event) {
+    console.log("Webhook event", event.type, event.id);
+  },
   async onCheckoutCompleted(event) {
     console.log("Checkout completed", event.data.id);
   },
@@ -167,13 +202,23 @@ export const POST = Webhooks({
 });
 ```
 
-Framework adapters expose the same hook API while returning responses in the shape expected by each framework.
+<p align="center">
+  Framework adapters expose the same hook API while returning responses in the shape expected by each framework, including <code>onEvent</code>, <code>onUnhandledEvent</code>, <code>onPaymentCreated</code>, <code>onPaymentSucceeded</code>, <code>onPaymentFailed</code>, <code>onPaymentCanceled</code>, <code>onPaymentRefunded</code>, <code>onCustomerCreated</code>, <code>onCustomerUpdated</code>, <code>onCustomerDeleted</code>, <code>onSubscriptionCreated</code>, <code>onSubscriptionUpdated</code>, <code>onSubscriptionCanceled</code>, and <code>onCheckoutCompleted</code>.
+</p>
 
-## Why Paymesh
+<p align="center">
+  Dispatch prefers the specific normalized hook first, falls back to <code>onEvent</code> when no specific handler exists, and uses <code>onUnhandledEvent</code> only when neither is defined.
+</p>
 
-Payment code usually starts small and then spreads provider-specific request shapes, webhook signatures, event names, and customer objects through the application. That makes it harder to test, harder to switch providers, and harder to support multiple runtimes.
+<h2 align="center">Why Paymesh</h2>
 
-Paymesh keeps those boundaries explicit:
+<p align="center">
+  Payment code usually starts small and then spreads provider-specific request shapes, webhook signatures, event names, and customer objects through the application. That makes it harder to test, harder to switch providers, and harder to support multiple runtimes.
+</p>
+
+<p align="center">
+  Paymesh keeps those boundaries explicit.
+</p>
 
 - one typed client for payment operations;
 - normalized payment, customer, and webhook event shapes;
@@ -181,8 +226,8 @@ Paymesh keeps those boundaries explicit:
 - framework adapters that handle webhook verification and dispatch;
 - optional raw provider responses when you need to inspect or store the original payload.
 
-## Contribution
+<h2 align="center">Contribution</h2>
 
-Paymesh is a free and open source project licensed under the [Apache 2.0 License](./LICENSE). You are free to use it, modify it, and build on top of it.
-
-You can help by opening issues, proposing provider integrations, improving framework adapters, and contributing fixes to the source code.
+<p align="center">
+  You can help by opening issues, proposing provider integrations, improving framework adapters, and contributing fixes to the source code.
+</p>

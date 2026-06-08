@@ -2,18 +2,23 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
 	type CompiledQuery,
 	defineDatabaseAdapter,
 	defineProvider,
+	type PaymeshEventType,
 	resolveDatabaseSchema,
+	withRaw,
 } from 'paymesh';
 import {
 	createMigrationHistory,
+	createProgram,
 	getExpectedMigrationNames,
 	getMigrationHistoryStatus,
 	getPaymeshMigrationFiles,
 	loadClient,
+	planGenerateMigrations,
 	pushProviderCatalog,
 	readMigrationFiles,
 	readMigrationHistory,
@@ -22,6 +27,7 @@ import {
 	writeMigrationFiles,
 	writeMigrationHistory,
 } from '../src/index';
+import { inspectWebhookRequest, startWebhookServer } from '../src/lib/listen';
 
 const tempDirectories: string[] = [];
 
@@ -77,6 +83,416 @@ describe('cli helpers', () => {
 		expect(namedClient.provider.id).toBe('stub');
 	});
 
+	test('triggers a built-in event from the CLI', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		const logs = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+				]);
+			}),
+		);
+
+		expect(logs).toContain('customer.created');
+		expect(logs).toContain('hooks onEvent, onCustomerCreated');
+		expect(logs).toContain('onEvent, onCustomerCreated');
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"hook":"onCustomerCreated"');
+	});
+
+	test('sends a built-in event to paymesh listen', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		const lines: string[] = [];
+		const server = await startWebhookServer({
+			client: createWebhookClient(),
+			port: 0,
+			logger: (message) => {
+				lines.push(message);
+			},
+		});
+
+		try {
+			const logs = await withinCwd(directory, () =>
+				captureLogs(async () => {
+					await createProgram().parseAsync([
+						'node',
+						'paymesh',
+						'trigger',
+						'payment.succeeded',
+						'--client',
+						'./paymesh-client.ts',
+						'--listen',
+						`http://127.0.0.1:${server.port}/webhooks`,
+					]);
+				}),
+			);
+			const listenerLine = stripAnsi(lines[0] ?? '');
+
+			expect(logs).toContain('listener http://');
+			expect(logs).toContain('status 200');
+			expect(listenerLine).toContain('source=trigger');
+			expect(listenerLine).toContain('event=payment.succeeded');
+			await expect(
+				fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+			).rejects.toThrow();
+		} finally {
+			await server.close();
+		}
+	});
+
+	test('triggers a plugin event from the CLI with json payload', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		const logs = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'{"code":"WELCOME10"}',
+				]);
+			}),
+		);
+
+		expect(logs).toContain('onCouponRedeemed');
+		expect(logs).toContain('plugin coupons');
+		expect(logs).toContain('hook onCouponRedeemed');
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"code":"WELCOME10"');
+	});
+
+	test('triggers a built-in event from a json file', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		await fs.writeFile(
+			path.join(directory, 'customer.json'),
+			JSON.stringify({ email: 'file@example.com' }),
+		);
+
+		await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'@customer.json',
+				]);
+			}),
+		);
+
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"email":"file@example.com"');
+	});
+
+	test('triggers a plugin event from a json file', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+		await fs.writeFile(
+			path.join(directory, 'coupon.json'),
+			JSON.stringify({ code: 'FILE10' }),
+		);
+
+		await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'@coupon.json',
+				]);
+			}),
+		);
+
+		expect(
+			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
+		).toContain('"code":"FILE10"');
+	});
+
+	test('rejects non-object built-in --data payloads', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'"ada@example.com"',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message: 'Built-in events require --data to be a JSON object',
+		});
+	});
+
+	test('rejects file data that does not end with json', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'customer.created',
+					'--client',
+					'./paymesh-client.ts',
+					'--data',
+					'@customer.txt',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message: 'File passed to --data must start with "@" and end with ".json"',
+		});
+	});
+
+	test('requires --data for plugin events', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message:
+				'Plugin event "onCouponRedeemed" requires --data with a JSON payload',
+		});
+	});
+
+	test('rejects sending plugin events to paymesh listen', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory);
+
+		await expect(
+			withinCwd(directory, () =>
+				createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'trigger',
+					'onCouponRedeemed',
+					'--client',
+					'./paymesh-client.ts',
+					'--listen',
+					'http://127.0.0.1:3000/webhooks',
+					'--data',
+					'{"code":"WELCOME10"}',
+				]),
+			),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message:
+				'Plugin events cannot be sent to paymesh listen. Use built-in webhook events only.',
+		});
+	});
+
+	test('inspects a valid webhook request', async () => {
+		const payload = JSON.stringify({
+			id: 'evt_123',
+			type: 'payment.succeeded',
+			data: {
+				id: 'pay_123',
+				provider: 'stub',
+			},
+		});
+		const request = new Request('http://localhost/webhooks', {
+			method: 'POST',
+			headers: {
+				'x-paymesh-signature': 'valid',
+				'content-type': 'application/json',
+			},
+			body: payload,
+		});
+
+		const result = await inspectWebhookRequest(
+			createWebhookClient().provider,
+			request,
+		);
+
+		expect(result.status).toBe(200);
+		expect(result.body).toEqual({ received: true });
+		expect(result.deliveryId).toBe('delivery_evt_123');
+		expect(result.hook).toBe('onPaymentSucceeded');
+		expect(result.rawBody).toBe(payload);
+		expect(result.event).toMatchObject({
+			id: 'evt_123',
+			type: 'payment.succeeded',
+			provider: 'stub',
+		});
+	});
+
+	test('rejects webhook requests with invalid signature', async () => {
+		const result = await inspectWebhookRequest(
+			createWebhookClient().provider,
+			new Request('http://localhost/webhooks', {
+				method: 'POST',
+				headers: {
+					'x-paymesh-signature': 'invalid',
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({ id: 'evt_123' }),
+			}),
+		);
+
+		expect(result.status).toBe(401);
+		expect(result.body).toEqual({ error: 'invalid_webhook_signature' });
+	});
+
+	test('returns a 400 when webhook payload parsing fails', async () => {
+		const result = await inspectWebhookRequest(
+			createWebhookClient().provider,
+			new Request('http://localhost/webhooks', {
+				method: 'POST',
+				headers: {
+					'x-paymesh-signature': 'valid',
+					'content-type': 'application/json',
+				},
+				body: '{',
+			}),
+		);
+
+		expect(result.status).toBe(400);
+		expect(result.body).toEqual({ error: 'webhook_handle_error' });
+	});
+
+	test('serves webhook events through the listener server and logs payloads', async () => {
+		const lines: string[] = [];
+		const server = await startWebhookServer({
+			client: createWebhookClient(),
+			port: 0,
+			logger: (message) => {
+				lines.push(message);
+			},
+		});
+
+		try {
+			const response = await fetch(`http://127.0.0.1:${server.port}/webhooks`, {
+				method: 'POST',
+				headers: {
+					'x-paymesh-signature': 'valid',
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					id: 'evt_live',
+					type: 'checkout.completed',
+					data: {
+						id: 'pay_123',
+						provider: 'stub',
+					},
+				}),
+			});
+			const summaryLine = stripAnsi(lines[0] ?? '');
+
+			expect(response.status).toBe(200);
+			await expect(response.json()).resolves.toEqual({ received: true });
+			expect(summaryLine).toContain('200');
+			expect(summaryLine).toContain('provider=stub');
+			expect(summaryLine).toContain('event=checkout.completed');
+			expect(lines[1]).toContain('"normalizedEvent"');
+			expect(lines[1]).toContain('"rawBody"');
+		} finally {
+			await server.close();
+		}
+	});
+
+	test('returns 405 for unsupported methods', async () => {
+		const lines: string[] = [];
+		const server = await startWebhookServer({
+			client: createWebhookClient(),
+			port: 0,
+			logger: (message) => {
+				lines.push(message);
+			},
+		});
+
+		try {
+			const response = await fetch(`http://127.0.0.1:${server.port}/webhooks`);
+			const summaryLine = stripAnsi(lines[0] ?? '');
+
+			expect(response.status).toBe(405);
+			await expect(response.json()).resolves.toEqual({
+				error: 'method_not_allowed',
+			});
+			expect(summaryLine).toContain('405');
+			expect(summaryLine).toContain('GET');
+		} finally {
+			await server.close();
+		}
+	});
+
+	test('fails to start the listener when provider does not support webhooks', async () => {
+		await expect(
+			startWebhookServer({
+				client: {
+					provider: defineProvider({
+						id: 'stub',
+						capabilities: {
+							checkout: true,
+						},
+						payments: {
+							create: async () => {
+								throw new Error('not used');
+							},
+						},
+						customers: {
+							get: async () => {
+								throw new Error('not used');
+							},
+							upsert: async () => {
+								throw new Error('not used');
+							},
+							delete: async () => {
+								throw new Error('not used');
+							},
+						},
+					}),
+				},
+				port: 0,
+			}),
+		).rejects.toMatchObject({
+			code: 'unsupported_capability',
+			message: 'Provider "stub" does not support webhooks capability',
+		});
+	});
+
 	test('writes and reads generated migration files', async () => {
 		const directory = await createTempProject();
 		const schema = resolveDatabaseSchema();
@@ -85,7 +501,10 @@ describe('cli helpers', () => {
 		const historyPath = resolveHistoryPath(directory);
 
 		await writeMigrationFiles(migrationsDir, files);
-		await writeMigrationHistory(historyPath, createMigrationHistory(files));
+		await writeMigrationHistory(
+			historyPath,
+			createMigrationHistory(files, schema),
+		);
 		const readBack = await readMigrationFiles(migrationsDir);
 		const history = await readMigrationHistory(historyPath);
 		const expected = await getExpectedMigrationNames(
@@ -110,6 +529,50 @@ describe('cli helpers', () => {
 			exists: true,
 			valid: true,
 		});
+	});
+
+	test('plans an incremental migration when the client schema changes', async () => {
+		const directory = await createTempProject();
+		const migrationsDir = path.join(directory, 'paymesh', 'migrations');
+		const historyPath = resolveHistoryPath(directory);
+		const initialSchema = resolveDatabaseSchema();
+		const initialFiles = getPaymeshMigrationFiles(initialSchema);
+
+		await writeMigrationFiles(migrationsDir, initialFiles);
+		await writeMigrationHistory(
+			historyPath,
+			createMigrationHistory(initialFiles, initialSchema),
+		);
+
+		const nextSchema = resolveDatabaseSchema({
+			tables: {
+				customers: {
+					fields: {
+						segment: {
+							type: 'string',
+							default: 'vip',
+							index: true,
+						},
+					},
+				},
+			},
+		});
+		const plan = await planGenerateMigrations(
+			migrationsDir,
+			historyPath,
+			nextSchema,
+		);
+
+		expect(plan.changed).toBe(true);
+		expect(plan.files).toHaveLength(1);
+		expect(plan.files[0]?.file).toBe('0003_paymesh_schema_sync.sql');
+		expect(plan.files[0]?.sql).toContain(
+			'ADD COLUMN IF NOT EXISTS "segment" TEXT DEFAULT \'vip\'',
+		);
+		expect(plan.files[0]?.sql).toContain(
+			'CREATE INDEX IF NOT EXISTS "paymesh_customers_idx_segment"',
+		);
+		expect(plan.history.schema).toEqual(nextSchema);
 	});
 
 	test('includes schema extra fields in generated migrations', () => {
@@ -145,6 +608,98 @@ describe('cli helpers', () => {
 		expect(incremental?.sql).toContain('customer');
 	});
 
+	test('includes custom plugin tables in generated migrations', () => {
+		const files = getPaymeshMigrationFiles(
+			resolveDatabaseSchema({
+				customTables: {
+					'coupons.redemptions': {
+						pluginId: 'coupons',
+						fields: {
+							code: {
+								type: 'string',
+								required: true,
+								unique: true,
+							},
+							status: {
+								type: 'enum',
+								enum: ['pending', 'redeemed'],
+								default: 'pending',
+								index: true,
+							},
+						},
+					},
+				},
+			}),
+		);
+		const initial = files.find((file) => file.version === 1);
+		const incremental = files.find((file) => file.version === 2);
+
+		expect(initial?.sql).toContain(
+			'CREATE TABLE IF NOT EXISTS "paymesh_coupons_redemptions"',
+		);
+		expect(initial?.sql).toContain('"code" TEXT NOT NULL');
+		expect(initial?.sql).toContain('"status" TEXT DEFAULT \'pending\'');
+		expect(incremental?.sql).toContain(
+			'paymesh_coupons_redemptions_idx_status',
+		);
+		expect(incremental?.sql).toContain('paymesh_coupons_redemptions_uniq_code');
+		expect(incremental?.sql).toContain("\"status\" IN ('pending', 'redeemed')");
+	});
+
+	test('supports custom table primary keys, timestamps, and explicit indexes', () => {
+		const files = getPaymeshMigrationFiles(
+			resolveDatabaseSchema({
+				customTables: {
+					'audit-logs.audit_logs': {
+						name: 'paymesh_audit_logs',
+						pluginId: 'audit-logs',
+						primaryKey: {
+							type: 'text',
+						},
+						timestamps: {
+							createdAt: true,
+							updatedAt: false,
+						},
+						fields: {
+							action: {
+								type: 'string',
+								required: true,
+							},
+							resource_type: {
+								type: 'string',
+								required: true,
+							},
+							occurred_at: {
+								type: 'date',
+								required: true,
+							},
+						},
+						indexes: [
+							{
+								name: 'paymesh_audit_logs_resource_idx',
+								columns: ['resource_type', 'action'],
+							},
+						],
+					},
+				},
+			}),
+		);
+		const initial = files.find((file) => file.version === 1);
+		const incremental = files.find((file) => file.version === 2);
+
+		expect(initial?.sql).toContain(
+			'CREATE TABLE IF NOT EXISTS "paymesh_audit_logs"',
+		);
+		expect(initial?.sql).toContain('"id" TEXT PRIMARY KEY');
+		expect(initial?.sql).toContain('"action" TEXT NOT NULL');
+		expect(initial?.sql).toContain(
+			'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()',
+		);
+		expect(initial?.sql).not.toContain('"updated_at" TIMESTAMPTZ');
+		expect(incremental?.sql).toContain('paymesh_audit_logs_resource_idx');
+		expect(incremental?.sql).toContain('("resource_type", "action")');
+	});
+
 	test('pushes catalog through cli helper', async () => {
 		const productWrites: Array<{ provider: string; count: number }> = [];
 		const priceWrites: Array<{ provider: string; count: number }> = [];
@@ -167,6 +722,12 @@ describe('cli helpers', () => {
 					},
 					async upsert() {},
 					async markDeleted() {},
+				},
+				pix: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
 				},
 				checkouts: {
 					async findByProviderId() {
@@ -275,4 +836,195 @@ async function createTempProject() {
 	const directory = await fs.mkdtemp(path.join(tmpdir(), 'paymesh-cli-'));
 	tempDirectories.push(directory);
 	return directory;
+}
+
+async function writeCliClient(directory: string) {
+	const paymeshModuleUrl = pathToFileURL(
+		path.resolve(process.cwd(), 'packages/paymesh/src/index.ts'),
+	).href;
+	const logFile = path.join(directory, 'trigger-log.json');
+
+	await fs.writeFile(
+		path.join(directory, 'paymesh-client.ts'),
+		`
+import { appendFileSync } from "node:fs";
+import { createClient, definePlugin, defineProvider } from ${JSON.stringify(paymeshModuleUrl)};
+
+const coupons = definePlugin({
+	id: 'coupons',
+	events: {
+		onCouponRedeemed: {
+			description: 'Triggered when a coupon is redeemed',
+		},
+	},
+});
+
+export default createClient({
+	provider: defineProvider({
+		id: 'stub',
+		capabilities: {
+			checkout: true,
+			customers: true,
+		},
+		payments: {
+			create: async () => {
+				throw new Error('not used');
+			},
+		},
+		customers: {
+			get: async () => {
+				throw new Error('not used');
+			},
+			upsert: async () => {
+				throw new Error('not used');
+			},
+			delete: async () => {
+				throw new Error('not used');
+			},
+		},
+	}),
+	plugins: [coupons] as const,
+	hooks: {
+		onEvent(event) {
+			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
+				hook: 'onEvent',
+				type: event.type,
+			}) + "\\n");
+		},
+		onCustomerCreated(event) {
+			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
+				hook: 'onCustomerCreated',
+				customerId: event.data.id,
+				email: event.data.email,
+			}) + "\\n");
+		},
+		onCouponRedeemed(event) {
+			appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({
+				hook: 'onCouponRedeemed',
+				code: event.data.code,
+			}) + "\\n");
+		},
+	},
+});
+`.trim(),
+	);
+}
+
+function createWebhookClient() {
+	return {
+		provider: defineProvider({
+			id: 'stub',
+			capabilities: {
+				checkout: true,
+				customers: true,
+				webhooks: true,
+			},
+			payments: {
+				create: async () => {
+					throw new Error('not used');
+				},
+			},
+			customers: {
+				get: async () => {
+					throw new Error('not used');
+				},
+				upsert: async () => {
+					throw new Error('not used');
+				},
+				delete: async () => {
+					throw new Error('not used');
+				},
+			},
+			webhooks: {
+				async verify({ request }) {
+					return request.headers.get('x-paymesh-signature') === 'valid';
+				},
+				async handle({ request, includeRaw }) {
+					const payload = (await request.json()) as {
+						id: string;
+						type: PaymeshEventType;
+						data: {
+							id: string;
+							provider: string;
+						};
+					};
+
+					return {
+						deliveryId: `delivery_${payload.id}`,
+						hook:
+							payload.type === 'payment.succeeded'
+								? 'onPaymentSucceeded'
+								: 'onCheckoutCompleted',
+						event: withRaw(
+							{
+								id: payload.id,
+								type: payload.type,
+								provider: 'stub',
+								data: payload.data,
+							},
+							payload,
+							includeRaw,
+						),
+					};
+				},
+			},
+		}),
+		schema: resolveDatabaseSchema(),
+	};
+}
+
+async function captureLogs(callback: () => Promise<void>) {
+	const originalLog = console.log;
+	const lines: string[] = [];
+
+	console.log = (...args: unknown[]) => {
+		lines.push(stripAnsi(args.map((value) => String(value)).join(' ')));
+	};
+
+	try {
+		await callback();
+	} finally {
+		console.log = originalLog;
+	}
+
+	return lines.join('\n');
+}
+
+function stripAnsi(value: string) {
+	let output = '';
+	let i = 0;
+
+	while (i < value.length) {
+		const current = value.charAt(i);
+
+		if (current !== '\u001b') {
+			output += current;
+			i += 1;
+			continue;
+		}
+
+		i += 1;
+		if (value.charAt(i) === '[') {
+			i += 1;
+
+			while (i < value.length) {
+				const code = value.charAt(i);
+				i += 1;
+				if (code !== ';' && (code < '0' || code > '9')) break;
+			}
+		}
+	}
+
+	return output;
+}
+
+async function withinCwd<T>(directory: string, callback: () => Promise<T>) {
+	const previous = process.cwd();
+	process.chdir(directory);
+
+	try {
+		return await callback();
+	} finally {
+		process.chdir(previous);
+	}
 }

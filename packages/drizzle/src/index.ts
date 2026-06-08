@@ -6,10 +6,17 @@ import {
 } from 'paymesh';
 import { createRepositories } from './repositories';
 
+/**
+ * Options for the Drizzle adapter.
+ */
 export interface DrizzleDatabaseOptions {
+	/** Keeps raw provider payloads attached to stored rows when enabled. Defaults to `false`. */
 	persistRaw?: boolean;
 }
 
+/**
+ * Minimal Drizzle database contract required by the adapter.
+ */
 export interface DrizzleDatabase {
 	_: {
 		session: {
@@ -28,6 +35,14 @@ export interface DrizzleDatabase {
 	): Promise<T>;
 }
 
+/**
+ * Creates a Paymesh database adapter backed by a Drizzle database instance.
+ *
+ * @example
+ * ```ts
+ * export const database = drizzle(db, { persistRaw: false });
+ * ```
+ */
 export function drizzle(
 	database: DrizzleDatabase,
 	options?: DrizzleDatabaseOptions,
@@ -41,7 +56,10 @@ export function drizzle(
 			.catch((error) => {
 				throw PaymeshError.wrap(error, {
 					code: 'database_error',
-					message: 'Failed to execute database query',
+					message: formatDatabaseErrorMessage(
+						'Failed to execute database query',
+						error,
+					),
 				});
 			});
 
@@ -78,8 +96,19 @@ export function drizzle(
 				.catch((error) => {
 					throw PaymeshError.wrap(error, {
 						code: 'database_error',
-						message: 'Failed to execute database transaction',
+						message: formatDatabaseErrorMessage(
+							'Failed to execute database transaction',
+							error,
+						),
 					});
 				}),
 	});
+}
+
+function formatDatabaseErrorMessage(prefix: string, error: unknown) {
+	if (error instanceof Error && error.message.length > 0) {
+		return `${prefix}: ${error.message}`;
+	}
+
+	return prefix;
 }

@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { PaymeshError } from 'paymesh';
 import { loadClient } from '../lib/client';
 import {
 	getAppliedPaymeshMigrations,
@@ -6,6 +7,7 @@ import {
 	resolveHistoryPath,
 	resolveMigrationsDir,
 } from '../lib/migrations';
+import { formatPath, logInfo, logSuccess } from '../lib/output';
 import { compileQuery } from '../lib/sql';
 
 export function registerMigrateCommand(program: Command) {
@@ -23,9 +25,11 @@ export function registerMigrateCommand(program: Command) {
 				explicitPath: options.client,
 			});
 
-			if (!client.database) {
-				throw new Error('The configured client does not define a database');
-			}
+			if (!client.database)
+				throw new PaymeshError({
+					code: 'client_error',
+					message: 'The configured client does not define a database',
+				});
 
 			try {
 				const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);
@@ -46,11 +50,11 @@ export function registerMigrateCommand(program: Command) {
 							file.file,
 						);
 					});
-					console.log(`Applied ${file.file}`);
+					logSuccess(`Applied ${formatPath(file.file)}`);
 				}
 
 				if (pending.length === 0) {
-					console.log('Database already up to date');
+					logInfo('Database already up to date');
 				}
 			} finally {
 				await client.database.close?.();
