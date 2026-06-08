@@ -112,6 +112,17 @@ function mapPolarOrderPayment(order: PolarOrder) {
 	};
 }
 
+/**
+ * Creates a Polar provider configured for Paymesh.
+ *
+ * @example
+ * ```ts
+ * export const provider = polar({
+ *   accessToken: process.env.POLAR_ACCESS_TOKEN,
+ *   webhookSecret: process.env.POLAR_WEBHOOK_SECRET,
+ * });
+ * ```
+ */
 export const polar = ({
 	accessToken = process.env.POLAR_ACCESS_TOKEN,
 	webhookSecret = process.env.POLAR_WEBHOOK_SECRET,

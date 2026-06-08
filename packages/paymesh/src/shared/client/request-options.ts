@@ -9,6 +9,15 @@ interface ClientRequestDefaults {
 	includeRaw?: boolean;
 }
 
+/**
+ * Creates a merge function for provider request options with client defaults.
+ *
+ * @example
+ * ```ts
+ * const merge = createRequestOptionsMerger({ baseUrl: 'https://api.example.com' });
+ * const options = merge({ includeRaw: true });
+ * ```
+ */
 export function createRequestOptionsMerger(defaults: ClientRequestDefaults) {
 	return <IncludeRaw extends boolean = false>(
 		requestOptions?: ProviderRequestOptions<IncludeRaw>,

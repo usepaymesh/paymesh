@@ -1,3 +1,6 @@
+/**
+ * Canonical error codes emitted by Paymesh and its adapters.
+ */
 export type PaymeshErrorCode =
 	| 'provider_error'
 	| 'plugin_error'
@@ -15,25 +18,48 @@ export type PaymeshErrorCode =
 	| 'client_error'
 	| 'cli_error';
 
+/**
+ * Structured input used to build a `PaymeshError`.
+ */
 export interface PaymeshErrorProps {
+	/** Stable machine-readable error code. */
 	code: PaymeshErrorCode;
+	/** Human-readable message for logs and consumers. */
 	message: string;
+	/** Provider identifier associated with the failure, when available. */
 	provider?: string;
+	/** HTTP status code returned by the upstream provider, when available. */
 	status?: number;
+	/** HTTP status text returned by the upstream provider, when available. */
 	statusText?: string;
+	/** Upstream URL involved in the failure, when available. */
 	url?: string;
+	/** Parsed response body or low-level payload associated with the error. */
 	body?: unknown;
+	/** Original thrown value. */
 	cause?: unknown;
 }
 
+/**
+ * Error type used across the public Paymesh API.
+ */
 export class PaymeshError extends Error {
+	/** Stable machine-readable error code. */
 	readonly code: PaymeshErrorCode;
+	/** Provider identifier associated with the failure, when available. */
 	readonly provider?: string;
+	/** HTTP status code returned by the upstream provider, when available. */
 	readonly status?: number;
+	/** HTTP status text returned by the upstream provider, when available. */
 	readonly statusText?: string;
+	/** Upstream URL involved in the failure, when available. */
 	readonly url?: string;
+	/** Parsed response body or low-level payload associated with the error. */
 	readonly body?: unknown;
 
+	/**
+	 * Creates a new Paymesh error from structured metadata.
+	 */
 	constructor(props: PaymeshErrorProps) {
 		super(props.message, { cause: props.cause });
 
@@ -46,6 +72,9 @@ export class PaymeshError extends Error {
 		this.body = props.body;
 	}
 
+	/**
+	 * Returns the current error state as a serializable object.
+	 */
 	get props(): PaymeshErrorProps {
 		return {
 			code: this.code,
@@ -59,6 +88,9 @@ export class PaymeshError extends Error {
 		};
 	}
 
+	/**
+	 * Wraps an unknown error in `PaymeshError` unless it already is one.
+	 */
 	static wrap(
 		error: unknown,
 		props: Omit<PaymeshErrorProps, 'message' | 'cause'> & {

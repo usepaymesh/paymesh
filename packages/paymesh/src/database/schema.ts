@@ -12,8 +12,14 @@ import type {
 	ResolvedDatabaseSchema,
 } from '../types/database';
 
+/**
+ * Default prefix applied to Paymesh-managed database tables.
+ */
 export const PAYMESH_DEFAULT_SCHEMA_PREFIX = 'paymesh_';
 
+/**
+ * Canonical table names used by the built-in schema resolver.
+ */
 export const PAYMESH_DATABASE_TABLE_NAMES = {
 	customers: 'customers',
 	pix: 'pix',
@@ -29,10 +35,28 @@ export const PAYMESH_DATABASE_TABLE_NAMES = {
 	migrations: 'migrations',
 } satisfies Record<DatabaseTableKey, string>;
 
+/**
+ * Ordered list of built-in database table keys.
+ */
 export const PAYMESH_DATABASE_TABLE_KEYS = Object.keys(
 	PAYMESH_DATABASE_TABLE_NAMES,
 ) as DatabaseTableKey[];
 
+/**
+ * Resolves a user schema into concrete table and custom-table metadata.
+ *
+ * @example
+ * ```ts
+ * const schema = resolveDatabaseSchema({
+ *   prefix: 'app_',
+ *   customTables: {
+ *     'audit.logs': {
+ *       fields: { action: { type: 'string', required: true } },
+ *     },
+ *   },
+ * });
+ * ```
+ */
 export function resolveDatabaseSchema(
 	schema: DatabaseSchemaOptions = {},
 ): ResolvedDatabaseSchema {
@@ -57,6 +81,14 @@ export function resolveDatabaseSchema(
 	};
 }
 
+/**
+ * Merges the base schema with plugin-provided schema extensions.
+ *
+ * @example
+ * ```ts
+ * const merged = mergeDatabaseSchemas(baseSchema, [pluginSchema]);
+ * ```
+ */
 export function mergeDatabaseSchemas(
 	base: DatabaseSchemaOptions = {},
 	extensions: DatabaseSchemaOptions[] = [],

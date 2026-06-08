@@ -7,10 +7,24 @@ import {
 import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { createRepositories } from './repositories';
 
+/**
+ * Options for the Postgres adapter.
+ */
 export interface PostgresDatabaseOptions {
+	/** Keeps raw provider payloads attached to stored rows when enabled. Defaults to `false`. */
 	persistRaw?: boolean;
 }
 
+/**
+ * Creates a Paymesh database adapter backed by `pg`.
+ *
+ * @example
+ * ```ts
+ * export const database = postgres(process.env.DATABASE_URL, {
+ *   persistRaw: true,
+ * });
+ * ```
+ */
 export function postgres(
 	connection: string | Pool,
 	options?: PostgresDatabaseOptions,

@@ -2,6 +2,9 @@ import { mergeDatabaseSchemas } from '../../database/schema';
 import type { DatabaseSchemaOptions } from '../../types/database';
 import type { AnyPaymeshPlugin, PluginSchema } from '../../types/plugins';
 
+/**
+ * Resolves client schema options by merging plugin schema extensions into the base schema.
+ */
 export function resolveClientSchemaOptions(
 	base: DatabaseSchemaOptions | undefined,
 	plugins: readonly AnyPaymeshPlugin[],

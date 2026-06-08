@@ -230,6 +230,17 @@ function mapStripePaymentObject(payment: StripePaymentObject): BaseAnyPayment {
 	};
 }
 
+/**
+ * Creates a Stripe provider configured for Paymesh.
+ *
+ * @example
+ * ```ts
+ * export const provider = stripe({
+ *   secret: process.env.STRIPE_API_KEY,
+ *   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+ * });
+ * ```
+ */
 export const stripe = ({
 	secret = process.env.STRIPE_API_KEY,
 	webhookSecret = process.env.STRIPE_WEBHOOK_SECRET,

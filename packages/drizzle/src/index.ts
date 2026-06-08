@@ -6,10 +6,17 @@ import {
 } from 'paymesh';
 import { createRepositories } from './repositories';
 
+/**
+ * Options for the Drizzle adapter.
+ */
 export interface DrizzleDatabaseOptions {
+	/** Keeps raw provider payloads attached to stored rows when enabled. Defaults to `false`. */
 	persistRaw?: boolean;
 }
 
+/**
+ * Minimal Drizzle database contract required by the adapter.
+ */
 export interface DrizzleDatabase {
 	_: {
 		session: {
@@ -28,6 +35,14 @@ export interface DrizzleDatabase {
 	): Promise<T>;
 }
 
+/**
+ * Creates a Paymesh database adapter backed by a Drizzle database instance.
+ *
+ * @example
+ * ```ts
+ * export const database = drizzle(db, { persistRaw: false });
+ * ```
+ */
 export function drizzle(
 	database: DrizzleDatabase,
 	options?: DrizzleDatabaseOptions,

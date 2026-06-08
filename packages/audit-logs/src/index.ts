@@ -34,6 +34,17 @@ import type {
 
 export type * from './types';
 
+/**
+ * Creates the Audit Logs plugin, which persists normalized Paymesh events into a database table.
+ *
+ * @example
+ * ```ts
+ * export const auditLogs = auditLog({
+ *   events: ['payment.*', 'customer.*'],
+ *   includeRequestInfo: true,
+ * });
+ * ```
+ */
 export function auditLog(options: AuditLogOptions = {}) {
 	if (options.tamperEvident)
 		throw new PaymeshError({
@@ -42,19 +53,31 @@ export function auditLog(options: AuditLogOptions = {}) {
 		});
 
 	const config = {
+		/** Defaults to `['*']`. */
 		events: options.events ?? ['*'],
+		/** Defaults to `[]`. */
 		exclude: options.exclude ?? [],
+		/** Defaults to `'async'`. */
 		mode: options.mode ?? 'async',
+		/** Defaults to `'warn'`. */
 		failureMode: options.failureMode ?? 'warn',
+		/** Defaults to `'1y'`. */
 		retention: options.retention ?? '1y',
+		/** Defaults to `true`. */
 		redact: options.redact ?? true,
+		/** Defaults to `true`. */
 		includeDiff: options.includeDiff ?? true,
+		/** Defaults to `true`. */
 		includeProviderMetadata: options.includeProviderMetadata ?? true,
+		/** Defaults to `true`. */
 		includeRequestInfo: options.includeRequestInfo ?? true,
 		actor: options.actor,
 		batch: {
+			/** Defaults to `false`. */
 			enabled: options.batch?.enabled ?? false,
+			/** Defaults to `100`. */
 			size: options.batch?.size ?? 100,
+			/** Defaults to `1_000`. */
 			flushInterval: options.batch?.flushInterval ?? 1_000,
 		},
 	} satisfies ResolvedAuditLogOptions;

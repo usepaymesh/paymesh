@@ -6,10 +6,17 @@ import {
 } from 'paymesh';
 import { createRepositories } from './repositories';
 
+/**
+ * Options for the Prisma adapter.
+ */
 export interface PrismaDatabaseOptions {
+	/** Keeps raw provider payloads attached to stored rows when enabled. Defaults to `false`. */
 	persistRaw?: boolean;
 }
 
+/**
+ * Minimal Prisma client contract required by the adapter.
+ */
 export interface PrismaDatabase {
 	$queryRawUnsafe<Row = unknown>(
 		query: string,
@@ -24,6 +31,14 @@ export interface PrismaDatabase {
 	): Promise<T>;
 }
 
+/**
+ * Creates a Paymesh database adapter backed by a Prisma client.
+ *
+ * @example
+ * ```ts
+ * export const database = prisma(prismaClient, { persistRaw: true });
+ * ```
+ */
 export function prisma(
 	database: PrismaDatabase,
 	options?: PrismaDatabaseOptions,

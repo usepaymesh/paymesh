@@ -5,12 +5,25 @@ interface FastifyRequestWithRawBody extends FastifyRequest {
 	rawBody?: unknown;
 }
 
+/**
+ * Options for mounting the Paymesh webhook handler in Fastify.
+ */
 export interface WebhooksOptions<IncludeRaw extends boolean = false>
 	extends PaymeshHooks<IncludeRaw> {
+	/** Preconfigured Paymesh client instance. */
 	client: PaymeshClient<IncludeRaw>;
+	/** Propagates raw payloads to webhook handlers when enabled. Defaults to `false`. */
 	includeRaw?: IncludeRaw;
 }
 
+/**
+ * Creates a Fastify-compatible webhook handler for Paymesh.
+ *
+ * @example
+ * ```ts
+ * fastify.post('/webhooks/paymesh', Webhooks({ client }));
+ * ```
+ */
 export function Webhooks<IncludeRaw extends boolean = false>({
 	client,
 	includeRaw,

@@ -42,6 +42,19 @@ export type * from './types/database';
 export type * from './types/plugins';
 export type * from './types/providers';
 export { defineDatabaseAdapter, resolveDatabaseSchema };
+
+/**
+ * Creates a Paymesh client from a provider, optional database adapter, and plugin list.
+ *
+ * @example
+ * ```ts
+ * const client = createClient({
+ *   provider: stripe({ secret: process.env.STRIPE_API_KEY }),
+ *   database: postgres(process.env.DATABASE_URL),
+ *   includeRaw: false,
+ * });
+ * ```
+ */
 export const createClient = <
 	const Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
 	P extends Provider<string> = Provider<string>,
