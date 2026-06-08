@@ -211,14 +211,11 @@ export function bootstrapPlugins<
 				});
 			}
 
-			const pluginMetadata = pluginMetadataById[plugin.id];
-			if (!pluginMetadata) {
-				throw new PaymeshError({
-					code: 'plugin_error',
-					message: `Plugin "${plugin.id}" metadata could not be resolved.`,
-					provider: provider.id,
-				});
-			}
+			const pluginMetadata = getPluginMetadata(
+				pluginMetadataById,
+				plugin.id,
+				provider.id,
+			);
 
 			const metadata = {
 				pluginId: plugin.id,
@@ -282,14 +279,11 @@ export function bootstrapPlugins<
 	};
 
 	for (const plugin of plugins) {
-		const pluginMetadata = pluginMetadataById[plugin.id];
-		if (!pluginMetadata) {
-			throw new PaymeshError({
-				code: 'plugin_error',
-				message: `Plugin "${plugin.id}" metadata could not be resolved.`,
-				provider: provider.id,
-			});
-		}
+		const pluginMetadata = getPluginMetadata(
+			pluginMetadataById,
+			plugin.id,
+			provider.id,
+		);
 
 		const emit = createPluginEmitter({
 			dispatchHook: createHookDispatcher(),
@@ -340,17 +334,13 @@ export function bootstrapPlugins<
 		async handle(request, options) {
 			const pathname = new URL(request.url).pathname;
 			const method = request.method.toUpperCase();
-			const resolved = routeRegistrations.find(
-				(candidate) =>
-					candidate.metadata.method === method &&
-					matchRoute(candidate.matcher, pathname) !== null,
+			const resolved = findRouteRegistration(
+				routeRegistrations,
+				method,
+				pathname,
 			);
 
 			if (!resolved) {
-				return Response.json({ error: 'route_not_found' }, { status: 404 });
-			}
-			const params = matchRoute(resolved.matcher, pathname);
-			if (!params) {
 				return Response.json({ error: 'route_not_found' }, { status: 404 });
 			}
 
@@ -365,7 +355,7 @@ export function bootstrapPlugins<
 			});
 			const context = {
 				locals: {},
-				params,
+				params: resolved.params,
 				request,
 				route: resolved.metadata,
 				client: client as never,
@@ -495,14 +485,11 @@ function collectExtensions<
 	const mergedExtensions: Record<string, unknown> = {};
 
 	for (const plugin of plugins) {
-		const pluginMetadata = pluginMetadataById[plugin.id];
-		if (!pluginMetadata) {
-			throw new PaymeshError({
-				code: 'plugin_error',
-				message: `Plugin "${plugin.id}" metadata could not be resolved.`,
-				provider: provider.id,
-			});
-		}
+		const pluginMetadata = getPluginMetadata(
+			pluginMetadataById,
+			plugin.id,
+			provider.id,
+		);
 
 		const emit = createPluginEmitter({
 			dispatchHook: createDispatcher(),
@@ -575,6 +562,43 @@ function collectExtensions<
 	}
 
 	return mergedExtensions as PluginClientExtensions<Plugins>;
+}
+
+function getPluginMetadata(
+	pluginMetadataById: Record<string, RegisteredPaymeshPlugin>,
+	pluginId: string,
+	providerId: string,
+) {
+	const pluginMetadata = pluginMetadataById[pluginId];
+	if (!pluginMetadata) {
+		throw new PaymeshError({
+			code: 'plugin_error',
+			message: `Plugin "${pluginId}" metadata could not be resolved.`,
+			provider: providerId,
+		});
+	}
+
+	return pluginMetadata;
+}
+
+function findRouteRegistration(
+	routeRegistrations: Array<RouteRegistration>,
+	method: string,
+	pathname: string,
+) {
+	for (const route of routeRegistrations) {
+		if (route.metadata.method !== method) continue;
+
+		const params = matchRoute(route.matcher, pathname);
+		if (!params) continue;
+
+		return {
+			...route,
+			params,
+		};
+	}
+
+	return null;
 }
 
 function createPluginEmitter({
