@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { PaymeshError } from 'paymesh';
 import { pushProviderCatalog } from '../lib/catalog';
 import { loadClient } from '../lib/client';
+import { formatValue, logSuccess } from '../lib/output';
 
 export function registerPushCommand(program: Command) {
 	program
@@ -27,8 +28,10 @@ export function registerPushCommand(program: Command) {
 
 			try {
 				const summary = await pushProviderCatalog(client);
-				console.log(`Products: ${summary.products}`);
-				console.log(`Prices: ${summary.prices}`);
+
+				logSuccess(
+					`Catalog synchronized: ${formatValue(String(summary.products))} products, ${formatValue(String(summary.prices))} prices`,
+				);
 			} finally {
 				await client.database.close?.();
 			}

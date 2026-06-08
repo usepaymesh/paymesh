@@ -8,6 +8,7 @@ import {
 	writeMigrationFiles,
 	writeMigrationHistory,
 } from '../lib/migrations';
+import { formatPath, logInfo, logSuccess } from '../lib/output';
 
 export function registerGenerateCommand(program: Command) {
 	program
@@ -32,10 +33,11 @@ export function registerGenerateCommand(program: Command) {
 			);
 
 			if (!plan.changed) {
-				if (plan.historyChanged) {
+				if (plan.historyChanged)
 					await writeMigrationHistory(historyPath, plan.history);
-				}
-				console.log('No schema changes detected');
+
+				logInfo('No schema changes detected');
+
 				return;
 			}
 
@@ -44,11 +46,13 @@ export function registerGenerateCommand(program: Command) {
 				writeMigrationHistory(historyPath, plan.history),
 			]);
 
-			for (const file of plan.files) {
-				console.log(
-					path.relative(process.cwd(), path.join(migrationsDir, file.file)),
+			for (const file of plan.files)
+				logSuccess(
+					formatPath(
+						path.relative(process.cwd(), path.join(migrationsDir, file.file)),
+					),
 				);
-			}
-			console.log(path.relative(process.cwd(), historyPath));
+
+			logSuccess(formatPath(path.relative(process.cwd(), historyPath)));
 		});
 }

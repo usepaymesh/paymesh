@@ -100,7 +100,7 @@ describe('cli helpers', () => {
 		);
 
 		expect(logs).toContain('customer.created');
-		expect(logs).toContain('hooks:');
+		expect(logs).toContain('hooks onEvent, onCustomerCreated');
 		expect(logs).toContain('onEvent, onCustomerCreated');
 		expect(
 			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
@@ -134,11 +134,12 @@ describe('cli helpers', () => {
 					]);
 				}),
 			);
+			const listenerLine = stripAnsi(lines[0] ?? '');
 
-			expect(logs).toContain('listener:');
-			expect(logs).toContain(`status=200`);
-			expect(lines[0]).toContain('source=trigger');
-			expect(lines[0]).toContain('event=payment.succeeded');
+			expect(logs).toContain('listener http://');
+			expect(logs).toContain('status 200');
+			expect(listenerLine).toContain('source=trigger');
+			expect(listenerLine).toContain('event=payment.succeeded');
 			await expect(
 				fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
 			).rejects.toThrow();
@@ -166,8 +167,8 @@ describe('cli helpers', () => {
 		);
 
 		expect(logs).toContain('onCouponRedeemed');
-		expect(logs).toContain('plugin:coupons');
-		expect(logs).toContain('hooks:');
+		expect(logs).toContain('plugin coupons');
+		expect(logs).toContain('hook onCouponRedeemed');
 		expect(
 			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
 		).toContain('"code":"WELCOME10"');
@@ -418,12 +419,13 @@ describe('cli helpers', () => {
 					},
 				}),
 			});
+			const summaryLine = stripAnsi(lines[0] ?? '');
 
 			expect(response.status).toBe(200);
 			await expect(response.json()).resolves.toEqual({ received: true });
-			expect(lines[0]).toContain('[200]');
-			expect(lines[0]).toContain('provider=stub');
-			expect(lines[0]).toContain('event=checkout.completed');
+			expect(summaryLine).toContain('200');
+			expect(summaryLine).toContain('provider=stub');
+			expect(summaryLine).toContain('event=checkout.completed');
 			expect(lines[1]).toContain('"normalizedEvent"');
 			expect(lines[1]).toContain('"rawBody"');
 		} finally {
@@ -443,12 +445,14 @@ describe('cli helpers', () => {
 
 		try {
 			const response = await fetch(`http://127.0.0.1:${server.port}/webhooks`);
+			const summaryLine = stripAnsi(lines[0] ?? '');
 
 			expect(response.status).toBe(405);
 			await expect(response.json()).resolves.toEqual({
 				error: 'method_not_allowed',
 			});
-			expect(lines[0]).toContain('[405]');
+			expect(summaryLine).toContain('405');
+			expect(summaryLine).toContain('GET');
 		} finally {
 			await server.close();
 		}
@@ -974,7 +978,7 @@ async function captureLogs(callback: () => Promise<void>) {
 	const lines: string[] = [];
 
 	console.log = (...args: unknown[]) => {
-		lines.push(args.map((value) => String(value)).join(' '));
+		lines.push(stripAnsi(args.map((value) => String(value)).join(' ')));
 	};
 
 	try {
@@ -984,6 +988,34 @@ async function captureLogs(callback: () => Promise<void>) {
 	}
 
 	return lines.join('\n');
+}
+
+function stripAnsi(value: string) {
+	let output = '';
+	let i = 0;
+
+	while (i < value.length) {
+		const current = value.charAt(i);
+
+		if (current !== '\u001b') {
+			output += current;
+			i += 1;
+			continue;
+		}
+
+		i += 1;
+		if (value.charAt(i) === '[') {
+			i += 1;
+
+			while (i < value.length) {
+				const code = value.charAt(i);
+				i += 1;
+				if (code !== ';' && (code < '0' || code > '9')) break;
+			}
+		}
+	}
+
+	return output;
 }
 
 async function withinCwd<T>(directory: string, callback: () => Promise<T>) {

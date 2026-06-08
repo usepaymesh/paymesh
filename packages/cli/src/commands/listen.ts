@@ -1,8 +1,8 @@
 import type { Command } from 'commander';
 import { PaymeshError } from 'paymesh';
-import pc from 'picocolors';
 import { loadClient } from '../lib/client';
 import { startWebhookServer } from '../lib/listen';
+import { formatPath, logInfo, logSuccess } from '../lib/output';
 
 export function registerListenCommand(program: Command) {
 	program
@@ -28,13 +28,15 @@ export function registerListenCommand(program: Command) {
 			});
 			const server = await startWebhookServer({ client, port });
 
-			console.log(
-				`${pc.magenta('✦')} Listening for ${pc.bold(client.provider.id)} webhooks on ${pc.cyan(`http://127.0.0.1:${server.port}`)}`,
+			logSuccess(
+				`Listening for ${client.provider.id} webhooks on ${formatPath(`http://127.0.0.1:${server.port}`)}`,
 			);
 
 			await waitForShutdown(async () => {
 				await server.close();
 				await client.database?.close?.();
+
+				logInfo('Webhook listener stopped');
 			});
 		});
 }
@@ -44,6 +46,7 @@ async function waitForShutdown(close: () => Promise<void>) {
 		let closed = false;
 
 		const handleSignal = (signal: NodeJS.Signals) => {
+			logInfo(`Received ${signal}, shutting down...`);
 			void shutdown(signal);
 		};
 		const handleError = (error: unknown) => {

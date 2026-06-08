@@ -1,6 +1,7 @@
 import http from 'node:http';
 import type { PaymeshClient } from 'paymesh';
 import { PaymeshError } from 'paymesh';
+import pc from 'picocolors';
 
 type WebhookProvider = PaymeshClient<boolean>['provider'];
 
@@ -195,15 +196,20 @@ export function formatSummary(input: {
 	source: 'provider' | 'trigger';
 }) {
 	const details = [
-		`${input.method.toUpperCase()} ${input.path}`,
-		`source=${input.source}`,
-		`provider=${input.providerId}`,
+		`${pc.bold(input.method.toUpperCase())} ${pc.dim(input.path)}`,
+		`${pc.dim('source')}=${input.source === 'trigger' ? pc.magenta(input.source) : pc.cyan(input.source)}`,
+		`${pc.dim('provider')}=${pc.bold(input.providerId)}`,
 	];
 
-	if (input.eventType) details.push(`event=${input.eventType}`);
-	if (input.deliveryId) details.push(`delivery=${input.deliveryId}`);
+	if (input.eventType)
+		details.push(`${pc.dim('event')}=${pc.green(input.eventType)}`);
+	if (input.deliveryId)
+		details.push(`${pc.dim('delivery')}=${pc.yellow(input.deliveryId)}`);
 
-	return `[${input.status}] ${details.join(' ')}`;
+	const statusTone =
+		input.status >= 400 ? pc.red : input.status >= 300 ? pc.yellow : pc.green;
+
+	return `${statusTone('✦')} ${pc.bold(String(input.status))} ${details.join(' ')}`;
 }
 
 function inspectTriggeredEvent(

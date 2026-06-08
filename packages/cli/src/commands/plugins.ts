@@ -1,6 +1,12 @@
 import type { Command } from 'commander';
-import pc from 'picocolors';
 import { loadClient } from 'src/lib/client';
+import {
+	formatBadge,
+	formatPath,
+	formatValue,
+	logInfo,
+	logTitle,
+} from '../lib/output';
 
 export function registerPluginsCommand(program: Command) {
 	return program
@@ -18,17 +24,22 @@ export function registerPluginsCommand(program: Command) {
 
 			const plugins = client.plugins.list();
 
-			if (!plugins.length)
-				return console.log('Currenct client does not have any plugin');
+			if (!plugins.length) {
+				logInfo('Current client does not have any plugins');
+
+				return;
+			}
 
 			const maxNameLength = Math.max(...plugins.map(({ id }) => id.length));
 
 			const content = plugins
 				.map(
 					({ id, name, version, description }) =>
-						`${pc.magenta('✦')} ${pc.bold((name ?? id).padEnd(maxNameLength))} (${version ?? 'No version'}): ${pc.dim(description ?? 'No description')}`,
+						`${formatBadge('✦')} ${formatValue((name ?? id).padEnd(maxNameLength))} ${formatPath(`(${version ?? 'no version'})`)} ${description ? `- ${description}` : formatPath('no description')}`,
 				)
 				.join('\n');
+
+			logTitle('Registered plugins', `${plugins.length} total`);
 
 			console.log(content);
 		});

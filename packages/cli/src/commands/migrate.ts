@@ -7,6 +7,7 @@ import {
 	resolveHistoryPath,
 	resolveMigrationsDir,
 } from '../lib/migrations';
+import { formatPath, logInfo, logSuccess } from '../lib/output';
 import { compileQuery } from '../lib/sql';
 
 export function registerMigrateCommand(program: Command) {
@@ -49,11 +50,11 @@ export function registerMigrateCommand(program: Command) {
 							file.file,
 						);
 					});
-					console.log(`Applied ${file.file}`);
+					logSuccess(`Applied ${formatPath(file.file)}`);
 				}
 
 				if (pending.length === 0) {
-					console.log('Database already up to date');
+					logInfo('Database already up to date');
 				}
 			} finally {
 				await client.database.close?.();

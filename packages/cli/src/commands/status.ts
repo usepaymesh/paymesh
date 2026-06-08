@@ -6,6 +6,7 @@ import {
 	resolveHistoryPath,
 	resolveMigrationsDir,
 } from '../lib/migrations';
+import { formatState, formatValue, logTitle } from '../lib/output';
 import { getPaymeshStatus } from '../lib/status';
 
 export function registerStatusCommand(program: Command) {
@@ -42,26 +43,27 @@ export function registerStatusCommand(program: Command) {
 					history,
 				);
 
-				console.log(`Provider: ${status.provider.id}`);
+				logTitle('Paymesh status', `provider ${status.provider.id}`);
+				console.log(`  Provider    ${formatValue(status.provider.id)}`);
 				console.log(
-					`Database: ${status.database.configured ? (status.database.connected ? 'connected' : 'configured') : 'not configured'}`,
+					`  Database    ${status.database.configured ? formatState(status.database.connected ? 'connected' : 'configured') : formatState('not configured', 'warn')}`,
 				);
 				console.log(
-					`History: ${status.history.exists ? (status.history.valid ? 'valid' : 'invalid') : 'missing'}`,
+					`  History     ${status.history.exists ? (status.history.valid ? formatState('valid') : formatState('invalid', 'bad')) : formatState('missing', 'warn')}`,
 				);
 				console.log(
-					`Migrations: ${status.migrations.upToDate ? 'up to date' : `${status.migrations.pending.length} pending`}`,
+					`  Migrations  ${status.migrations.upToDate ? formatState('up to date') : formatState(`${status.migrations.pending.length} pending`, 'warn')}`,
 				);
 				console.log(
-					`Catalog: ${status.catalog.supported ? `supported (${status.catalog.productCount ?? 0} products / ${status.catalog.priceCount ?? 0} prices)` : 'not supported'}`,
+					`  Catalog     ${status.catalog.supported ? formatState(`${status.catalog.productCount ?? 0} products / ${status.catalog.priceCount ?? 0} prices`) : formatState('not supported', 'warn')}`,
 				);
 				console.log(
-					`PIX: ${status.pix.supported ? `supported (${status.pix.count ?? 0} persisted)` : 'not supported'}`,
+					`  PIX         ${status.pix.supported ? formatState(`${status.pix.count ?? 0} persisted`) : formatState('not supported', 'warn')}`,
 				);
 				console.log(
-					`Webhooks: ${status.webhooks.supported ? `supported (${status.webhooks.processedCount ?? 0} events persisted)` : 'not supported'}`,
+					`  Webhooks    ${status.webhooks.supported ? formatState(`${status.webhooks.processedCount ?? 0} events persisted`) : formatState('not supported', 'warn')}`,
 				);
-				console.log(`Schema prefix: ${status.schema.prefix}`);
+				console.log(`  Schema      ${formatValue(status.schema.prefix)}`);
 			} finally {
 				await client.database?.close?.();
 			}

@@ -6,10 +6,17 @@ import {
 	type PaymeshEventType,
 	type PluginHookEvent,
 } from 'paymesh';
-import pc from 'picocolors';
 import { createFakeData } from 'src/lib/faker';
 import { parseJson, parseObjectJson } from 'src/lib/utils';
 import { loadClient } from '../lib/client';
+import {
+	formatBadge,
+	formatPath,
+	formatState,
+	formatValue,
+	logInfo,
+	logSuccess,
+} from '../lib/output';
 
 const BUILT_IN_HOOKS = {
 	'payment.created': 'onPaymentCreated',
@@ -79,8 +86,8 @@ export function registerTriggerCommand(program: Command) {
 								hook,
 							);
 
-							console.log(
-								`${pc.magenta('✦')} ${pc.bold(eventName)} ${pc.dim('listener:')} ${pc.cyan(options.listen)} ${pc.dim(`status=${response.status}`)}`,
+							logSuccess(
+								`${formatBadge('✦')} ${formatValue(eventName)} ${formatPath(`listener ${options.listen}`)} ${formatState(`status ${response.status}`)}`,
 							);
 							return;
 						}
@@ -90,9 +97,14 @@ export function registerTriggerCommand(program: Command) {
 							callClientHook(client, hook, event),
 						]);
 
-						console.log(
-							`${pc.magenta('✦')} ${pc.bold(eventName)} ${pc.dim('hooks:')} ${[called, specificCalled].filter(Boolean).join(', ') || 'none'}`,
-						);
+						const triggeredHooks = [called, specificCalled].filter(Boolean);
+						if (triggeredHooks.length > 0) {
+							logSuccess(
+								`${formatBadge('✦')} ${formatValue(eventName)} ${formatPath(`hooks ${triggeredHooks.join(', ')}`)}`,
+							);
+						} else {
+							logInfo(`${formatValue(eventName)} did not trigger any hooks`);
+						}
 
 						return;
 					}
@@ -126,8 +138,8 @@ export function registerTriggerCommand(program: Command) {
 							createdAt: new Date().toISOString(),
 						} satisfies PluginHookEvent<string, unknown>);
 
-						console.log(
-							`${pc.magenta('✦')} ${pc.bold(eventName)} ${pc.dim(`plugin:${plugin.id}`)} ${pc.dim('hooks:')} ${called ?? 'none'}`,
+						logSuccess(
+							`${formatBadge('✦')} ${formatValue(eventName)} ${formatPath(`plugin ${plugin.id}`)} ${called ? formatState(`hook ${called}`) : formatState('no hook called', 'warn')}`,
 						);
 						return;
 					}
