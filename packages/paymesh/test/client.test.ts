@@ -179,10 +179,268 @@ describe('client', () => {
 		);
 	});
 
+	test('rejects createClient when sandbox:false but provider is sandbox', () => {
+		expect(() =>
+			createClient({
+				provider: createStubProvider({ sandbox: true }),
+				sandbox: false,
+			}),
+		).toThrow(
+			new PaymeshError({
+				code: 'invalid_request',
+				message:
+					'Client sandbox option (false) does not match provider "stub" sandbox mode (true).',
+				provider: 'stub',
+			}),
+		);
+	});
+
+	test('allows createClient when sandbox assertion matches provider mode', () => {
+		expect(() =>
+			createClient({
+				provider: createStubProvider({ sandbox: true }),
+				sandbox: true,
+			}),
+		).not.toThrow();
+
+		expect(() =>
+			createClient({
+				provider: createStubProvider({ sandbox: false }),
+				sandbox: false,
+			}),
+		).not.toThrow();
+	});
+
+	test('allows createClient without sandbox assertion regardless of provider mode', () => {
+		expect(() =>
+			createClient({
+				provider: createStubProvider({ sandbox: true }),
+			}),
+		).not.toThrow();
+
+		expect(() =>
+			createClient({
+				provider: createStubProvider({ sandbox: false }),
+			}),
+		).not.toThrow();
+	});
+
+	test('passes sandbox override to customers.get through the database', async () => {
+		const sandboxGets: boolean[] = [];
+		const database = defineDatabaseAdapter({
+			id: 'mock',
+			dialect: 'postgres',
+			persistRaw: false,
+			repositories: {
+				customers: {
+					async findByProviderId(_schema, _provider, sandbox, _id, options) {
+						sandboxGets.push(sandbox);
+						return withRaw(
+							{
+								id: 'cus_123',
+								provider: 'stub',
+								sandbox,
+							},
+							null,
+							options?.includeRaw,
+						) as never;
+					},
+					async list() {
+						return { data: [], total: 0, previous: null, next: null };
+					},
+					async upsert() {},
+					async markDeleted() {},
+				},
+				pix: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				checkouts: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				invoices: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				subscriptions: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				webhookEvents: {
+					async acquire() {
+						return { duplicate: false };
+					},
+					async markProcessed() {},
+					async markFailed() {},
+				},
+				products: {
+					async upsertMany() {},
+				},
+				prices: {
+					async upsertMany() {},
+				},
+				migrations: {
+					async ensureTable() {},
+					async listApplied() {
+						return [];
+					},
+					async recordApplied() {},
+				},
+			},
+			async query<Row = unknown>() {
+				return [] as Row[];
+			},
+			async execute() {},
+			async transaction(callback) {
+				return callback(database);
+			},
+		});
+		const client = createClient({
+			provider: createStubProvider({ sandbox: false }),
+			database,
+		});
+
+		await client.customers.get('cus_123');
+		await client.customers.get('cus_123', { sandbox: true });
+
+		expect(sandboxGets).toEqual([false, true]);
+	});
+
+	test('passes sandbox override to pix.get through the database', async () => {
+		const sandboxGets: boolean[] = [];
+		const database = defineDatabaseAdapter({
+			id: 'mock',
+			dialect: 'postgres',
+			persistRaw: false,
+			repositories: {
+				customers: {
+					async findByProviderId() {
+						return null;
+					},
+					async list() {
+						return { data: [], total: 0, previous: null, next: null };
+					},
+					async upsert() {},
+					async markDeleted() {},
+				},
+				pix: {
+					async findByProviderId(_schema, _provider, sandbox, _id, options) {
+						sandboxGets.push(sandbox);
+						return withRaw(
+							{
+								id: 'pix_123',
+								provider: 'stub',
+								sandbox,
+								amount: 1000,
+								currency: 'brl',
+								status: 'pending' as const,
+								method: 'pix' as const,
+							},
+							null,
+							options?.includeRaw,
+						) as never;
+					},
+					async upsert() {},
+				},
+				checkouts: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				invoices: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				subscriptions: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				webhookEvents: {
+					async acquire() {
+						return { duplicate: false };
+					},
+					async markProcessed() {},
+					async markFailed() {},
+				},
+				products: {
+					async upsertMany() {},
+				},
+				prices: {
+					async upsertMany() {},
+				},
+				migrations: {
+					async ensureTable() {},
+					async listApplied() {
+						return [];
+					},
+					async recordApplied() {},
+				},
+			},
+			async query<Row = unknown>() {
+				return [] as Row[];
+			},
+			async execute() {},
+			async transaction(callback) {
+				return callback(database);
+			},
+		});
+		const client = createClient({
+			provider: createStubProvider({ sandbox: false }),
+			database,
+		});
+
+		await client.pix.get('pix_123');
+		await client.pix.get('pix_123', { sandbox: true });
+
+		expect(sandboxGets).toEqual([false, true]);
+	});
+
+	test('merges sandbox into request options from client defaults', async () => {
+		const calls: Array<ProviderRequestOptions<boolean> | undefined> = [];
+		const provider = createStubProvider({
+			onPaymentCreate(_data, options) {
+				calls.push(options);
+				return Promise.resolve(
+					withRaw(
+						{
+							id: 'pay_123',
+							provider: 'stub',
+							sandbox: false,
+							amount: 1000,
+							currency: 'usd',
+							status: 'paid' as const,
+						},
+						null,
+						options?.includeRaw,
+					),
+				);
+			},
+		});
+
+		const client = createClient({ provider });
+		await client.payments.create({ amount: 1000, currency: 'USD' });
+
+		expect(calls[0]).toHaveProperty('sandbox', undefined);
+	});
+
 	test('types onEvent as a discriminated union of normalized webhook events', () => {
 		const client = createClient({
 			provider: createStubProvider(),
-			hooks: {
+
 				onEvent(event) {
 					expectType<string>(event.id);
 					expectType<string>(event.provider);
