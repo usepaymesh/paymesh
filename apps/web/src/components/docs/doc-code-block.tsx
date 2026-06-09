@@ -18,101 +18,102 @@ function getTokenStyle(color: string, fontStyle = 0) {
 	} as const;
 }
 
+function renderLines(
+	lines: Awaited<ReturnType<typeof codeToTokens>>['tokens'],
+	codeForeground: string,
+) {
+	return lines.map((line, index) => (
+		<span
+			className="code-line"
+			key={`line-${line[0]?.offset ?? index}-${line.length}`}
+		>
+			{line.length === 0 ? (
+				<span> </span>
+			) : (
+				line.map((token) => (
+					<span
+						key={`${token.offset}-${token.content}`}
+						style={getTokenStyle(
+							token.color ?? codeForeground,
+							token.fontStyle,
+						)}
+					>
+						{token.content}
+					</span>
+				))
+			)}
+		</span>
+	));
+}
+
 export async function DocCodeBlock({
 	code,
 	filename,
 	lang = 'ts',
 	variant = 'default',
 }: DocCodeBlockProps) {
-	const highlighted = await codeToTokens(code, {
-		lang,
-		theme: 'min-dark',
-	});
-	const codeForeground = highlighted.fg ?? '#b392f0';
+	const [lightHighlighted, darkHighlighted] = await Promise.all([
+		codeToTokens(code, {
+			lang,
+			theme: 'min-light',
+		}),
+		codeToTokens(code, {
+			lang,
+			theme: 'min-dark',
+		}),
+	]);
+	const lightForeground = lightHighlighted.fg ?? '#24292e';
+	const darkForeground = darkHighlighted.fg ?? '#b392f0';
 
 	if (variant === 'minimal') {
 		return (
-			<div
-				className="install-code-block relative overflow-x-auto bg-[#050505]"
-				style={{ color: codeForeground }}
-			>
+			<div className="install-code-block relative overflow-x-auto bg-[var(--code-block-bg)]">
 				<div className="absolute top-3 right-3 z-10">
 					<CopyCodeButton code={code} />
 				</div>
-				<pre className="code-pre">
-					<code>
-						{highlighted.tokens.map((line, index) => (
-							<span
-								className="code-line"
-								key={`line-${line[0]?.offset ?? index}-${line.length}`}
-							>
-								{line.length === 0 ? (
-									<span> </span>
-								) : (
-									line.map((token) => (
-										<span
-											key={`${token.offset}-${token.content}`}
-											style={getTokenStyle(
-												token.color ?? codeForeground,
-												token.fontStyle,
-											)}
-										>
-											{token.content}
-										</span>
-									))
-								)}
-							</span>
-						))}
-					</code>
+				<pre
+					className="code-pre dark:hidden"
+					style={{ color: lightForeground }}
+				>
+					<code>{renderLines(lightHighlighted.tokens, lightForeground)}</code>
+				</pre>
+				<pre
+					className="code-pre hidden dark:block"
+					style={{ color: darkForeground }}
+				>
+					<code>{renderLines(darkHighlighted.tokens, darkForeground)}</code>
 				</pre>
 			</div>
 		);
 	}
 
 	return (
-		<div className="my-5 overflow-hidden rounded-md border border-white/[0.1]">
-			<div className="flex items-center justify-between border-b border-white/[0.08] bg-[#050505] px-4 py-2">
+		<div className="my-5 overflow-hidden rounded-md border border-[var(--code-block-border)]">
+			<div className="flex items-center justify-between border-b border-[var(--code-block-border)] bg-[var(--code-block-bg)] px-4 py-2">
 				<div className="flex items-center gap-3">
 					{filename ? (
-						<span className="font-mono text-[11px] uppercase tracking-[0.12em] text-white/45">
+						<span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[color:var(--code-block-muted-strong)]">
 							{filename}
 						</span>
 					) : null}
-					<span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/25">
+					<span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--code-block-muted)]">
 						{lang}
 					</span>
 				</div>
 				<CopyCodeButton code={code} />
 			</div>
-			<div
-				className="relative overflow-x-auto bg-[#050505]"
-				style={{ color: codeForeground }}
-			>
-				<pre className="code-pre">
-					<code>
-						{highlighted.tokens.map((line, index) => (
-							<span
-								className="code-line"
-								key={`line-${line[0]?.offset ?? index}-${line.length}`}
-							>
-								{line.length === 0 ? (
-									<span> </span>
-								) : (
-									line.map((token) => (
-										<span
-											key={`${token.offset}-${token.content}`}
-											style={getTokenStyle(
-												token.color ?? codeForeground,
-												token.fontStyle,
-											)}
-										>
-											{token.content}
-										</span>
-									))
-								)}
-							</span>
-						))}
-					</code>
+			<div className="relative overflow-x-auto bg-[var(--code-block-bg)]">
+				<pre
+					className="code-pre dark:hidden"
+					style={{ color: lightForeground }}
+				>
+					<code>{renderLines(lightHighlighted.tokens, lightForeground)}</code>
+				</pre>
+				<pre
+					className="code-pre hidden dark:block"
+					style={{ color: darkForeground }}
+				>
+					<code>{renderLines(darkHighlighted.tokens, darkForeground)}</code>
 				</pre>
 			</div>
 		</div>

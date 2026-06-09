@@ -18,11 +18,11 @@ interface CodeTab {
 	id: string;
 	label: string;
 	source: string;
-	lines: HighlightLine[];
+	lightLines: HighlightLine[];
+	darkLines: HighlightLine[];
 }
 
 interface CodeTabsProps {
-	codeForeground: string;
 	tabs: CodeTab[];
 }
 
@@ -39,7 +39,41 @@ function getTokenStyle(color: string, fontStyle = 0) {
 	} as const;
 }
 
-export function CodeTabs({ codeForeground, tabs }: CodeTabsProps) {
+function CodePreview({
+	codeForeground,
+	lines,
+}: {
+	codeForeground: string;
+	lines: HighlightLine[];
+}) {
+	return (
+		<pre className="code-pre">
+			<code>
+				{lines.map((line) => (
+					<span className="code-line" key={line.key}>
+						{line.tokens.length === 0 ? (
+							<span> </span>
+						) : (
+							line.tokens.map((token) => (
+								<span
+									key={`${token.offset}-${token.content}`}
+									style={getTokenStyle(
+										token.color ?? codeForeground,
+										token.fontStyle,
+									)}
+								>
+									{token.content}
+								</span>
+							))
+						)}
+					</span>
+				))}
+			</code>
+		</pre>
+	);
+}
+
+export function CodeTabs({ tabs }: CodeTabsProps) {
 	const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? '');
 	const [copied, setCopied] = useState(false);
 
@@ -55,13 +89,15 @@ export function CodeTabs({ codeForeground, tabs }: CodeTabsProps) {
 	if (!active) return null;
 
 	return (
-		<div className="relative mb-6 rounded-md border border-white/[0.1]">
-			<div className="flex items-center border-b border-white/[0.1]">
+		<div className="relative mb-6 rounded-md border border-[var(--code-block-border)] bg-[var(--code-block-bg)]">
+			<div className="flex items-center border-b border-[var(--code-block-border)]">
 				{tabs.map((tab) => (
 					<button
 						className={cn(
 							'relative px-4 py-2 text-[12px] transition-colors',
-							tab.id === active.id ? 'text-neutral-200' : 'text-white/35',
+							tab.id === active.id
+								? 'text-[color:var(--landing-text)]'
+								: 'text-[color:var(--landing-text-muted)]',
 						)}
 						key={tab.id}
 						onClick={() => setActiveTab(tab.id)}
@@ -69,48 +105,32 @@ export function CodeTabs({ codeForeground, tabs }: CodeTabsProps) {
 					>
 						{tab.label}
 						{tab.id === active.id ? (
-							<div className="absolute bottom-0 left-4 right-4 h-[1.5px] bg-neutral-400" />
+							<div className="absolute bottom-0 left-4 right-4 h-[1.5px] bg-[var(--landing-text-faint)]" />
 						) : null}
 					</button>
 				))}
 			</div>
 
 			<div
-				className="relative overflow-x-auto bg-[#050505]"
+				className="relative overflow-x-auto bg-[var(--code-block-bg)]"
 				id="code"
-				style={{ color: codeForeground }}
 			>
-				<pre className="code-pre">
-					<code>
-						{active.lines.map((line) => (
-							<span className="code-line" key={line.key}>
-								{line.tokens.length === 0 ? (
-									<span> </span>
-								) : (
-									line.tokens.map((token) => (
-										<span
-											key={`${token.offset}-${token.content}`}
-											style={getTokenStyle(
-												token.color ?? codeForeground,
-												token.fontStyle,
-											)}
-										>
-											{token.content}
-										</span>
-									))
-								)}
-							</span>
-						))}
-					</code>
-				</pre>
+				<div className="dark:hidden">
+					<CodePreview codeForeground="#24292e" lines={active.lightLines} />
+				</div>
+				<div className="hidden dark:block">
+					<CodePreview codeForeground="#b392f0" lines={active.darkLines} />
+				</div>
 				<button
 					aria-label="Copy snippet"
-					className="absolute right-4 top-4 text-white/35 transition-colors hover:text-white/60"
+					className="absolute right-4 top-4 text-[color:var(--code-block-muted)] transition-colors hover:text-[color:var(--code-block-muted-strong)]"
 					onClick={copyActiveCode}
 					type="button"
 				>
 					{copied ? (
-						<span className="font-mono text-[11px] text-white/60">copied</span>
+						<span className="font-mono text-[11px] text-[color:var(--code-block-muted-strong)]">
+							copied
+						</span>
 					) : (
 						<svg
 							aria-hidden="true"

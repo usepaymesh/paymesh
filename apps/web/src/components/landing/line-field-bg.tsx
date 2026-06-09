@@ -175,11 +175,11 @@ export function LineFieldBackground() {
 	return (
 		<div
 			aria-hidden="true"
-			className="pointer-events-none absolute inset-0 hidden overflow-hidden bg-[#050505] lg:block"
+			className="pointer-events-none absolute inset-0 hidden overflow-hidden bg-[var(--landing-panel-bg)] lg:block"
 		>
 			<canvas
 				ref={canvasRef}
-				className="h-full w-full opacity-70 invert dark:invert-0"
+				className="h-full w-full opacity-50 invert dark:opacity-70 dark:invert-0"
 			/>
 		</div>
 	);

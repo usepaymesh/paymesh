@@ -257,7 +257,7 @@ function ArrowUpRightIcon() {
 	return (
 		<svg
 			aria-hidden="true"
-			className="text-white/40"
+			className="text-[color:var(--landing-text-muted)]"
 			fill="none"
 			height="16"
 			stroke="currentColor"
@@ -292,7 +292,7 @@ function FastifyIcon() {
 	return (
 		<Image
 			alt=""
-			className="h-[14px] w-[14px] object-contain invert"
+			className="h-[14px] w-[14px] object-contain dark:invert"
 			height={14}
 			src="/providers/fastify.svg"
 			unoptimized
@@ -307,12 +307,12 @@ function PaymeshBrand() {
 			<span className="inline-flex h-[17px] w-[17px] items-center justify-center overflow-hidden rounded-[2px]">
 				<Image
 					alt="Paymesh"
-					className="h-full w-full object-contain invert"
+					className="h-full w-full object-contain dark:invert"
 					priority
 					src={paymeshIcon}
 				/>
 			</span>
-			<span className="text-[15px] font-medium tracking-tight text-neutral-100">
+			<span className="text-[15px] font-medium tracking-tight text-[color:var(--landing-text)]">
 				PAYMESH.
 			</span>
 		</div>
@@ -324,6 +324,7 @@ function ProviderBadgeIcon({ icon }: { icon: ProviderIconId }) {
 		return (
 			<svg
 				aria-hidden="true"
+				className="text-[color:var(--landing-text)]"
 				fill="none"
 				height="11"
 				viewBox="0 0 24 24"
@@ -332,7 +333,7 @@ function ProviderBadgeIcon({ icon }: { icon: ProviderIconId }) {
 			>
 				<path
 					d="M6 3.5h6.8c3.43 0 5.7 2.06 5.7 5.15c0 3.2-2.4 5.35-5.95 5.35H9.2V20.5H6zM9.2 11.35h3.06c1.92 0 3.04-.9 3.04-2.56c0-1.64-1.12-2.54-3.04-2.54H9.2z"
-					fill="#ffffff"
+					fill="currentColor"
 				/>
 			</svg>
 		);
@@ -379,6 +380,7 @@ function ProviderBadgeIcon({ icon }: { icon: ProviderIconId }) {
 		return (
 			<svg
 				aria-hidden="true"
+				className="text-[color:var(--landing-text)]"
 				fill="none"
 				height="11"
 				viewBox="0 0 24 24"
@@ -387,7 +389,7 @@ function ProviderBadgeIcon({ icon }: { icon: ProviderIconId }) {
 			>
 				<path
 					d="M8 4v5m8-5v5m-8 0h8m-9 0H5v4a4 4 0 0 0 4 4h1v3h4v-3h1a4 4 0 0 0 4-4V9h-2"
-					stroke="#ffffff"
+					stroke="currentColor"
 					strokeLinecap="round"
 					strokeLinejoin="round"
 					strokeWidth="1.8"
@@ -411,7 +413,7 @@ function ProviderBadgeIcon({ icon }: { icon: ProviderIconId }) {
 function TrustedLogo({ label }: { label: string }) {
 	if (label === 'OpenAI') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<OpenAIIcon />
 				<span className="whitespace-nowrap text-xs font-medium tracking-wide">
 					OpenAI
@@ -422,7 +424,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Next.js') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<svg
 					aria-hidden="true"
 					fill="currentColor"
@@ -442,7 +444,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Bun') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
 					className="h-[14px] w-[14px] object-contain"
@@ -460,7 +462,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Fastify') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<FastifyIcon />
 				<span className="whitespace-nowrap text-xs font-medium tracking-wide">
 					Fastify
@@ -471,7 +473,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Hono') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
 					className="h-[14px] w-[14px] object-contain"
@@ -489,7 +491,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Elysia') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
 					className="h-[14px] w-[14px] object-contain"
@@ -507,7 +509,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Express') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
 					className="h-[14px] w-[14px] object-contain"
@@ -525,7 +527,7 @@ function TrustedLogo({ label }: { label: string }) {
 
 	if (label === 'Stripe' || label === 'PayPal') {
 		return (
-			<div className="flex items-center gap-2 px-5 text-white/40">
+			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
 					className="h-[14px] w-[14px] object-contain"
@@ -542,7 +544,7 @@ function TrustedLogo({ label }: { label: string }) {
 	}
 
 	return (
-		<div className="px-5 text-xs font-medium tracking-wide text-white/30">
+		<div className="px-5 text-xs font-medium tracking-wide text-[color:var(--landing-text-faint)]">
 			{label}
 		</div>
 	);
@@ -560,17 +562,29 @@ export default async function Home() {
 
 	const highlightedTabs = await Promise.all(
 		Object.entries(codeSnippets).map(async ([id, source]) => {
-			const highlighted = await codeToTokens(source, {
-				lang: 'ts',
-				theme: 'min-dark',
-			});
+			const [lightHighlighted, darkHighlighted] = await Promise.all([
+				codeToTokens(source, {
+					lang: 'ts',
+					theme: 'min-light',
+				}),
+				codeToTokens(source, {
+					lang: 'ts',
+					theme: 'min-dark',
+				}),
+			]);
 
 			return {
 				id,
 				label: tabLabels[id] ?? 'Database',
 				source,
-				fg: highlighted.fg ?? '#b392f0',
-				lines: highlighted.tokens.map((line, index) => ({
+				lightLines: lightHighlighted.tokens.map((line, index) => ({
+					key: `line-light-${index}-${
+						line.map((token) => `${token.offset}:${token.content}`).join('|') ||
+						'empty'
+					}`,
+					tokens: line,
+				})),
+				darkLines: darkHighlighted.tokens.map((line, index) => ({
 					key: `line-${index}-${
 						line.map((token) => `${token.offset}:${token.content}`).join('|') ||
 						'empty'
@@ -581,13 +595,11 @@ export default async function Home() {
 		}),
 	);
 
-	const codeForeground = highlightedTabs[0]?.fg ?? '#b392f0';
-
 	return (
-		<main className="relative min-h-dvh bg-[#050505] pt-[45px] text-neutral-200 lg:pt-0">
+		<main className="relative min-h-dvh bg-[var(--landing-bg)] pt-[45px] text-[color:var(--landing-text)] lg:pt-0">
 			<div className="relative">
 				<div className="flex flex-col lg:flex-row">
-					<div className="relative z-10 w-full border-b border-white/[0.06] bg-[#050505] px-5 sm:px-6 lg:sticky lg:top-0 lg:h-dvh lg:w-[40%] lg:overflow-clip lg:border-r lg:border-b-0 lg:px-7">
+					<div className="relative z-10 w-full border-b border-[color:var(--landing-border)] bg-[var(--landing-panel-bg)] px-5 sm:px-6 lg:sticky lg:top-0 lg:h-dvh lg:w-[40%] lg:overflow-clip lg:border-r lg:border-b-0 lg:px-7">
 						<LineFieldBackground />
 
 						<div className="absolute left-5 top-4 z-[4] lg:left-7">
@@ -597,12 +609,12 @@ export default async function Home() {
 						<div className="relative z-[2] flex h-full w-full flex-col justify-center py-16">
 							<div>
 								<a
-									className="group/badge pointer-events-auto relative inline-flex items-center gap-1.5 rounded-full bg-neutral-800/80 px-2.5 py-1 transition-colors hover:bg-neutral-700/60"
+									className="group/badge pointer-events-auto relative inline-flex items-center gap-1.5 rounded-full border border-[color:var(--landing-border)] bg-[var(--landing-card-bg)] px-2.5 py-1 transition-colors hover:bg-[color:var(--landing-card-bg)]"
 									href="#providers"
 								>
 									<svg
 										aria-hidden="true"
-										className="text-neutral-100"
+										className="text-[color:var(--landing-text)]"
 										height="14"
 										viewBox="0 0 24 24"
 										width="14"
@@ -613,13 +625,13 @@ export default async function Home() {
 											fill="currentColor"
 										/>
 									</svg>
-									<span className="text-xs font-light text-neutral-100 sm:text-sm">
+									<span className="text-xs font-light text-[color:var(--landing-text)] sm:text-sm">
 										Introducing{' '}
 										<span className="font-normal">| Payment Mesh</span>
 									</span>
 									<svg
 										aria-hidden="true"
-										className="text-neutral-400 transition-transform group-hover/badge:translate-x-0.5"
+										className="text-[color:var(--landing-text-muted)] transition-transform group-hover/badge:translate-x-0.5"
 										fill="none"
 										height="13"
 										stroke="currentColor"
@@ -634,20 +646,15 @@ export default async function Home() {
 									</svg>
 								</a>
 
-								<h1 className="max-w-[34rem] pt-4 text-2xl leading-tight tracking-tight text-neutral-200 md:text-3xl xl:text-4xl">
+								<h1 className="max-w-[34rem] pt-4 text-2xl leading-tight tracking-tight text-[color:var(--landing-text)] md:text-3xl xl:text-4xl">
 									Provider-agnostic payments infrastructure for TypeScript
 									teams.
 								</h1>
 
 								<div className="pointer-events-auto flex flex-wrap items-center gap-2 pt-5 sm:gap-3">
 									<a
-										className="relative z-10 inline-flex min-h-10 items-center justify-center gap-1.5 bg-[#f5f5f5] px-5 py-2 text-sm font-medium text-[#050505] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.94)] transition-colors hover:bg-white"
+										className="relative z-10 inline-flex min-h-10 items-center justify-center gap-1.5 bg-[var(--landing-accent-bg)] px-5 py-2 text-sm font-medium text-[var(--landing-accent-text)] shadow-[inset_0_0_0_1px_var(--landing-border-strong)] transition-colors hover:bg-[var(--landing-accent-bg-hover)]"
 										href="/docs/introduction"
-										style={{
-											WebkitTextFillColor: '#050505',
-											backgroundColor: '#f5f5f5',
-											color: '#050505',
-										}}
 									>
 										Get Started
 									</a>
@@ -657,13 +664,13 @@ export default async function Home() {
 					</div>
 
 					<div className="relative z-0 w-full overflow-x-hidden lg:w-[60%]">
-						<nav className="sticky top-0 z-20 grid grid-cols-2 border-b border-white/[0.08] bg-[#050505]">
+						<nav className="sticky top-0 z-20 grid grid-cols-2 border-b border-[color:var(--landing-border)] bg-[var(--landing-panel-bg)]">
 							{topLinks.map((link) => (
 								<a
 									className={cn(
-										'flex min-h-16 items-center justify-center border-l border-white/[0.06] px-3 text-[12px] tracking-[0.09em] text-white/45 transition-colors hover:text-white/70',
+										'flex min-h-16 items-center justify-center border-l border-[color:var(--landing-border)] px-3 text-[12px] tracking-[0.09em] text-[color:var(--landing-text-muted)] transition-colors hover:text-[color:var(--landing-text-soft)]',
 										link.active &&
-											'text-white shadow-[inset_0_-1px_0_rgba(214,214,214,0.75)]',
+											'text-[color:var(--landing-text)] shadow-[inset_0_-1px_0_var(--landing-border-strong)]',
 									)}
 									href={link.href}
 									key={link.label}
@@ -679,43 +686,43 @@ export default async function Home() {
 									<div className="p-5 lg:px-8 lg:pt-10">
 										<article className="no-scrollbar pb-0">
 											<h1
-												className="mb-4 flex items-center gap-3 text-sm text-neutral-100 sm:mb-5 sm:text-[15px]"
+												className="mb-4 flex items-center gap-3 text-sm text-[color:var(--landing-text)] sm:mb-5 sm:text-[15px]"
 												id="readme"
 												style={{ fontFamily: 'var(--font-mono)' }}
 											>
 												README
-												<span className="h-px flex-1 bg-white/15" />
+												<span className="h-px flex-1 bg-[color:var(--landing-border-strong)]" />
 											</h1>
 
-											<p className="mb-6 text-sm leading-relaxed text-white/80 sm:mb-8 sm:text-[15px]">
+											<p className="mb-6 text-sm leading-relaxed text-[color:var(--landing-text-soft)] sm:mb-8 sm:text-[15px]">
 												Payments that live{' '}
-												<span className="font-medium text-white/90">
+												<span className="font-medium text-[color:var(--landing-text)]">
 													inside your app
 												</span>
 												. Composable, provider-based, and built to scale -
 												powering from indie launches to the biggest{' '}
-												<span className="font-medium text-white/90">
+												<span className="font-medium text-[color:var(--landing-text)]">
 													multi-provider billing stacks
 												</span>{' '}
 												on the internet.
 											</p>
 
 											<CodeTabs
-												codeForeground={codeForeground}
 												tabs={highlightedTabs.map(
-													({ id, label, lines, source }) => ({
+													({ id, label, lightLines, darkLines, source }) => ({
 														id,
 														label,
-														lines,
+														lightLines,
+														darkLines,
 														source,
 													}),
 												)}
 											/>
 
 											<div className="my-4 flex items-center gap-3">
-												<div className="flex-1 border-t border-white/6" />
+												<div className="flex-1 border-t border-[color:var(--landing-border)]" />
 												<span
-													className="shrink-0 text-[11px] uppercase tracking-wider text-white/50 sm:text-xs"
+													className="shrink-0 text-[11px] uppercase tracking-wider text-[color:var(--landing-text-muted)] sm:text-xs"
 													style={{ fontFamily: 'var(--font-mono)' }}
 												>
 													Frameworks / Providers
@@ -753,14 +760,14 @@ export default async function Home() {
 											</div>
 
 											<div className="my-4 flex items-center gap-4">
-												<span className="shrink-0 text-lg font-medium tracking-tight text-white/90">
+												<span className="shrink-0 text-lg font-medium tracking-tight text-[color:var(--landing-text)]">
 													Providers
 												</span>
-												<div className="flex-1 border-t border-white/10" />
+												<div className="flex-1 border-t border-[color:var(--landing-border-strong)]" />
 											</div>
 
 											<div
-												className="relative mb-2 grid grid-cols-1 overflow-hidden border border-white/[0.08] sm:grid-cols-2 md:grid-cols-3"
+												className="relative mb-2 grid grid-cols-1 overflow-hidden border border-[color:var(--landing-border)] sm:grid-cols-2 md:grid-cols-3"
 												id="providers"
 											>
 												{providerCards.map((provider, index) => (
@@ -771,7 +778,7 @@ export default async function Home() {
 													>
 														<article
 															className={cn(
-																'group relative min-h-[168px] border-white/[0.08] p-4 transition-all duration-200 hover:z-10 hover:bg-white/[0.02] hover:shadow-[inset_0_1px_0_0_rgba(128,128,128,0.1)] lg:p-5',
+																'group relative min-h-[168px] border-[color:var(--landing-border)] p-4 transition-all duration-200 hover:z-10 hover:bg-[var(--landing-card-bg)] hover:shadow-[inset_0_1px_0_0_var(--landing-border)] lg:p-5',
 																index < 8 && 'border-b',
 																index >= 6 && 'md:border-b-0',
 																index % 2 === 0 && index < 8 && 'sm:border-r',
@@ -787,7 +794,7 @@ export default async function Home() {
 
 															<div className="mb-1">
 																<div
-																	className="tracking-wider text-white/35 transition-colors duration-200 group-hover:text-white/55"
+																	className="tracking-wider text-[color:var(--landing-text-faint)] transition-colors duration-200 group-hover:text-[color:var(--landing-text-muted)]"
 																	style={{
 																		fontFamily: 'var(--font-mono)',
 																		fontSize: '11px',
@@ -795,19 +802,19 @@ export default async function Home() {
 																>
 																	{provider.id}
 																</div>
-																<div className="text-[13px] font-medium text-white/85">
+																<div className="text-[13px] font-medium text-[color:var(--landing-text)]">
 																	{provider.headline}
 																</div>
 															</div>
 
-															<div className="text-[13px] leading-relaxed text-neutral-400 transition-colors duration-200 group-hover:text-neutral-300">
+															<div className="text-[13px] leading-relaxed text-[color:var(--landing-text-muted)] transition-colors duration-200 group-hover:text-[color:var(--landing-text-soft)]">
 																{provider.description}
 															</div>
 
 															<div className="mt-3 flex items-center gap-2.5">
 																<div className="relative flex items-center gap-2">
-																	<div className="absolute left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-white/[0.08]" />
-																	<div className="relative flex h-6 w-6 shrink-0 items-center justify-center border border-white/[0.08] bg-[#050505] opacity-70 transition-opacity duration-300 group-hover:opacity-100">
+																	<div className="absolute left-3 right-3 top-1/2 h-px -translate-y-1/2 bg-[color:var(--landing-border)]" />
+																	<div className="relative flex h-6 w-6 shrink-0 items-center justify-center border border-[color:var(--landing-border)] bg-[var(--landing-panel-bg)] opacity-70 transition-opacity duration-300 group-hover:opacity-100">
 																		<ProviderBadgeIcon icon={provider.icon} />
 																	</div>
 																</div>
@@ -818,18 +825,18 @@ export default async function Home() {
 																			className={cn(
 																				'shrink-0 border px-1.5 py-0.5 font-mono text-[8px] whitespace-nowrap',
 																				tagIndex < 2
-																					? 'border-white/[0.08] bg-white/[0.02] text-white/45'
-																					: 'border-white/[0.05] text-white/30',
+																					? 'border-[color:var(--landing-border)] bg-[var(--landing-card-bg)] text-[color:var(--landing-text-muted)]'
+																					: 'border-[color:var(--landing-border)] text-[color:var(--landing-text-faint)]',
 																			)}
 																			key={tag}
 																		>
 																			{tag}
 																		</span>
 																	))}
-																	<div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[#050505] to-transparent" />
+																	<div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-[image:var(--landing-edge-fade)]" />
 																</div>
 
-																<span className="shrink-0 border border-dashed border-white/[0.1] px-1.5 py-0.5 font-mono text-[8px] text-white/30">
+																<span className="shrink-0 border border-dashed border-[color:var(--landing-border-strong)] px-1.5 py-0.5 font-mono text-[8px] text-[color:var(--landing-text-faint)]">
 																	{provider.status}
 																</span>
 															</div>
@@ -837,16 +844,16 @@ export default async function Home() {
 													</a>
 												))}
 
-												<span className="absolute left-1/3 top-1/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-white/20 md:block">
+												<span className="absolute left-1/3 top-1/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-[color:var(--landing-text-faint)] md:block">
 													+
 												</span>
-												<span className="absolute left-2/3 top-1/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-white/20 md:block">
+												<span className="absolute left-2/3 top-1/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-[color:var(--landing-text-faint)] md:block">
 													+
 												</span>
-												<span className="absolute left-1/3 top-2/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-white/20 md:block">
+												<span className="absolute left-1/3 top-2/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-[color:var(--landing-text-faint)] md:block">
 													+
 												</span>
-												<span className="absolute left-2/3 top-2/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-white/20 md:block">
+												<span className="absolute left-2/3 top-2/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-[color:var(--landing-text-faint)] md:block">
 													+
 												</span>
 											</div>

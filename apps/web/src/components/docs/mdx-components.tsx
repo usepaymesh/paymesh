@@ -81,7 +81,7 @@ function InlineCode(props: ComponentProps<'code'>) {
 	if (!props.className && typeof text === 'string' && packageDocsLinks[text]) {
 		return (
 			<Link
-				className="font-medium text-white underline decoration-white/20 underline-offset-4 transition-colors hover:decoration-white/45"
+				className="font-medium text-foreground underline decoration-foreground/20 underline-offset-4 transition-colors hover:decoration-foreground/45"
 				href={packageDocsLinks[text] as ComponentProps<typeof Link>['href']}
 			>
 				{text}

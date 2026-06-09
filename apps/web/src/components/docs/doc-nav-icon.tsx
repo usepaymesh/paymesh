@@ -190,11 +190,13 @@ export function DocNavIcon({
 			);
 		case 'polar':
 			return (
-				<ImageIcon
-					alt="Polar"
-					className={`${className} rounded-full`}
-					src="/providers/polar.ico"
-				/>
+				<span className="inline-flex items-center justify-center rounded-full bg-[#111827] p-[2px] ring-1 ring-black/10 dark:ring-white/10">
+					<ImageIcon
+						alt="Polar"
+						className={className}
+						src="/providers/polar.ico"
+					/>
+				</span>
 			);
 		case 'paypal':
 			return (

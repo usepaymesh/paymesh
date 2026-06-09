@@ -33,12 +33,12 @@ export function CopyCodeButton({ code }: { code: string }) {
 	return (
 		<button
 			aria-label="Copy code"
-			className="text-white/32 transition-colors hover:text-white/58"
+			className="text-[color:var(--code-block-muted)] transition-colors hover:text-[color:var(--code-block-muted-strong)]"
 			onClick={copy}
 			type="button"
 		>
 			{copied ? (
-				<span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/45">
+				<span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[color:var(--code-block-muted-strong)]">
 					Copied
 				</span>
 			) : (

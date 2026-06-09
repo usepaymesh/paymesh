@@ -1,11 +1,5 @@
 .paymesh-docs-shell {
-	background:
-		radial-gradient(
-			circle at top left,
-			rgb(255 255 255 / 0.03),
-			transparent 22%
-		),
-		linear-gradient(180deg, #020202 0%, #050505 38%, #090909 100%);
+	background: var(--docs-shell-bg);
 }
 
 .paymesh-docs-shell .prose {
@@ -20,17 +14,18 @@
 }
 
 .paymesh-docs-shell .prose p {
-	color: rgb(255 255 255 / 0.72);
+	color: var(--docs-prose-color);
 }
 
 .paymesh-docs-shell .prose strong {
-	color: rgb(255 255 255 / 0.96);
+	color: var(--docs-strong-color);
 }
 
 .paymesh-docs-shell .prose code {
-	border: 1px solid rgb(255 255 255 / 0.08);
-	background: rgb(255 255 255 / 0.04);
+	border: 1px solid var(--docs-inline-code-border);
+	background: var(--docs-inline-code-bg);
 	border-radius: 0.25rem;
+	color: var(--docs-inline-code-color);
 	padding: 0.12rem 0.34rem;
 }
 
@@ -43,8 +38,8 @@
 .install-package-tabs {
 	margin: 1.25rem 0;
 	overflow: hidden;
-	border: 1px solid rgb(255 255 255 / 0.08);
-	background: #050505;
+	border: 1px solid var(--code-block-border);
+	background: var(--code-block-bg);
 	border-radius: 0;
 	box-shadow: none;
 	font-family: var(--font-mono), monospace;
@@ -54,8 +49,8 @@
 	display: flex;
 	gap: 1.1rem;
 	overflow-x: auto;
-	border-bottom: 1px solid rgb(255 255 255 / 0.08);
-	background: #050505;
+	border-bottom: 1px solid var(--code-block-border);
+	background: var(--code-block-bg);
 	padding: 0 1rem;
 	align-items: center;
 }
@@ -68,16 +63,16 @@
 	font-size: 0.96rem;
 	line-height: 1;
 	font-weight: 500;
-	color: rgb(255 255 255 / 0.58);
 	flex: 0 0 auto;
 	font-family: inherit;
 	appearance: none;
 	border-radius: 0;
 	box-shadow: none;
+	color: var(--code-block-muted-strong);
 }
 
 .install-package-tabs__trigger[data-state="active"] {
-	color: white;
+	color: var(--foreground);
 }
 
 .install-package-tabs__trigger[data-state="active"]::after {
@@ -86,13 +81,13 @@
 	bottom: -1px;
 	left: 0;
 	height: 1px;
-	background: white;
+	background: currentcolor;
 	content: "";
 }
 
 .install-package-tabs__panel {
 	position: relative;
-	background: #050505;
+	background: var(--code-block-bg);
 	min-height: 74px;
 	border: 0;
 	box-shadow: none;
@@ -120,16 +115,20 @@
 }
 
 .install-package-tabs__command {
+	color: #7c3aed;
+}
+
+.dark .install-package-tabs__command {
 	color: #c792ea;
 }
 
 .install-package-tabs__packages {
-	color: #e6edf3;
+	color: var(--foreground);
 }
 
 .install-package-tabs__copy button {
 	opacity: 1;
-	color: rgb(255 255 255 / 0.42);
+	color: var(--code-block-muted);
 	padding: 0;
 	background: transparent;
 	border: 0;

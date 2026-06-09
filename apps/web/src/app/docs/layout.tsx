@@ -16,15 +16,15 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
 				<header className="fixed left-0 right-0 top-0 z-40 border-b border-foreground/6 bg-background/80 backdrop-blur-xl">
 					<div className="flex h-12 items-center px-4 lg:pl-[calc(min(22vw,300px)+20px)]">
 						<Link className="flex items-center gap-2.5" href="/">
-							<span className="inline-flex h-[18px] w-[18px] items-center justify-center overflow-hidden rounded-[3px] ring-1 ring-white/10">
+							<span className="inline-flex h-[18px] w-[18px] items-center justify-center overflow-hidden rounded-[3px] ring-1 ring-foreground/10">
 								<Image
 									alt="Paymesh"
-									className="h-full w-full object-contain invert"
+									className="h-full w-full object-contain dark:invert"
 									priority
 									src={paymeshIcon}
 								/>
 							</span>
-							<span className="text-[15px] font-medium tracking-tight text-neutral-50">
+							<span className="text-[15px] font-medium tracking-tight text-foreground">
 								PAYMESH.
 							</span>
 						</Link>
