@@ -388,6 +388,8 @@ export interface ClientOptions<
 	baseUrl?: string;
 	/** Default request timeout in milliseconds. */
 	timeout?: number;
+	/** Explicit sandbox expectation for the configured provider. Throws when it mismatches `provider.isSandbox()`. */
+	sandbox?: boolean;
 	/** Default retry configuration. */
 	retry?: RetryOptions;
 	/** Fetch implementation to use. */

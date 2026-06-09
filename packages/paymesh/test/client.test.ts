@@ -163,6 +163,22 @@ describe('client', () => {
 		expect(client.provider.isSandbox()).toBe(true);
 	});
 
+	test('rejects createClient sandbox mismatch', () => {
+		expect(() =>
+			createClient({
+				provider: createStubProvider({ sandbox: false }),
+				sandbox: true,
+			}),
+		).toThrow(
+			new PaymeshError({
+				code: 'invalid_request',
+				message:
+					'Client sandbox option (true) does not match provider "stub" sandbox mode (false).',
+				provider: 'stub',
+			}),
+		);
+	});
+
 	test('types onEvent as a discriminated union of normalized webhook events', () => {
 		const client = createClient({
 			provider: createStubProvider(),
@@ -270,6 +286,35 @@ describe('client', () => {
 			provider: 'stub',
 			sandbox: false,
 			segment: 'vip',
+		});
+	});
+
+	test('lists only sandbox customers when the provider is in sandbox mode', async () => {
+		const database = createListDatabase();
+		const client = createClient({
+			provider: createStubProvider({ sandbox: true }),
+			database,
+			schema: {
+				tables: {
+					customers: {
+						fields: {
+							segment: {
+								type: 'string',
+								required: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		const page = await client.customers.list();
+
+		expect(page.data).toHaveLength(1);
+		expect(page.data[0]).toMatchObject({
+			id: 'cus_test_1',
+			provider: 'stub',
+			sandbox: true,
 		});
 	});
 
@@ -1066,33 +1111,48 @@ function createListDatabase() {
 				async findByProviderId() {
 					return null;
 				},
-				async list(_schema, _provider, options) {
+				async list(_schema, _provider, sandbox, options) {
+					const rows = sandbox
+						? [
+								withRaw(
+									{
+										id: 'cus_test_1',
+										provider: 'stub',
+										sandbox: true,
+										email: 'ada@example.com',
+										segment: 'vip',
+									},
+									{ id: 'raw_cus_test_1' },
+									options?.includeRaw,
+								),
+							]
+						: [
+								withRaw(
+									{
+										id: 'cus_1',
+										provider: 'stub',
+										sandbox: false,
+										email: 'ada@example.com',
+										segment: 'vip',
+									},
+									{ id: 'raw_cus_1' },
+									options?.includeRaw,
+								),
+								withRaw(
+									{
+										id: 'cus_2',
+										provider: 'stub',
+										sandbox: false,
+										email: 'grace@example.com',
+										segment: 'vip',
+									},
+									{ id: 'raw_cus_2' },
+									options?.includeRaw,
+								),
+							];
 					return {
-						data: [
-							withRaw(
-								{
-									id: 'cus_1',
-									provider: 'stub',
-									sandbox: false,
-									email: 'ada@example.com',
-									segment: 'vip',
-								},
-								{ id: 'raw_cus_1' },
-								options?.includeRaw,
-							),
-							withRaw(
-								{
-									id: 'cus_2',
-									provider: 'stub',
-									sandbox: false,
-									email: 'grace@example.com',
-									segment: 'vip',
-								},
-								{ id: 'raw_cus_2' },
-								options?.includeRaw,
-							),
-						],
-						total: 2,
+						data: rows,
+						total: rows.length,
 						previous: null,
 						next: null,
 					} as never;

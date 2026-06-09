@@ -1082,6 +1082,7 @@ function createMockDatabase({
 		Record<string, unknown> & {
 			id: string;
 			provider: string;
+			sandbox: boolean;
 			createdAt: string;
 			deleted?: boolean;
 			raw: unknown;
@@ -1095,8 +1096,8 @@ function createMockDatabase({
 		persistRaw,
 		repositories: {
 			customers: {
-				async findByProviderId(_schema, provider, id, options) {
-					const customer = customers.get(`${provider}:${id}`);
+				async findByProviderId(_schema, provider, sandbox, id, options) {
+					const customer = customers.get(`${provider}:${sandbox}:${id}`);
 					if (!customer || customer.deleted) return null;
 
 					const {
@@ -1113,13 +1114,16 @@ function createMockDatabase({
 						options?.includeRaw,
 					) as never;
 				},
-				async list(_schema, provider, options) {
+				async list(_schema, provider, sandbox, options) {
 					const limit = resolveCustomerListLimit(options?.limit);
 					const cursor = resolveCustomerCursor(options?.after, options?.before);
 					const includeRaw = options?.includeRaw;
 					const filtered = [...customers.values()]
 						.filter(
-							(customer) => customer.provider === provider && !customer.deleted,
+							(customer) =>
+								customer.provider === provider &&
+								customer.sandbox === sandbox &&
+								!customer.deleted,
 						)
 						.sort(compareCustomerRecords);
 					const total = filtered.length;
@@ -1176,24 +1180,28 @@ function createMockDatabase({
 					};
 				},
 				async upsert(_schema, customer) {
-					const existing = customers.get(`${customer.provider}:${customer.id}`);
+					const key = `${customer.provider}:${customer.sandbox}:${customer.id}`;
+					const existing = customers.get(key);
 					const createdAt = existing?.createdAt ?? new Date().toISOString();
 					customerWrites.push({
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
-					customers.set(`${customer.provider}:${customer.id}`, {
+					customers.set(key, {
 						id: customer.id,
 						provider: customer.provider,
+						sandbox: customer.sandbox,
 						createdAt,
 						...(customer as Record<string, unknown>),
 						raw: persistRaw ? getInternalRaw(customer) : null,
 					});
 				},
 				async markDeleted(_schema, customer) {
-					const existing = customers.get(`${customer.provider}:${customer.id}`);
-					customers.set(`${customer.provider}:${customer.id}`, {
+					const key = `${customer.provider}:${customer.sandbox}:${customer.id}`;
+					const existing = customers.get(key);
+					customers.set(key, {
 						id: customer.id,
 						provider: customer.provider,
+						sandbox: customer.sandbox,
 						createdAt: existing?.createdAt ?? new Date().toISOString(),
 						deleted: true,
 						raw: persistRaw ? getInternalRaw(customer) : null,
@@ -1226,7 +1234,7 @@ function createMockDatabase({
 			},
 			webhookEvents: {
 				async acquire(_schema, event, deliveryId) {
-					const key = `${event.provider}:${deliveryId}`;
+					const key = `${event.provider}:${event.sandbox}:${deliveryId}`;
 					const current = webhookEvents.get(key);
 
 					if (!current) {
@@ -1242,14 +1250,20 @@ function createMockDatabase({
 					return { duplicate: true };
 				},
 				async markProcessed(_schema, event, deliveryId) {
-					webhookEvents.set(`${event.provider}:${deliveryId}`, {
-						status: 'processed',
-					});
+					webhookEvents.set(
+						`${event.provider}:${event.sandbox}:${deliveryId}`,
+						{
+							status: 'processed',
+						},
+					);
 				},
 				async markFailed(_schema, event, deliveryId) {
-					webhookEvents.set(`${event.provider}:${deliveryId}`, {
-						status: 'failed',
-					});
+					webhookEvents.set(
+						`${event.provider}:${event.sandbox}:${deliveryId}`,
+						{
+							status: 'failed',
+						},
+					);
 				},
 			},
 			products: {
@@ -1282,12 +1296,16 @@ function createMockDatabase({
 		customer: Record<string, unknown> & {
 			id: string;
 			provider: string;
+			sandbox: boolean;
 			createdAt: string;
 			deleted?: boolean;
 			raw: unknown;
 		},
 	) {
-		customers.set(`${customer.provider}:${customer.id}`, customer);
+		customers.set(
+			`${customer.provider}:${customer.sandbox}:${customer.id}`,
+			customer,
+		);
 	}
 
 	return Object.assign(database, { customerWrites, seedCustomer });

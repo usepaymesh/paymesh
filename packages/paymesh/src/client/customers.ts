@@ -73,6 +73,7 @@ export function createCustomersClient<
 				const customer = await database.repositories.customers.findByProviderId(
 					schema,
 					provider.id,
+					provider.isSandbox(),
 					id,
 					{
 						includeRaw: mergedOptions.includeRaw,
@@ -107,6 +108,7 @@ export function createCustomersClient<
 			const result = await database.repositories.customers.list(
 				schema,
 				provider.id,
+				provider.isSandbox(),
 				{
 					includeRaw: resolveIncludeRaw(
 						options?.includeRaw,

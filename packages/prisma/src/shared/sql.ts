@@ -30,6 +30,7 @@ export function findDataByProviderId(
 	schema: ResolvedDatabaseSchema,
 	tableKey: DatabaseTableKey,
 	provider: string,
+	sandbox: boolean,
 	id: string,
 ) {
 	return executor
@@ -39,9 +40,9 @@ export function findDataByProviderId(
 		}>({
 			sql: `SELECT data, sandbox
 				FROM ${tableName(schema, tableKey)}
-				WHERE provider = $1 AND provider_id = $2
+				WHERE provider = $1 AND sandbox = $2 AND provider_id = $3
 				LIMIT 1`,
-			params: [provider, id],
+			params: [provider, sandbox, id],
 		})
 		.then(([row]) =>
 			row
@@ -73,7 +74,7 @@ export function upsertByProviderId(
 	return executor.execute({
 		sql: `INSERT INTO ${tableName(schema, tableKey)} (${entries.map(([column]) => quoteIdentifier(column)).join(', ')})
 			VALUES (${entries.map((_, index) => `$${index + 1}`).join(', ')})
-			ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
+			ON CONFLICT (provider, sandbox, provider_id) DO UPDATE SET ${updates.join(', ')}`,
 		params: entries.map(([, value]) => value),
 	});
 }
@@ -109,7 +110,7 @@ export function upsertManyByProviderId(
 	return executor.execute({
 		sql: `INSERT INTO ${tableName(schema, tableKey)} (${columns.map((column) => quoteIdentifier(column)).join(', ')})
 			VALUES ${values.join(', ')}
-			ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
+			ON CONFLICT (provider, sandbox, provider_id) DO UPDATE SET ${updates.join(', ')}`,
 		params,
 	});
 }

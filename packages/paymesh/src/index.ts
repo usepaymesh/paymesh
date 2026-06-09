@@ -60,6 +60,17 @@ export function createClient<
 	Plugins
 > &
 	PluginClientExtensions<Plugins> {
+	if (
+		typeof options.sandbox === 'boolean' &&
+		options.sandbox !== provider.isSandbox()
+	) {
+		throw new PaymeshError({
+			code: 'invalid_request',
+			message: `Client sandbox option (${String(options.sandbox)}) does not match provider "${provider.id}" sandbox mode (${String(provider.isSandbox())}).`,
+			provider: provider.id,
+		});
+	}
+
 	const plugins = options.plugins ?? ([] as unknown as Plugins);
 	const schema = resolveDatabaseSchema(
 		resolveClientSchemaOptions(options.schema, plugins),

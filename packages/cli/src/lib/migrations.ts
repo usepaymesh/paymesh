@@ -60,6 +60,11 @@ const PAYMESH_MIGRATIONS: readonly PaymeshMigrationDefinition[] = [
 		name: 'paymesh_indexes_and_constraints',
 		sql: createIndexesAndConstraintsSql,
 	},
+	{
+		version: 3,
+		name: 'paymesh_sandbox_isolation',
+		sql: createSandboxIsolationSql,
+	},
 ];
 
 const BUILT_IN_SANDBOX_TABLES: readonly DatabaseTableKey[] = [
@@ -378,6 +383,9 @@ function createSchemaSyncMigrationSql(
 		...BUILT_IN_SANDBOX_TABLES.map((key) =>
 			createBuiltInSandboxSyncSql(schema.tables[key].name),
 		),
+		...BUILT_IN_SANDBOX_TABLES.map((key) =>
+			replaceProviderIdUniqueConstraintSql(schema.tables[key].name),
+		),
 		...Object.entries(schema.tables).flatMap(([key, table]) =>
 			Object.values(table.fields).flatMap((field) =>
 				createManagedFieldSyncSql({
@@ -583,6 +591,12 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 	].join('\n\n');
 }
 
+function createSandboxIsolationSql(schema: ResolvedDatabaseSchema) {
+	return BUILT_IN_SANDBOX_TABLES.map((key) =>
+		replaceProviderIdUniqueConstraintSql(schema.tables[key].name),
+	).join('\n\n');
+}
+
 function createMigrationsTableSql(schema: ResolvedDatabaseSchema) {
 	return `
 CREATE TABLE IF NOT EXISTS ${table(schema, 'migrations')} (
@@ -611,7 +625,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'customers')} (
 ${extraTableColumnsSql(schema, 'customers')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -639,7 +653,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'pix')} (
 ${extraTableColumnsSql(schema, 'pix')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -662,7 +676,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'checkouts')} (
 ${extraTableColumnsSql(schema, 'checkouts')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -686,7 +700,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'invoices')} (
 ${extraTableColumnsSql(schema, 'invoices')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -709,7 +723,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'paymentMethods')} (
 ${extraTableColumnsSql(schema, 'paymentMethods')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -729,7 +743,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'entitlements')} (
 ${extraTableColumnsSql(schema, 'entitlements')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -751,7 +765,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'usage')} (
 ${extraTableColumnsSql(schema, 'usage')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -773,7 +787,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'webhookEvents')} (
 ${extraTableColumnsSql(schema, 'webhookEvents')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -797,7 +811,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'subscriptions')} (
 ${extraTableColumnsSql(schema, 'subscriptions')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -818,7 +832,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'products')} (
 ${extraTableColumnsSql(schema, 'products')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -843,7 +857,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'prices')} (
 ${extraTableColumnsSql(schema, 'prices')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	UNIQUE (provider, provider_id)
+	UNIQUE (provider, sandbox, provider_id)
 );`.trim();
 }
 
@@ -1047,6 +1061,37 @@ BEGIN
 	) THEN
 		ALTER TABLE ${quoteIdentifier(tableName)}
 		ADD CONSTRAINT ${quoteIdentifier(constraint)} CHECK (${expression});
+	END IF;
+	END $$;`;
+}
+
+function replaceProviderIdUniqueConstraintSql(tableName: string) {
+	const constraintName = objectName(
+		tableName,
+		'provider_sandbox_provider_id_uniq',
+	);
+	return `DO $$
+DECLARE existing_constraint text;
+BEGIN
+	SELECT conname
+	INTO existing_constraint
+	FROM pg_constraint
+	WHERE conrelid = ${quoteIdentifier(tableName)}::regclass
+		AND contype = 'u'
+		AND pg_get_constraintdef(oid) = 'UNIQUE (provider, provider_id)'
+	LIMIT 1;
+
+	IF existing_constraint IS NOT NULL THEN
+		EXECUTE 'ALTER TABLE ${quoteIdentifier(tableName)} DROP CONSTRAINT ' || quote_ident(existing_constraint);
+	END IF;
+
+	IF NOT EXISTS (
+		SELECT 1
+		FROM pg_constraint
+		WHERE conname = '${constraintName}'
+	) THEN
+		ALTER TABLE ${quoteIdentifier(tableName)}
+		ADD CONSTRAINT ${quoteIdentifier(constraintName)} UNIQUE (provider, sandbox, provider_id);
 	END IF;
 END $$;`;
 }

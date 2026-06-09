@@ -569,7 +569,7 @@ describe('cli helpers', () => {
 
 		expect(plan.changed).toBe(true);
 		expect(plan.files).toHaveLength(1);
-		expect(plan.files[0]?.file).toBe('0003_paymesh_schema_sync.sql');
+		expect(plan.files[0]?.file).toBe('0004_paymesh_schema_sync.sql');
 		expect(plan.files[0]?.sql).toContain(
 			'ADD COLUMN IF NOT EXISTS "segment" TEXT DEFAULT \'vip\'',
 		);

@@ -45,7 +45,7 @@ export function upsertManyByProviderIdQuery(
 	return compileQuery(
 		`INSERT INTO ${tableName(schema, tableKey)} (${columns.map((column) => quoteIdentifier(column)).join(', ')})
 		 VALUES ${values.join(', ')}
-		 ON CONFLICT (provider, provider_id) DO UPDATE SET ${updates.join(', ')}`,
+		 ON CONFLICT (provider, sandbox, provider_id) DO UPDATE SET ${updates.join(', ')}`,
 		params,
 	);
 }
