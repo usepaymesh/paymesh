@@ -1,0 +1,75 @@
+---
+title: Client
+description: Understand how the Paymesh client is composed, what each manager does, and how database and plugin layers change runtime behavior.
+---
+
+## Composition
+
+The client is composed from:
+
+- a provider implementation
+- optional database driver
+- optional schema customizations
+- optional plugins
+
+`createClient` resolves schema first, then hands the provider, options, and resolved schema into the internal client manager factory.
+
+## Managers
+
+### `payments`
+
+Use `payments.create()` for hosted checkout or invoice-like creation flows that return a normalized payment object.
+
+### `pix`
+
+Use `pix.create()` and `pix.get()` for native PIX workflows where QR code and copy-paste payload matter.
+
+### `customers`
+
+Use `customers.upsert()`, `customers.get()`, `customers.delete()`, and `customers.list()` to work with normalized customer records.
+
+### `webhooks`
+
+Use `webhooks.handle()` when you need the core verification and dispatch engine directly. Framework adapters call this for you.
+
+### `routes`
+
+This manager exists primarily for plugin routes. It lets the runtime list and handle registered plugin routes.
+
+### `plugins`
+
+This manager lets you introspect what plugins are registered and what they contributed to the runtime.
+
+## `includeRaw`
+
+The client can be configured to propagate raw provider payloads.
+
+```ts title="src/lib/paymesh.ts"
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  includeRaw: true,
+});
+```
+
+That changes return types across the client so normalized objects include a real `raw` payload instead of `null`.
+
+## Schema-aware types
+
+When you customize database schema fields, client input and output types can be extended so those extra fields become part of the payment, PIX, or customer shape.
+
+That is why Paymesh types reference `DatabaseTableInputExtraFields` and `DatabaseTableOutputExtraFields`.
+
+## Plugin extensions
+
+Plugins can augment the client with extra runtime APIs.
+
+For example, the audit log plugin lazily adds:
+
+- `paymesh.auditLog.create()`
+- `paymesh.auditLog.list()`
+- `paymesh.auditLog.prune()`
+
+The dash plugin adds dashboard metadata under an internal extension field so a host application or plugin route can discover dashboard configuration.

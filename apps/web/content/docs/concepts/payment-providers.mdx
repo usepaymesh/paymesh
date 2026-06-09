@@ -1,0 +1,65 @@
+---
+title: Payment Providers
+description: Learn how provider packages fit into the system, what capabilities they advertise, and how Paymesh keeps provider differences explicit instead of pretending they do not exist.
+---
+
+## Providers are implementations, not the product API
+
+Provider packages implement the core contracts exported by `paymesh`.
+
+That means a provider is responsible for:
+
+- payment creation
+- PIX support when available
+- customer operations
+- catalog sync
+- dashboard affordances
+- webhook verification
+- raw event mapping into normalized events
+
+## Current first-party providers
+
+### Stripe
+
+Stripe currently implements:
+
+- payments
+- PIX
+- customers
+- catalog
+- dashboard helpers
+- webhook verification and event mapping
+
+### Polar
+
+Polar currently implements:
+
+- payments
+- customers
+- catalog
+- dashboard helpers
+- webhook verification and event mapping
+
+Polar does **not** expose PIX in the current repository.
+
+## Capability flags
+
+Provider differences are carried through capability flags rather than hidden.
+
+This is important for product code because it lets you ask:
+
+- does this provider support PIX?
+- does this provider support customers?
+- does this provider support subscriptions?
+
+without guessing from package name or trial-and-error.
+
+## Provider-specific inputs that remain explicit
+
+Some provider-specific differences still matter. For example:
+
+- Polar requires `productIds` for checkout creation
+- Stripe PIX supports `amountIncludesIof` and expiration settings
+- dashboard integrations vary by provider
+
+Paymesh keeps those differences at the edges instead of forcing one fake "universal" shape where it would be misleading.

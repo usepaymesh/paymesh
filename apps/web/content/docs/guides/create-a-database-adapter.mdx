@@ -1,0 +1,451 @@
+---
+title: Create a Database Adapter
+description: Build a real Paymesh database adapter with defineDatabaseAdapter, repository contracts, compiled query execution, transactions, schema resolution, and raw payload persistence.
+---
+
+This guide explains how to build a real Paymesh database adapter.
+
+The adapter contract in Paymesh is intentionally low-level. That is good. It means the runtime does not guess how your storage behaves.
+
+You provide:
+
+- an adapter id
+- a dialect
+- repository implementations
+- `query`
+- `execute`
+- `transaction`
+- optional `close`
+
+Paymesh uses that driver for:
+
+- customer persistence
+- PIX persistence
+- checkout persistence
+- invoice persistence
+- subscription persistence
+- webhook idempotency
+- provider catalog sync
+- migrations bookkeeping
+
+## Start with `defineDatabaseAdapter`
+
+```ts title="src/database/memory.ts"
+import { defineDatabaseAdapter, type CompiledQuery } from "paymesh";
+
+export const memory = () =>
+  defineDatabaseAdapter({
+    id: "memory",
+    dialect: "postgres",
+    repositories: {} as never,
+    query<Row = unknown>(_compiledQuery: CompiledQuery) {
+      return Promise.resolve([] as Row[]);
+    },
+    execute(_compiledQuery: CompiledQuery) {
+      return Promise.resolve();
+    },
+    transaction(callback) {
+      return callback(this as never);
+    },
+  });
+```
+
+That example is incomplete, but it shows the shape.
+
+## Understand every top-level adapter option
+
+### `id`
+
+Stable adapter identifier used for diagnostics and runtime introspection.
+
+### `dialect`
+
+Today the public driver definition uses:
+
+- `dialect: "postgres"`
+
+That is an important limitation to understand. Even adapters like Drizzle and Prisma are normalized around the relational Postgres-oriented driver contract that Paymesh currently exposes.
+
+### `persistRaw`
+
+When enabled, raw provider payloads are kept in stored rows.
+
+Use `persistRaw: true` when you need:
+
+- provider debugging
+- auditability
+- operator tooling
+- raw payload reinspection
+
+Keep it `false` when:
+
+- storage size matters
+- you do not want raw upstream payloads in persistence
+
+### `repositories`
+
+This is the real heart of the adapter. You must implement the repository interfaces that Paymesh expects.
+
+### `query`
+
+Runs a compiled SQL query and returns rows.
+
+### `execute`
+
+Runs a compiled statement that does not need to return rows.
+
+### `transaction`
+
+Runs a callback inside a transaction boundary.
+
+### `close`
+
+Optional teardown hook when the adapter owns the connection lifecycle.
+
+## The repository contract
+
+Every adapter must expose `PaymeshDatabaseRepositories`.
+
+The repository keys are:
+
+- `customers`
+- `pix`
+- `checkouts`
+- `invoices`
+- `subscriptions`
+- `webhookEvents`
+- `products`
+- `prices`
+- `migrations`
+
+## What each repository is responsible for
+
+### `customers`
+
+This repository persists normalized customer data and supports provider-id lookup and list operations.
+
+### `pix`
+
+This repository persists normalized PIX rows.
+
+### `checkouts`
+
+This repository persists checkout-oriented payment rows.
+
+### `invoices`
+
+This repository persists invoice snapshots.
+
+### `subscriptions`
+
+This repository persists subscription snapshots.
+
+### `webhookEvents`
+
+This repository is the idempotency gate. It is not optional in practice. If it is wrong, webhook replay protection is wrong.
+
+### `products` and `prices`
+
+These repositories persist provider catalog snapshots used by dashboard and catalog sync flows.
+
+### `migrations`
+
+This repository tracks adapter-managed migrations.
+
+## Step 1: Design your storage strategy
+
+Pick the shape before writing methods.
+
+Questions you should answer first:
+
+- Are table names generated from `schema.tables` and `schema.customTables` directly?
+- How do you map provider ids?
+- How do you store raw payloads?
+- How do you make `webhookEvents.acquire()` atomic?
+- How do you represent custom table fields and plugin tables?
+
+If you skip this step, the implementation turns into ad hoc SQL.
+
+## Step 2: Understand schema resolution
+
+Paymesh resolves a schema before runtime use.
+
+That schema contains:
+
+- `prefix`
+- resolved built-in tables
+- resolved custom tables
+
+Built-in table keys are:
+
+- `customers`
+- `pix`
+- `checkouts`
+- `invoices`
+- `paymentMethods`
+- `entitlements`
+- `usage`
+- `webhookEvents`
+- `subscriptions`
+- `products`
+- `prices`
+- `migrations`
+
+### Built-in table overrides
+
+Users can override:
+
+- `name`
+- `fields`
+
+### Extra field options
+
+Extra fields support:
+
+- `type`
+- `required`
+- `column`
+- `index`
+- `unique`
+- `default`
+
+Enum fields additionally support:
+
+- `enum`
+- `default`
+
+### Custom tables
+
+Custom tables support:
+
+- `name`
+- `fields`
+- `pluginId`
+- `primaryKey`
+- `timestamps`
+- `indexes`
+
+Your adapter should not hardcode table names and ignore the resolved schema. That would break plugin-owned tables and user schema overrides.
+
+## Step 3: Build the query boundary
+
+Paymesh adapters work with `CompiledQuery`.
+
+That means your adapter can centralize SQL execution in one small layer.
+
+```ts title="src/database/sql.ts"
+import { PaymeshError, type CompiledQuery } from "paymesh";
+
+export async function runQuery<Row>(
+  executor: { query(sql: string, params: readonly unknown[]): Promise<{ rows: Row[] }> },
+  compiledQuery: CompiledQuery,
+) {
+  try {
+    const result = await executor.query(compiledQuery.sql, compiledQuery.params);
+    return result.rows;
+  } catch (error) {
+    throw PaymeshError.wrap(error, {
+      code: "database_error",
+      message: "Failed to execute database query.",
+    });
+  }
+}
+```
+
+The real value of this layer is consistency:
+
+- one error wrapping strategy
+- one parameter handling strategy
+- one logging strategy
+
+## Step 4: Implement transactions correctly
+
+Your `transaction` implementation must actually isolate state changes.
+
+Do not fake it with `callback(driver)` unless your backing store is itself atomic.
+
+```ts title="src/database/my-adapter.ts"
+async transaction<T>(callback) {
+  const client = await pool.connect();
+  const tx = createTransactionDriver(client);
+
+  try {
+    await client.query("BEGIN");
+    const result = await callback(tx);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+},
+```
+
+For webhook idempotency, transaction correctness is not optional.
+
+## Step 5: Implement the webhook idempotency repository carefully
+
+`webhookEvents` usually needs three methods:
+
+- `acquire`
+- `markProcessed`
+- `markFailed`
+
+`acquire` is the important one. It must tell Paymesh whether a delivery id was already claimed.
+
+If two concurrent webhook deliveries can both pass `acquire`, your adapter is wrong.
+
+## Step 6: Implement a real adapter
+
+Below is a minimal but realistic skeleton.
+
+```ts title="src/database/my-adapter.ts"
+import {
+  defineDatabaseAdapter,
+  type CompiledQuery,
+  type PaymeshDatabaseDriver,
+  PaymeshError,
+} from "paymesh";
+
+type Queryable = {
+  query<Row = unknown>(sql: string, params: readonly unknown[]): Promise<{ rows: Row[] }>;
+};
+
+function executeQuery<Row = unknown>(
+  db: Queryable,
+  compiledQuery: CompiledQuery,
+) {
+  return db.query<Row>(compiledQuery.sql, compiledQuery.params).then((result) => result.rows);
+}
+
+function createRepositories(persistRaw: boolean) {
+  return {
+    customers: {
+      async findByProviderId() {
+        return null;
+      },
+      async list() {
+        return { items: [], nextCursor: null };
+      },
+      async upsert() {},
+      async delete() {},
+    },
+    pix: {
+      async findByProviderId() {
+        return null;
+      },
+      async upsert() {},
+    },
+    checkouts: {
+      async findByProviderId() {
+        return null;
+      },
+      async upsert() {},
+    },
+    invoices: {
+      async findByProviderId() {
+        return null;
+      },
+      async upsert() {},
+    },
+    subscriptions: {
+      async findByProviderId() {
+        return null;
+      },
+      async upsert() {},
+    },
+    webhookEvents: {
+      async acquire() {
+        return { duplicate: false };
+      },
+      async markProcessed() {},
+      async markFailed() {},
+    },
+    products: {
+      async upsertMany() {},
+    },
+    prices: {
+      async upsertMany() {},
+    },
+    migrations: {
+      async ensureTable() {},
+      async listApplied() {
+        return [];
+      },
+      async recordApplied() {},
+    },
+  };
+}
+
+export function myAdapter(connection: Queryable) {
+  const persistRaw = true;
+
+  return defineDatabaseAdapter({
+    id: "my-adapter",
+    dialect: "postgres",
+    persistRaw,
+    repositories: createRepositories(persistRaw),
+    query<Row = unknown>(compiledQuery: CompiledQuery) {
+      return executeQuery<Row>(connection, compiledQuery);
+    },
+    async execute(compiledQuery: CompiledQuery) {
+      await executeQuery(connection, compiledQuery);
+    },
+    async transaction<T>(callback: (database: PaymeshDatabaseDriver) => Promise<T>) {
+      try {
+        return await callback(this as PaymeshDatabaseDriver);
+      } catch (error) {
+        throw PaymeshError.wrap(error, {
+          code: "database_error",
+          message: "Database transaction failed.",
+        });
+      }
+    },
+  });
+}
+```
+
+## Step 7: Mount the adapter
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+import { myAdapter } from "../database/my-adapter";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: myAdapter(connection),
+});
+```
+
+## Choosing `persistRaw`
+
+### Use `persistRaw: true` when
+
+- your support team needs provider payload inspection
+- you build admin tools
+- you debug webhook mapping frequently
+
+### Use `persistRaw: false` when
+
+- raw payloads are sensitive and unnecessary
+- you want leaner row storage
+
+## Common mistakes
+
+- hardcoding table names instead of using the resolved schema
+- faking transactions
+- implementing webhook idempotency with a non-atomic read-then-write flow
+- ignoring custom fields and plugin custom tables
+- swallowing query errors without wrapping them
+
+## Next steps
+
+- Read [Database Schema](/docs/reference/database-schema) to understand the schema resolver in more detail.
+- Read [Create Your First Plugin](/docs/guides/create-your-first-plugin) if you want to pair your adapter with plugin-owned tables.
+- Read the built-in adapters for reference: [Postgres](/docs/database/postgres), [Drizzle](/docs/database/drizzle), and [Prisma](/docs/database/prisma).

@@ -1,0 +1,31 @@
+---
+title: Plugins
+description: Use plugins to add runtime APIs, routes, middleware, schema extensions, and operational features without modifying the core client.
+---
+
+## What plugins are for
+
+Plugins exist for cross-cutting billing features that should not live inside a provider package.
+
+Examples:
+
+- dashboards
+- audit logs
+- custom operational routes
+- plugin-owned database tables
+- custom event pipelines
+
+## What a plugin can contribute
+
+Through `definePlugin`, a plugin can contribute:
+
+- `config`
+- `schema`
+- `routes`
+- `middleware`
+- `events`
+- `hooks`
+- `extends`
+- `setup`
+
+That makes plugins the main extension boundary for the platform.

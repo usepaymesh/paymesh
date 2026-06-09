@@ -1,0 +1,52 @@
+---
+title: Database Schema
+description: Customize table names, add extra fields, and create plugin-owned tables through the schema system used by all database adapters.
+---
+
+## Top-level schema options
+
+The high-level schema accepts:
+
+- `prefix`
+- `tables`
+- `customTables`
+
+## Example
+
+```ts title="src/lib/paymesh.ts"
+schema: {
+  prefix: "billing",
+  tables: {
+    customers: {
+      name: "billing_customers",
+      fields: {
+        workspaceId: {
+          type: "string",
+          required: true,
+          index: true,
+        },
+      },
+    },
+  },
+  customTables: {
+    ledger_entries: {
+      primaryKey: {
+        type: "text",
+      },
+      timestamps: {
+        createdAt: true,
+        updatedAt: true,
+      },
+      fields: {
+        resource_id: {
+          type: "string",
+          required: true,
+        },
+        payload: {
+          type: "json",
+        },
+      },
+    },
+  },
+}
+```

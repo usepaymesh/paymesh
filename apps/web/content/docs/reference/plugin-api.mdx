@@ -1,0 +1,330 @@
+---
+title: Plugin API
+description: Detailed reference for definePlugin, including requirements, events, routes, middleware, setup, schema extensions, and runtime client augmentation.
+---
+
+## Plugin model
+
+Paymesh plugins are infrastructure extensions. A plugin can participate in four layers at once:
+
+- schema: add extra fields or whole custom tables
+- runtime: extend the client with extra APIs
+- HTTP: register routes and middleware
+- event system: react to built-in webhook hooks or define custom plugin events
+
+The public entrypoint is `definePlugin`.
+
+```ts title="src/plugins/billing-ops.ts"
+import { definePlugin } from "paymesh";
+
+export function billingOps() {
+  return definePlugin({
+    id: "billing-ops",
+    name: "Billing Ops",
+    version: "0.1.0",
+    description: "Operational helpers for failed payment handling.",
+  });
+}
+```
+
+## Top-level plugin fields
+
+| Field | Purpose |
+| --- | --- |
+| `id` | Stable identifier used in runtime metadata and route ownership. |
+| `name` | Human-readable label shown in introspection and tooling. |
+| `version` | Optional semantic version for operational visibility. |
+| `description` | Optional freeform summary. |
+| `config` | Declares runtime requirements such as database support or required provider capabilities. |
+| `schema` | Contributes built-in table field extensions or new custom tables. |
+| `events` | Declares custom plugin event names and payload shapes. |
+| `hooks` | Reacts to built-in Paymesh events such as `onPaymentSucceeded`, or to custom plugin events. |
+| `routes` | Registers HTTP routes served through `client.routes.handle()`. |
+| `middleware` | Runs before matching route handlers. |
+| `setup` | Executes during plugin initialization with access to the resolved client runtime. |
+| `extends` | Returns extra runtime APIs attached to the configured Paymesh client. |
+
+## `config`
+
+Use `config` to fail fast when the runtime cannot satisfy what the plugin needs.
+
+```ts title="src/plugins/billing-ops.ts"
+config: {
+  database: true,
+  providers: ["stripe", "polar"],
+  capabilities: ["webhooks", "customers"],
+},
+```
+
+### Supported config requirements
+
+| Config field | Meaning |
+| --- | --- |
+| `database: true` | Refuse initialization unless `createClient` received a database adapter. |
+| `providers` | Restrict the plugin to explicit provider ids. |
+| `capabilities` | Require provider features such as `pix`, `customers`, or `webhooks`. |
+
+This is how official plugins like `@paymesh/dash` and `@paymesh/audit-logs` protect themselves from invalid composition.
+
+## `schema`
+
+Plugins can extend storage in two ways:
+
+- add extra fields to built-in tables
+- define full custom tables
+
+```ts title="src/plugins/billing-ops.ts"
+schema: {
+  customTables: {
+    retry_jobs: {
+      primaryKey: { type: "text" },
+      timestamps: { createdAt: true, updatedAt: true },
+      fields: {
+        payment_id: { type: "string", required: true, index: true },
+        status: { type: "enum", enum: ["queued", "running", "done"], required: true },
+        attempts: { type: "number", required: true, default: 0 },
+        metadata: { type: "json" },
+      },
+      indexes: [
+        {
+          name: "retry_jobs_payment_status_idx",
+          columns: ["payment_id", "status"],
+        },
+      ],
+    },
+  },
+},
+```
+
+### Schema notes
+
+- plugin custom tables are merged into the resolved schema before migrations run
+- plugins cannot illegally redefine built-in schema in ways the resolver disallows
+- custom tables can have their own primary key style, timestamps, and secondary indexes
+
+## `events`
+
+Plugins can define their own event surface.
+
+```ts title="src/plugins/billing-ops.ts"
+events: {
+  "billingOps.retryQueued": {
+    description: "Raised when a retry job is queued.",
+    example: {
+      paymentId: "pi_123",
+      attempt: 1,
+    },
+  },
+},
+```
+
+Those event definitions drive typed hook names on the configured client.
+
+## `hooks`
+
+Plugins can react to two kinds of hooks:
+
+1. built-in Paymesh hooks such as `onPaymentFailed`
+2. custom plugin event hooks declared in `events`
+
+```ts title="src/plugins/billing-ops.ts"
+hooks: {
+  async onPaymentFailed(event) {
+    console.log("payment failed", event.data.id);
+  },
+  async "billingOps.retryQueued"(event) {
+    console.log("retry queued", event.data.paymentId);
+  },
+},
+```
+
+### Built-in hook families
+
+The runtime exposes strongly named built-in hooks for:
+
+- `onEvent`
+- `onUnhandledEvent`
+- `onPaymentCreated`
+- `onPaymentSucceeded`
+- `onPaymentFailed`
+- `onPaymentCanceled`
+- `onPaymentRefunded`
+- `onCustomerCreated`
+- `onCustomerUpdated`
+- `onCustomerDeleted`
+- `onSubscriptionCreated`
+- `onSubscriptionUpdated`
+- `onSubscriptionCanceled`
+- `onCheckoutCompleted`
+
+## `routes`
+
+Plugin routes are mounted into the client runtime and dispatched through `client.routes.handle(request)`.
+
+```ts title="src/plugins/billing-ops.ts"
+routes: [
+  {
+    method: "GET",
+    path: "/internal/paymesh/retries",
+    async handler({ client }) {
+      return Response.json({
+        provider: client.provider.id,
+        plugins: client.plugins.list().map((plugin) => plugin.id),
+      });
+    },
+  },
+],
+```
+
+### Route context
+
+Handlers receive a context object with:
+
+- `client`
+- `plugin`
+- `provider`
+- `database`
+- `schema`
+- `request`
+- `params`
+- `locals`
+- `route`
+- `emit()`
+
+That makes routes suitable for administrative surfaces, webhook tooling, and internal operational APIs.
+
+## `middleware`
+
+Middleware runs before route handlers and can gate access or add `locals`.
+
+```ts title="src/plugins/billing-ops.ts"
+middleware: [
+  async ({ request, locals }) => {
+    const session = await auth({ request });
+    locals.userId = session.user.id;
+  },
+],
+```
+
+Use middleware for:
+
+- authentication
+- authorization
+- request scoping
+- request-local actor metadata
+
+## `setup`
+
+`setup` runs when the plugin is initialized and is the right place to capture shared runtime state.
+
+```ts title="src/plugins/billing-ops.ts"
+setup(context) {
+  console.log("plugin ready for provider", context.client.provider.id);
+},
+```
+
+The setup context includes:
+
+- `client`
+- `plugin`
+- `provider`
+- `database`
+- `schema`
+- `emit()`
+
+## `extends`
+
+Use `extends` to expose new APIs directly on the configured Paymesh client.
+
+```ts title="src/plugins/billing-ops.ts"
+extends() {
+  return {
+    billingOps: {
+      async enqueueRetry(paymentId: string) {
+        return { paymentId, queued: true };
+      },
+    },
+  };
+},
+```
+
+After registration:
+
+```ts title="src/server/retries.ts"
+await paymesh.billingOps.enqueueRetry("pi_123");
+```
+
+### Lazy extensions
+
+Official plugins sometimes use `lazy()` to defer heavier extension setup until the extension is actually accessed. `@paymesh/dash` uses this pattern for its internal dashboard config.
+
+## Full example
+
+```ts title="src/plugins/billing-ops.ts"
+import { definePlugin } from "paymesh";
+
+export function billingOps() {
+  return definePlugin({
+    id: "billing-ops",
+    name: "Billing Ops",
+    description: "Retry workflow helpers for failed payments.",
+    config: {
+      database: true,
+      capabilities: ["webhooks"],
+    },
+    schema: {
+      customTables: {
+        retry_jobs: {
+          primaryKey: { type: "text" },
+          timestamps: { createdAt: true, updatedAt: true },
+          fields: {
+            payment_id: { type: "string", required: true, index: true },
+            status: { type: "string", required: true },
+            attempts: { type: "number", required: true, default: 0 },
+          },
+        },
+      },
+    },
+    events: {
+      "billingOps.retryQueued": {
+        description: "Raised after a failed payment is added to the retry queue.",
+      },
+    },
+    hooks: {
+      async onPaymentFailed(event) {
+        console.log("queue retry for", event.data.id);
+      },
+    },
+    routes: [
+      {
+        method: "GET",
+        path: "/internal/paymesh/retries",
+        handler() {
+          return Response.json({ ok: true });
+        },
+      },
+    ],
+    extends() {
+      return {
+        billingOps: {
+          async enqueueRetry(paymentId: string) {
+            return { paymentId, queued: true };
+          },
+        },
+      };
+    },
+  });
+}
+```
+
+## When to use a plugin
+
+Create a plugin when the feature needs at least one of these:
+
+- its own schema
+- its own HTTP routes
+- reusable built-in hook handling
+- reusable typed runtime APIs
+- custom event emission
+
+Do not create a plugin for one-off route logic that can live beside your application code.

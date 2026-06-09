@@ -1,0 +1,41 @@
+---
+title: Dash
+description: Add a local admin dashboard for billing operations with request-aware authentication, plugin routes, and database-backed operational views.
+---
+
+## What Dash adds
+
+The Dash plugin contributes:
+
+- plugin routes
+- plugin middleware
+- a custom audit table for dashboard actions
+- a lazy runtime extension with dashboard configuration
+
+## Setup
+
+```ts title="src/lib/paymesh.ts"
+import { dash } from "@paymesh/dash";
+
+dash({
+  path: "/admin/paymesh",
+  auth({ request, client }) {
+    const email = request.headers.get("x-user-email");
+
+    if (!email) {
+      throw new Error("Unauthorized");
+    }
+
+    return {
+      id: "user_123",
+      type: "user",
+      email,
+      provider: client.provider.id,
+    };
+  },
+});
+```
+
+## Auth callback
+
+The key design detail is that `auth()` receives the request object. That lets you integrate the dashboard with your own session, header, proxy, or gateway logic without coupling Dash to a specific auth library.

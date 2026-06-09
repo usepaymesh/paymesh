@@ -1,0 +1,493 @@
+---
+title: Webhooks at Scale
+description: Build webhook pipelines that stay correct under retries, duplicates, bursts, provider outages, slow internal dependencies, and growing event volume.
+---
+
+This guide is about the part of the billing stack that usually breaks first under real load.
+
+Webhook handling is where you combine:
+
+- external retries you do not control
+- signatures that depend on the exact raw body
+- duplicate deliveries
+- out-of-order events
+- slow internal side effects
+- local persistence
+- operator visibility
+
+At small volume, teams often put everything in one route handler and it looks fine.
+
+At scale, that shape fails in predictable ways:
+
+- the provider retries because you acknowledged too slowly
+- duplicate deliveries create duplicate local side effects
+- route-level logic mixes verification, persistence, business logic, and notifications
+- transient database latency turns into a webhook storm
+- adapters mutate the request body before signature verification
+
+The goal is not just speed. The goal is correct, bounded, observable processing.
+
+## The webhook contract in Paymesh
+
+Paymesh expects webhook handling to be a narrow path:
+
+1. receive the raw HTTP request
+2. verify the provider signature against the raw body
+3. normalize the upstream payload into a Paymesh event
+4. persist the webhook event and normalized records if configured
+5. dispatch hooks and plugin hooks
+6. return the provider-specific acknowledgment response
+
+That shape is important because it gives you one place to reason about correctness.
+
+## The first rule: preserve the raw body
+
+Signature verification depends on the exact request body bytes. If your framework parses or mutates the body before Paymesh sees it, verification can fail even when the secret is correct.
+
+### Express
+
+Express must use `express.raw()` on the webhook route. This is not optional.
+
+<Callout type="warning" title="Use express.raw() on webhook routes">
+If you use `express.json()` or any middleware that parses the request body before Paymesh verifies the signature, webhook verification will fail. The provider signs the raw bytes, not the parsed JavaScript object.
+</Callout>
+
+```ts title="src/server.ts"
+import express from "express";
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+
+const app = express();
+
+const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+});
+
+app.post(
+  "/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const response = await paymesh.routes.handleWebhook(
+      new Request("https://app.local/webhooks/stripe", {
+        body: req.body,
+        headers: new Headers(
+          Object.entries(req.headers).flatMap(([key, value]) =>
+            typeof value === "string" ? [[key, value]] : (value ?? []).map((entry) => [key, entry]),
+          ),
+        ),
+        method: "POST",
+      }),
+    );
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.send(Buffer.from(await response.arrayBuffer()));
+  },
+);
+```
+
+### Fastify
+
+Fastify needs access to `rawBody` on the webhook route.
+
+<Callout type="warning" title="Keep rawBody enabled for webhook verification">
+If Fastify does not expose the raw body, the provider signature cannot be verified reliably. Parsed JSON is too late in the pipeline.
+</Callout>
+
+```ts title="src/server.ts"
+import Fastify from "fastify";
+import { createClient } from "paymesh";
+import { fastifyAdapter } from "@paymesh/fastify";
+import { stripe } from "@paymesh/stripe";
+
+const app = Fastify({
+  logger: true,
+});
+
+await app.register(import("@fastify/raw-body"), {
+  field: "rawBody",
+  global: false,
+  routes: ["/webhooks/stripe"],
+});
+
+const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+});
+
+app.post("/webhooks/stripe", async (request, reply) => {
+  const response = await fastifyAdapter({
+    client: paymesh,
+    request,
+  }).webhook();
+
+  reply.status(response.status);
+  response.headers.forEach((value, key) => reply.header(key, value));
+  reply.send(await response.text());
+});
+```
+
+## Keep the acknowledgment path narrow
+
+The route that responds to the provider should do as little as possible before returning a response.
+
+Good acknowledgment path:
+
+- verify signature
+- normalize event
+- persist idempotency state
+- run only the work that must happen before acknowledgment
+- return the response
+
+Bad acknowledgment path:
+
+- send Slack notifications
+- call three internal services
+- re-fetch the payment from the provider
+- rebuild dashboards synchronously
+- run slow cross-table analytics updates
+
+If your provider times out waiting for acknowledgment, it will retry. That turns one slow request into many duplicate requests.
+
+## Idempotency is not optional
+
+Duplicate webhook deliveries are normal.
+
+Your system has to behave correctly when the same event arrives:
+
+- twice in one second
+- after the original request already succeeded
+- concurrently on two instances
+- after a temporary database failover
+
+Paymesh gives you normalized webhook events, but your database adapter still has to make duplicate suppression atomic.
+
+## Where idempotency actually lives
+
+The critical boundary is the webhook event repository in the database adapter.
+
+Your adapter must be able to acquire a webhook event exactly once for the event identity you use. That identity usually includes:
+
+- provider
+- upstream event id
+- or another provider-specific unique delivery key
+
+The implementation must be protected by a unique constraint or an equivalent atomic write primitive.
+
+### Example acquisition shape
+
+```ts title="src/adapter/webhook-events.ts"
+export async function acquireWebhookEvent(input: {
+  eventId: string;
+  provider: string;
+  receivedAt: Date;
+}) {
+  return db
+    .insert(webhookEvents)
+    .values({
+      provider: input.provider,
+      provider_event_id: input.eventId,
+      received_at: input.receivedAt,
+      status: "processing",
+    })
+    .onConflictDoNothing({
+      target: [webhookEvents.provider, webhookEvents.provider_event_id],
+    })
+    .returning();
+}
+```
+
+If that insert does not happen atomically, duplicate deliveries can both pass the gate and run side effects twice.
+
+## Design for retries from the beginning
+
+Providers retry for several reasons:
+
+- your route returned a non-2xx response
+- your route timed out
+- the network path failed after your app completed work
+- the provider did not receive or trust the acknowledgment
+
+That means your processing must be safe under replay.
+
+The practical model is:
+
+- make the first write idempotent
+- make downstream side effects idempotent where possible
+- record enough metadata to prove what happened
+- keep the response path short so unnecessary retries stay rare
+
+## Separate normalized persistence from expensive reactions
+
+A common mistake is to treat "webhook received" and "all business logic completed" as the same unit of work.
+
+They are not the same.
+
+A better split is:
+
+- route path: verification, normalization, durable local state, dispatch
+- async path: notifications, projections, search indexing, support metrics, emails
+
+## Use hooks and plugins deliberately
+
+Paymesh hooks are useful, but you still need to decide which hooks are cheap enough to run inline.
+
+### Good inline hook work
+
+- lightweight audit rows
+- cheap state transitions
+- enqueueing a background job
+- updating a narrow operational table inside the same transaction boundary
+
+### Bad inline hook work
+
+- slow HTTP calls to unrelated services
+- generating files or reports
+- expensive dashboard fan-out
+- reading a lot of unrelated records before you can acknowledge
+
+## Queue heavy work
+
+If a webhook triggers business actions that are slow or operationally noisy, move them into a queue or worker.
+
+The route should produce a minimal durable fact such as:
+
+- webhook event stored
+- payment state updated
+- background job enqueued
+
+Then the worker can:
+
+- send emails
+- fan out to analytics
+- notify support systems
+- refresh projections
+- sync external CRMs
+
+## Handle out-of-order events
+
+At volume, event order is not guaranteed.
+
+You can receive:
+
+- `payment.succeeded` before a previously retried `payment.created`
+- customer update after local deletion intent
+- checkout completion after another payment-side event already moved the record
+
+Your handlers should not assume the event stream is perfectly ordered.
+
+Practical strategies:
+
+- treat the provider event as the current authority when appropriate
+- make updates monotonic when possible
+- keep provider ids and timestamps available
+- allow upsert semantics instead of only create/delete semantics
+
+## Persist raw payloads only when they buy you something
+
+`includeRaw` and adapter-level `persistRaw` are useful, but they have real cost.
+
+Raw payload persistence increases:
+
+- row size
+- write amplification
+- retention cost
+- operator temptation to couple downstream systems to provider-shaped payloads
+
+Use raw persistence when:
+
+- you are debugging a new provider
+- support needs exact upstream payload inspection
+- compliance or audit requirements justify it
+
+Keep it off when normalized records and webhook metadata are enough.
+
+## Observability requirements
+
+Once webhook traffic matters, logs alone are not enough.
+
+You need to be able to answer:
+
+- how many webhook deliveries arrived per provider
+- how many failed verification
+- how many were duplicates
+- how many retried
+- what the slowest handlers are
+- which event types generate the most load
+- what percentage of events reached terminal success
+
+Useful dimensions to record:
+
+- provider
+- event type
+- upstream event id
+- delivery timestamp
+- processing status
+- attempt count
+- latency
+- instance or worker identity
+
+## Use the Audit Logs plugin for normalized event history
+
+When the operational question is "what happened in Paymesh terms?", normalized event logging is more useful than raw provider payloads alone.
+
+[Audit Logs](/docs/plugins/audit-logs) is the right place to persist:
+
+- normalized event type
+- actor or request metadata
+- operational notes
+- plugin-generated events
+
+That gives support and operations a stable event model even if provider payloads differ.
+
+## Put dashboards on normalized records, not webhook request bodies
+
+Dashboards should read from:
+
+- normalized payments
+- normalized customers
+- normalized PIX records
+- webhook event tables
+- audit records
+
+They should not depend on reading the request body that happened to arrive on one delivery attempt.
+
+That separation makes retries, replay, and provider changes much easier to reason about.
+
+## Multi-instance deployment concerns
+
+Webhook scale problems get sharper when you run multiple app instances.
+
+The route layer must assume:
+
+- two instances can receive duplicate deliveries close together
+- workers can race on the same follow-up job
+- retries can arrive after failover
+
+That means:
+
+- use database-enforced uniqueness
+- avoid in-memory duplicate suppression
+- keep queue deduplication keys stable
+- avoid local process state as the source of truth
+
+## Timeout strategy
+
+Use strict, explicit timeouts on internal calls made from webhook processing.
+
+If a webhook handler depends on another service:
+
+- keep the timeout short
+- degrade safely
+- prefer enqueueing rather than waiting
+
+Long internal timeouts inside webhook routes are one of the easiest ways to trigger avoidable provider retries.
+
+## Error handling strategy
+
+Treat errors in three groups:
+
+### Verification errors
+
+These mean the request is not trustworthy.
+
+Examples:
+
+- invalid signature
+- missing signature header
+- malformed body for the provider verifier
+
+These should fail fast and never enter normal processing.
+
+### Recoverable processing errors
+
+These are temporary problems:
+
+- transient database failure
+- queue unavailable
+- temporary dependency timeout
+
+These should produce enough telemetry for safe replay and operational visibility.
+
+### Non-recoverable mapping or code errors
+
+These usually indicate a bug or unsupported upstream payload shape.
+
+These should be visible immediately and should not silently disappear into generic retries.
+
+## A production shape
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { auditLog } from "@paymesh/audit-logs";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+    persistRaw: false,
+  }),
+  timeout: 8_000,
+  includeRaw: false,
+  plugins: [
+    auditLog({
+      actor: async ({ request }) => {
+        return request.headers.get("x-operator-id") ?? null;
+      },
+    }),
+  ],
+  hooks: {
+    async onEvent({ event, client }) {
+      switch (event.type) {
+        case "payment.succeeded": {
+          await queue.publish("payment.succeeded", {
+            paymentId: event.data.id,
+            provider: event.provider,
+          });
+          return;
+        }
+
+        case "pix.created": {
+          await queue.publish("pix.created", {
+            pixId: event.data.id,
+          });
+          return;
+        }
+      }
+    },
+  },
+});
+```
+
+This keeps the durable path small and moves expensive reactions into background work.
+
+## Checklist
+
+Before calling your webhook pipeline production-ready, verify all of this:
+
+- the route uses the raw body required by the adapter
+- verification happens before parsed-body business logic
+- duplicate suppression is atomic at the database boundary
+- heavy side effects are not required for acknowledgment
+- queue deduplication keys are stable
+- raw payload persistence is intentional, not accidental
+- normalized events and webhook event rows are observable
+- failure paths are visible in logs and metrics
+- operators can inspect normalized history without replaying payload parsing logic
+
+## Related pages
+
+- [Optimize Performance](/docs/guides/optimize-performance)
+- [Create a Database Adapter](/docs/guides/create-a-database-adapter)
+- [Create a Provider](/docs/guides/create-a-provider)
+- [Plugins Overview](/docs/plugins/overview)
+- [Audit Logs](/docs/plugins/audit-logs)

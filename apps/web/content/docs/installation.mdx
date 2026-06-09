@@ -1,0 +1,266 @@
+---
+title: Installation
+description: Install Paymesh, wire a provider, optionally add persistence, and mount webhook handling in a way that scales beyond a demo.
+---
+
+<Steps>
+  <Step>
+    ### Install the core package and one provider
+
+    Start with the core client and exactly one provider.
+
+    <InstallTabs packages="paymesh @paymesh/stripe" />
+
+    If your product model fits Polar better:
+
+    <InstallTabs packages="paymesh @paymesh/polar" />
+
+    <Callout type="info">
+      You do not need a database on day one, but most real installations should add one quickly so webhook state, customers, PIX objects, and catalog snapshots are queryable locally.
+    </Callout>
+  </Step>
+
+  <Step>
+    ### Create a shared client module
+
+    Put the client in a stable server-side module such as `src/lib/paymesh.ts`, `src/server/paymesh.ts`, or `app/lib/paymesh.ts`.
+
+    <Tabs items={["stripe", "polar"]}>
+      <Tab value="stripe">
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { stripe } from "@paymesh/stripe";
+
+        export const paymesh = createClient({
+          provider: stripe({
+            secret: "sk_test_123",
+            webhookSecret: "whsec_123",
+          }),
+        });
+        ```
+      </Tab>
+      <Tab value="polar">
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { polar } from "@paymesh/polar";
+
+        export const paymesh = createClient({
+          provider: polar({
+            accessToken: "polar_access_123",
+            webhookSecret: "whsec_polar_123",
+          }),
+        });
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step>
+    ### Add a database adapter
+
+    For anything beyond a toy integration, add one database adapter.
+
+    <Tabs items={["postgres", "drizzle", "prisma"]}>
+      <Tab value="postgres">
+        <InstallTabs packages="@paymesh/postgres pg" />
+
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { postgres } from "@paymesh/postgres";
+        import { stripe } from "@paymesh/stripe";
+
+        export const paymesh = createClient({
+          provider: stripe({
+            secret: "sk_test_123",
+            webhookSecret: "whsec_123",
+          }),
+          database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+            persistRaw: true,
+          }),
+        });
+        ```
+      </Tab>
+
+      <Tab value="drizzle">
+        <InstallTabs packages="@paymesh/drizzle drizzle-orm pg" />
+
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { drizzle as paymeshDrizzle } from "@paymesh/drizzle";
+        import { stripe } from "@paymesh/stripe";
+        import { drizzle } from "drizzle-orm/node-postgres";
+
+        const db = drizzle("postgres://postgres:postgres@localhost:5432/paymesh");
+
+        export const paymesh = createClient({
+          provider: stripe({
+            secret: "sk_test_123",
+            webhookSecret: "whsec_123",
+          }),
+          database: paymeshDrizzle(db, {
+            persistRaw: true,
+          }),
+        });
+        ```
+      </Tab>
+
+      <Tab value="prisma">
+        <InstallTabs packages="@paymesh/prisma @prisma/client" />
+
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { prisma as paymeshPrisma } from "@paymesh/prisma";
+        import { PrismaClient } from "@prisma/client";
+        import { stripe } from "@paymesh/stripe";
+
+        const db = new PrismaClient();
+
+        export const paymesh = createClient({
+          provider: stripe({
+            secret: "sk_test_123",
+            webhookSecret: "whsec_123",
+          }),
+          database: paymeshPrisma(db, {
+            persistRaw: true,
+          }),
+        });
+        ```
+      </Tab>
+    </Tabs>
+
+    <Callout>
+      `persistRaw: true` stores provider payloads alongside normalized data. Use it when you need reconciliation, replay analysis, or provider-specific debugging. Leave it off when normalized records are enough.
+    </Callout>
+  </Step>
+
+  <Step>
+    ### Mount webhook handling
+
+    Your provider package is only half of the installation story. You also need to accept webhook traffic and dispatch normalized hooks.
+
+    <Tabs items={["next", "express", "hono", "elysia"]}>
+      <Tab value="next">
+        ```ts title="app/api/webhooks/paymesh/route.ts"
+        import { Webhooks } from "@paymesh/next";
+        import { paymesh } from "@/lib/paymesh";
+
+        export const POST = Webhooks({
+          client: paymesh,
+          async onPaymentSucceeded(event) {
+            console.log("payment.succeeded", event.data.id);
+          },
+        });
+        ```
+      </Tab>
+
+      <Tab value="express">
+        ```ts title="src/server/webhooks.ts"
+        import express from "express";
+        import { Webhooks } from "@paymesh/express";
+        import { paymesh } from "./paymesh";
+
+        const app = express();
+
+        app.post(
+          "/webhooks/paymesh",
+          express.raw({ type: "*/*" }),
+          Webhooks({
+            client: paymesh,
+            async onPaymentSucceeded(event) {
+              console.log("payment.succeeded", event.data.id);
+            },
+          }),
+        );
+        ```
+      </Tab>
+
+      <Tab value="hono">
+        ```ts title="src/server/webhooks.ts"
+        import { Hono } from "hono";
+        import { Webhooks } from "@paymesh/hono";
+        import { paymesh } from "./paymesh";
+
+        const app = new Hono();
+
+        app.post(
+          "/webhooks/paymesh",
+          Webhooks({
+            client: paymesh,
+          }),
+        );
+        ```
+      </Tab>
+
+      <Tab value="elysia">
+        ```ts title="src/server/webhooks.ts"
+        import { Elysia } from "elysia";
+        import { Webhooks } from "@paymesh/elysia";
+        import { paymesh } from "./paymesh";
+
+        const app = new Elysia();
+
+        app.post(
+          "/webhooks/paymesh",
+          Webhooks({
+            client: paymesh,
+          }),
+        );
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step>
+    ### Add plugins only after the core path is live
+
+    Once payments, customers, and webhooks are stable, add plugins for operational workflows.
+
+    <InstallTabs packages="@paymesh/dash @paymesh/audit-logs" />
+
+    ```ts title="src/lib/paymesh.ts"
+    import { auditLog } from "@paymesh/audit-logs";
+    import { dash } from "@paymesh/dash";
+
+    export const paymesh = createClient({
+      provider: stripe({
+        secret: "sk_test_123",
+        webhookSecret: "whsec_123",
+      }),
+      database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+      plugins: [
+        dash({
+          auth({ request }) {
+            const email = request.headers.get("x-user-email");
+
+            if (!email) {
+              throw new Error("Unauthorized");
+            }
+
+            return {
+              id: "user_123",
+              type: "user",
+              email,
+            };
+          },
+        }),
+        auditLog({
+          events: ["payment.*", "customer.*", "checkout.*"],
+          retention: "1y",
+        }),
+      ],
+    });
+    ```
+  </Step>
+</Steps>
+
+## What "installed correctly" means
+
+An installation is complete when:
+
+- your app has one shared Paymesh client
+- one provider is configured
+- webhook routes are mounted
+- successful events reach normalized hooks
+- local persistence is configured if you need durable state
+
+If you only installed packages, you are not done.

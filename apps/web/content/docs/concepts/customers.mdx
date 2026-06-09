@@ -1,0 +1,59 @@
+---
+title: Customers
+description: Work with provider-side customer records through one normalized client without duplicating provider-specific customer logic across the app.
+---
+
+## Supported operations
+
+The normalized customer client covers:
+
+- `upsert`
+- `get`
+- `delete`
+- `list`
+
+The exact behavior depends on provider capability and database configuration, but the application-facing API stays stable.
+
+## Upsert data
+
+Customer upsert input can include:
+
+- `id`
+- `externalId`
+- `name`
+- `email`
+- `phone`
+- `metadata`
+
+```ts title="src/server/customers.ts"
+const customer = await paymesh.customers.upsert({
+  externalId: "user_123",
+  email: "ada@example.com",
+  name: "Ada Lovelace",
+  metadata: {
+    tier: "pro",
+  },
+});
+```
+
+## Why `externalId` matters
+
+`externalId` is the bridge back to your product model. It is how you keep provider-side customer records attached to your own user or organization record without using provider ids as primary product identifiers.
+
+## Delete behavior
+
+Deletion returns a normalized payload:
+
+```ts
+{
+  id: "cus_123",
+  provider: "stripe",
+  deleted: true
+}
+```
+
+That keeps destructive behavior explicit.
+
+## Database persistence
+
+With a database adapter attached, customer state can be persisted into the built-in `customers` table and queried locally. That is usually better than hitting the provider API on every request.

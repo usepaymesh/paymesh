@@ -1,0 +1,25 @@
+---
+title: Testing
+description: Test the normalization boundary, webhook paths, and plugin behavior without turning your billing test suite into provider fixture soup.
+---
+
+## What to test
+
+At minimum, test:
+
+- payment creation paths in your application service layer
+- webhook handlers for the normalized events you rely on
+- plugin-provided runtime APIs you actually call
+- database persistence when billing state is product-critical
+
+## Favor normalized assertions
+
+A useful Paymesh test usually asserts normalized behavior:
+
+```ts title="test/billing.test.ts"
+expect(event.type).toBe("payment.succeeded");
+expect(event.data.id).toBe("pi_123");
+expect(event.data.status).toBe("paid");
+```
+
+That is usually better than asserting raw provider fixture shape unless you are explicitly testing a provider adapter.

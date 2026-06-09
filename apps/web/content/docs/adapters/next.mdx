@@ -1,0 +1,57 @@
+---
+title: Next Adapter
+description: Mount Paymesh webhooks in Next.js App Router with a native route handler that stays tiny while still exposing the full normalized hook surface.
+---
+
+## Installation
+
+<InstallTabs packages="@paymesh/next" />
+
+## Basic usage
+
+```ts title="app/api/webhooks/paymesh/route.ts"
+import { Webhooks } from "@paymesh/next";
+import { paymesh } from "@/lib/paymesh";
+
+export const POST = Webhooks({
+  client: paymesh,
+  async onPaymentSucceeded(event) {
+    console.log("payment.succeeded", event.data.id);
+  },
+});
+```
+
+## What the adapter does
+
+The Next adapter:
+
+- accepts a configured `client`
+- forwards the incoming `Request` into `client.webhooks.handle()`
+- returns `Response.json(result.body, { status: result.status })`
+- lets you declare the same hook map you would pass directly to the core webhook handler
+
+That means the adapter is intentionally thin. All normalization, verification, persistence, and hook dispatch stay inside the core client.
+
+## Including raw payloads
+
+If your route logic needs provider payloads directly, enable `includeRaw`.
+
+```ts title="app/api/webhooks/paymesh/route.ts"
+export const POST = Webhooks({
+  client: paymesh,
+  includeRaw: true,
+  async onEvent(event) {
+    console.log(event.raw);
+  },
+});
+```
+
+Use that only when you need it. Most application logic should stay on normalized fields.
+
+## When to choose this adapter
+
+Use `@paymesh/next` when:
+
+- your app uses the App Router
+- you want one-file webhook routes
+- you want route handlers that stay boring and defer all billing behavior into Paymesh

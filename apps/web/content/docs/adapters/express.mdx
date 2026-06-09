@@ -1,0 +1,57 @@
+---
+title: Express Adapter
+description: Use Paymesh webhook handling inside Express while preserving raw-body semantics required for provider signature verification.
+---
+
+## Installation
+
+<InstallTabs packages="@paymesh/express express" />
+
+## Basic usage
+
+```ts title="src/server/webhooks.ts"
+import express from "express";
+import { Webhooks } from "@paymesh/express";
+import { paymesh } from "./paymesh";
+
+const app = express();
+
+app.post(
+  "/webhooks/paymesh",
+  express.raw({ type: "*/*" }),
+  Webhooks({
+    client: paymesh,
+    async onEvent(event) {
+      console.log(event.type, event.context.deliveryId);
+    },
+  }),
+);
+```
+
+<Callout type="warn" title="`express.raw()` is required">
+  Express must pass the untouched request body into Paymesh. Provider signatures are computed from the original bytes, not from a parsed JSON object. If you replace `express.raw({ type: "*/*" })` with `express.json()`, signature verification will eventually fail and the webhook route will not work reliably.
+</Callout>
+
+## Why raw body matters
+
+Most provider verification schemes sign the original request body. If Express parses the body before the adapter sees it, verification can fail.
+
+That is why the raw-body middleware is not an implementation detail. It is part of the correct integration contract.
+
+In practice that means:
+
+- mount the webhook route before global JSON body parsing, or
+- use route-local `express.raw()` exactly like the example above
+
+## What the adapter does
+
+The Express adapter:
+
+- reads the Express request and response objects
+- reconstructs a standard `Request`
+- forwards it into `client.webhooks.handle()`
+- writes the normalized result body and status back to Express
+
+## Recommended pattern
+
+Keep provider-specific billing routes isolated from the rest of your JSON middleware stack. In Express, that usually means mounting the Paymesh route before generic body parsers or using route-local raw parsing exactly like the example above.

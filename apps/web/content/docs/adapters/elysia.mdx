@@ -1,0 +1,42 @@
+---
+title: Elysia Adapter
+description: Mount Paymesh webhook handling in Elysia with a direct request-to-handler path that fits Bun-first services cleanly.
+---
+
+## Installation
+
+<InstallTabs packages="@paymesh/elysia elysia" />
+
+## Basic usage
+
+```ts title="src/server/webhooks.ts"
+import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
+import { paymesh } from "./paymesh";
+
+const app = new Elysia();
+
+app.post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client: paymesh,
+    async onEvent(event) {
+      console.log(event.type);
+    },
+  }),
+);
+```
+
+## What the adapter does
+
+The Elysia adapter receives `request` and `status()` from the Elysia context, calls `client.webhooks.handle()`, and maps the normalized result back through Elysia’s response API.
+
+That keeps the route itself small and leaves all billing logic in Paymesh hooks.
+
+## When to choose this adapter
+
+Use `@paymesh/elysia` when:
+
+- your backend is Bun-first
+- you want an Elysia-native route signature
+- you still want webhook behavior to be identical to the rest of the Paymesh ecosystem

@@ -1,0 +1,292 @@
+---
+title: Client Options
+description: Full reference for createClient, including provider composition, database persistence, schema overrides, plugin registration, and raw payload behavior.
+---
+
+## `createClient`
+
+Every Paymesh installation starts from `createClient`. This is the composition point where you decide:
+
+- which provider powers the runtime
+- whether data is persisted locally
+- how built-in tables are named
+- whether plugins extend routes, hooks, and schema
+- whether normalized objects should carry raw provider payloads
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+import { auditLog } from "@paymesh/audit-logs";
+import { dash } from "@paymesh/dash";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+  includeRaw: false,
+  schema: {
+    prefix: "paymesh",
+  },
+  plugins: [
+    auditLog({
+      events: ["payment.*", "customer.*"],
+    }),
+    dash({
+      path: "/internal/paymesh",
+      auth: async ({ request }) => {
+        const session = await auth({ request });
+        return {
+          allowed: session.user.role === "admin",
+          actor: {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+          },
+        };
+      },
+    }),
+  ],
+});
+```
+
+## Option reference
+
+| Option | Required | Default | What it controls |
+| --- | --- | --- | --- |
+| `provider` | yes | none | The provider implementation created by packages such as `@paymesh/stripe` or `@paymesh/polar`. |
+| `database` | no | `undefined` | Persists normalized data, enables migrations, webhook deduplication, catalog sync, plugins that require storage, and operational tooling. |
+| `includeRaw` | no | `false` | Propagates raw provider payloads through client reads and webhook events when enabled. |
+| `schema` | no | generated defaults | Renames built-in tables, changes the prefix, and adds extra columns or custom tables. |
+| `plugins` | no | `[]` | Registers plugin routes, hooks, schema extensions, setup logic, and runtime client extensions. |
+
+## `provider`
+
+The provider is the only required option. It supplies:
+
+- capabilities such as `pix`, `customers`, `webhooks`, `subscriptions`, and `customerPortal`
+- normalized payment and customer methods
+- webhook verification and event mapping
+- optional dashboard helpers and catalog sync
+
+Pick a single provider per client instance. If you need multiple providers, create multiple clients and compose them one level above Paymesh.
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { polar } from "@paymesh/polar";
+
+export const paymesh = createClient({
+  provider: polar({
+    accessToken: "polar_access_123",
+    webhookSecret: "whsec_123",
+  }),
+});
+```
+
+### Provider capability checks
+
+Paymesh exposes provider capabilities on the runtime so your product code can branch only when necessary.
+
+```ts title="src/server/capabilities.ts"
+if (paymesh.capabilities.pix) {
+  const pix = await paymesh.pix.create({
+    amount: 5900,
+    currency: "BRL",
+    description: "Invoice #42",
+  });
+
+  return pix.copyPasteCode;
+}
+```
+
+## `database`
+
+Without a database, Paymesh still works for direct payment creation and webhook normalization. With a database, it becomes operationally useful.
+
+Adding `database` enables:
+
+- normalized persistence for `customers`, `checkouts`, `pix`, `subscriptions`, `products`, `prices`, and `webhookEvents`
+- webhook delivery acquisition and deduplication
+- catalog push and migration workflows from `@paymesh/cli`
+- plugins that declare `config.database: true`
+- dashboard views powered by stored data instead of live provider fetches
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+});
+```
+
+<Callout type="info">
+  `persistRaw` is configured on the database adapter, not on `createClient`. When it is enabled, stored rows retain provider payloads for reconciliation and debugging.
+</Callout>
+
+## `includeRaw`
+
+`includeRaw` controls runtime objects, not storage. When enabled, return values and webhook events include the original provider payload in `raw`.
+
+```ts title="src/server/raw.ts"
+const client = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  includeRaw: true,
+});
+
+const pix = await client.pix.create({
+  amount: 9900,
+  currency: "BRL",
+  description: "Invoice #99",
+});
+
+console.log(pix.raw);
+```
+
+Use `includeRaw` when:
+
+- you are incrementally migrating from a provider SDK and still need provider-specific fields
+- support tooling needs the upstream payload at request time
+- you are debugging webhook mappings
+
+Keep it off when you want application code to stay strict about the normalized contract.
+
+## `schema`
+
+`schema` lets you control physical persistence details without rewriting the client contract.
+
+```ts title="src/lib/paymesh.ts"
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  schema: {
+    prefix: "billing",
+    tables: {
+      customers: {
+        name: "billing_customers",
+        fields: {
+          workspaceId: {
+            type: "string",
+            required: true,
+            index: true,
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+### Schema responsibilities
+
+| Schema area | What it affects |
+| --- | --- |
+| `prefix` | Default prefix for all built-in tables. |
+| `tables` | Built-in table name overrides plus extra fields for those tables. |
+| `customTables` | Additional custom tables, commonly contributed by plugins. |
+
+### What schema does not do
+
+- it does not change provider API behavior
+- it does not alter webhook mapping semantics
+- it does not change the normalized Paymesh runtime method signatures
+
+## `plugins`
+
+Plugins are registered in an ordered array. During client creation they can:
+
+- validate runtime requirements
+- extend the resolved schema
+- add HTTP routes
+- attach middleware
+- react to built-in webhook events
+- define custom plugin events
+- expose extra runtime APIs through `extends`
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { auditLog } from "@paymesh/audit-logs";
+import { dash } from "@paymesh/dash";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+  plugins: [
+    auditLog(),
+    dash({
+      path: "/internal/paymesh",
+      auth: async ({ request }) => {
+        const session = await auth({ request });
+        return {
+          allowed: session.user.role === "admin",
+        };
+      },
+    }),
+  ],
+});
+```
+
+### Plugin ordering
+
+Plugin registration order matters when:
+
+- multiple plugins observe the same hook
+- routes overlap
+- setup logic expects another plugin to have extended the schema first
+
+Keep official operational plugins near the end of the array unless you have a strong reason not to.
+
+## Runtime shape after composition
+
+After `createClient`, the runtime typically exposes:
+
+- `paymesh.provider`
+- `paymesh.capabilities`
+- `paymesh.payments`
+- `paymesh.pix`
+- `paymesh.customers`
+- `paymesh.webhooks`
+- `paymesh.routes`
+- `paymesh.plugins`
+- `paymesh.database`
+- `paymesh.schema`
+- plugin-contributed extensions
+
+That means the client becomes the single integration boundary for the rest of your application.
+
+## Recommended composition pattern
+
+Create one server-only module that exports the configured client, and import that module everywhere else.
+
+Do not:
+
+- instantiate providers inside route handlers
+- scatter schema options across unrelated files
+- assemble plugin lists conditionally in multiple places
+
+Do:
+
+- keep one authoritative `paymesh.ts`
+- colocate migration and webhook examples with that file
+- treat `createClient` as application infrastructure, not request-time logic

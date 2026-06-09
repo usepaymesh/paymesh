@@ -1,0 +1,72 @@
+---
+title: Comparison
+description: Understand where Paymesh sits between a direct provider SDK, internal billing glue code, and a fully abstracted payment platform.
+---
+
+## Paymesh vs direct provider SDKs
+
+Direct SDK usage is usually fast on day one and expensive on day ninety.
+
+| Concern | Direct SDK | Paymesh |
+| --- | --- | --- |
+| Payment creation | Provider-specific request bodies | Normalized client surface |
+| PIX handling | Provider-specific shape | Dedicated `pix` client |
+| Customer sync | Provider-specific methods | Normalized `customers` client |
+| Webhooks | Raw event fan-out and signature code | Normalized hooks and framework adapters |
+| Persistence | You build it yourself | First-party adapters and normalized schema |
+| Operational tooling | You build it yourself | First-party plugins |
+| Multi-provider strategy | Rewrite pressure | Provider boundary already exists |
+
+## Paymesh vs a thin in-house wrapper
+
+Many teams build a custom wrapper over Stripe or Polar. That is often better than importing a provider SDK all over the codebase, but thin wrappers usually stop at request helpers.
+
+Paymesh goes further:
+
+- provider capability flags are explicit
+- PIX is a first-class primitive
+- webhook event mapping is part of the contract
+- database persistence is part of the system
+- plugins can extend routes, schema, events, and runtime clients
+
+## Where Paymesh is opinionated
+
+Paymesh is not trying to hide all provider differences.
+
+Instead, it does three specific things:
+
+1. It normalizes the most common product-side operations.
+2. It makes unsupported capability differences explicit through provider capabilities.
+3. It gives you extension points when the normalized surface is not enough.
+
+That means the abstraction remains honest.
+
+## Good fit
+
+Paymesh is a strong fit when:
+
+- your product wants a stable billing boundary
+- you need local persistence of billing state
+- you need PIX support without mixing it into every payment branch
+- you want dashboard or audit capabilities without building them from scratch
+- you expect provider strategy to evolve
+
+## Bad fit
+
+Paymesh is a weaker fit when:
+
+- you only need one or two direct provider API calls
+- you are heavily invested in provider-specific features that are intentionally outside the normalized surface
+- you do not want a local billing model at all
+
+## Why this repo is structured the way it is
+
+The repository mirrors the comparison:
+
+- `packages/paymesh` owns the core contracts
+- provider packages implement provider-specific translation
+- adapter packages mount the same webhook engine in different frameworks
+- database packages persist the same normalized schema in different stacks
+- plugins build on top of the core runtime instead of patching providers directly
+
+That separation is the main value proposition.

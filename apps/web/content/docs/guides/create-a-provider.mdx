@@ -1,0 +1,602 @@
+---
+title: Create a Provider
+description: Build a real Paymesh provider using defineProvider, capability flags, normalized payments and customers, PIX, webhooks, catalog access, dashboard helpers, and request-level overrides.
+---
+
+This guide explains how to create a provider package for Paymesh.
+
+The provider layer is where upstream payment APIs stop leaking into application code.
+
+A provider is responsible for:
+
+- turning Paymesh input into upstream API calls
+- normalizing upstream responses
+- advertising capabilities truthfully
+- verifying and translating webhooks
+- optionally supporting PIX
+- optionally supporting catalog and dashboard sync
+
+If you get the provider contract right, application code stays small and migration-friendly.
+
+## Start with `defineProvider`
+
+```ts title="src/index.ts"
+import { defineProvider } from "paymesh";
+
+export const example = () =>
+  defineProvider({
+    id: "example",
+    capabilities: {
+      checkout: true,
+      customers: true,
+    },
+    payments: {
+      async create(data) {
+        return {
+          id: "pay_123",
+          provider: "example",
+          amount: data.amount,
+          currency: data.currency,
+          status: "pending",
+          raw: null,
+        };
+      },
+    },
+    customers: {
+      async get(id) {
+        return {
+          id,
+          provider: "example",
+          raw: null,
+        };
+      },
+      async upsert(data) {
+        return {
+          id: data.id ?? "cus_123",
+          provider: "example",
+          raw: null,
+        };
+      },
+      async delete(id) {
+        return {
+          id,
+          provider: "example",
+          deleted: true,
+          raw: null,
+        };
+      },
+    },
+  });
+```
+
+That is the smallest meaningful provider shape.
+
+## Understand every top-level provider option
+
+`ProviderDefinition` supports:
+
+- `id`
+- `payments`
+- `pix?`
+- `customers`
+- `webhooks?`
+- `catalog?`
+- `dashboard?`
+- `capabilities`
+
+## Step 1: Choose a stable `id`
+
+`id` should be:
+
+- lowercase
+- stable
+- globally unique in your Paymesh ecosystem
+
+Good:
+
+- `stripe`
+- `polar`
+- `acmepay`
+
+Bad:
+
+- `StripeProvider`
+- `my-new-best-provider-v2`
+
+## Step 2: Advertise capabilities truthfully
+
+Supported capability keys today are:
+
+- `pix`
+- `coupons`
+- `checkout`
+- `subscriptions`
+- `webhooks`
+- `refunds`
+- `customerPortal`
+- `customers`
+
+```ts title="src/index.ts"
+capabilities: {
+  checkout: true,
+  customers: true,
+  pix: true,
+  webhooks: true,
+},
+```
+
+Do not mark unsupported capabilities as `true` just because the upstream API has something vaguely related.
+
+The client runtime enforces capability checks based on this map.
+
+## Step 3: Implement `payments.create`
+
+The payment input contract is `PaymentCreateData`.
+
+Available input fields:
+
+- `amount`
+- `currency`
+- `productIds?`
+- `customer?`
+- `description?`
+- `metadata?`
+- `successUrl?`
+- `cancelUrl?`
+- `returnUrl?`
+
+Customer subfields are:
+
+- `id?`
+- `externalId?`
+- `name?`
+- `email?`
+- `document?`
+- `phone?`
+
+```ts title="src/index.ts"
+payments: {
+  async create(data) {
+    const upstream = await createCheckoutSession({
+      amount: data.amount,
+      cancelUrl: data.cancelUrl,
+      currency: data.currency,
+      customer: data.customer,
+      description: data.description,
+      metadata: data.metadata,
+      productIds: data.productIds,
+      returnUrl: data.returnUrl,
+      successUrl: data.successUrl,
+    });
+
+    return {
+      id: upstream.id,
+      provider: "example",
+      amount: upstream.amount,
+      currency: upstream.currency,
+      status: mapStatus(upstream.status),
+      checkoutUrl: upstream.checkoutUrl,
+      customer: upstream.customer,
+      metadata: upstream.metadata,
+      raw: null,
+    };
+  },
+},
+```
+
+### Normalize status aggressively
+
+The Paymesh status contract is small on purpose:
+
+- `pending`
+- `processing`
+- `paid`
+- `failed`
+- `canceled`
+- `refunded`
+
+Your provider should collapse upstream status sprawl into those values.
+
+## Step 4: Implement `customers`
+
+The customer contract has three methods:
+
+- `get`
+- `upsert`
+- `delete`
+
+`upsert` receives `CustomerUpsertData`:
+
+- `id?`
+- `externalId?`
+- `name?`
+- `email?`
+- `phone?`
+- `metadata?`
+
+```ts title="src/index.ts"
+customers: {
+  async get(id) {
+    const upstream = await getCustomer(id);
+
+    return {
+      id: upstream.id,
+      provider: "example",
+      externalId: upstream.externalId,
+      name: upstream.name,
+      email: upstream.email,
+      phone: upstream.phone,
+      metadata: upstream.metadata,
+      raw: null,
+    };
+  },
+  async upsert(data) {
+    const upstream = await upsertCustomer(data);
+
+    return {
+      id: upstream.id,
+      provider: "example",
+      externalId: upstream.externalId,
+      name: upstream.name,
+      email: upstream.email,
+      phone: upstream.phone,
+      metadata: upstream.metadata,
+      raw: null,
+    };
+  },
+  async delete(id) {
+    await deleteCustomer(id);
+
+    return {
+      id,
+      provider: "example",
+      deleted: true,
+      raw: null,
+    };
+  },
+},
+```
+
+## Step 5: Add PIX support when the provider has a native PIX flow
+
+`pix` is optional. Only implement it when the provider has a real PIX API.
+
+The PIX input contract is `PixCreateData`:
+
+- `amount`
+- `currency`
+- `customer?`
+- `description?`
+- `metadata?`
+- `pix?`
+
+PIX-specific options are:
+
+- `amountIncludesIof?: "always" | "never"`
+- `expiresAfterSeconds?: number`
+- `expiresAt?: Date | string`
+
+```ts title="src/index.ts"
+pix: {
+  async create(data) {
+    const upstream = await createPixCharge(data);
+
+    return {
+      id: upstream.id,
+      provider: "example",
+      method: "pix",
+      amount: upstream.amount,
+      currency: upstream.currency,
+      status: mapStatus(upstream.status),
+      copyPasteCode: upstream.copyPasteCode,
+      qrCodeImageUrlPng: upstream.qrCodePng,
+      qrCodeImageUrlSvg: upstream.qrCodeSvg,
+      instructionsUrl: upstream.instructionsUrl,
+      expiresAt: upstream.expiresAt,
+      raw: null,
+    };
+  },
+  async get(id) {
+    const upstream = await getPixCharge(id);
+
+    return {
+      id: upstream.id,
+      provider: "example",
+      method: "pix",
+      amount: upstream.amount,
+      currency: upstream.currency,
+      status: mapStatus(upstream.status),
+      copyPasteCode: upstream.copyPasteCode,
+      qrCodeImageUrlPng: upstream.qrCodePng,
+      qrCodeImageUrlSvg: upstream.qrCodeSvg,
+      instructionsUrl: upstream.instructionsUrl,
+      expiresAt: upstream.expiresAt,
+      raw: null,
+    };
+  },
+},
+```
+
+## Step 6: Respect request-level overrides
+
+Provider methods can receive `ProviderRequestOptions`.
+
+Supported options are:
+
+- `baseUrl?`
+- `timeout?`
+- `retry?`
+- `fetch?`
+- `includeRaw?`
+
+Use these to merge client defaults with per-call overrides.
+
+The built-in Stripe and Polar providers both follow this pattern.
+
+```ts title="src/index.ts"
+function resolveRequestOptions(options?: ProviderRequestOptions<boolean>) {
+  return {
+    baseUrl: options?.baseUrl ?? defaultBaseUrl,
+    timeout: options?.timeout ?? defaultTimeout,
+    retry: options?.retry ?? defaultRetry,
+    fetch: options?.fetch ?? defaultFetch,
+  };
+}
+```
+
+## Step 7: Attach raw payloads with `withRaw`
+
+When `includeRaw` is enabled, the returned object should carry the upstream payload.
+
+Use `withRaw` from Paymesh rather than branching everywhere manually.
+
+```ts title="src/index.ts"
+import { withRaw } from "paymesh";
+
+return withRaw(
+  {
+    id: upstream.id,
+    provider: "example",
+    amount: upstream.amount,
+    currency: upstream.currency,
+    status: mapStatus(upstream.status),
+  },
+  upstream,
+  options?.includeRaw,
+);
+```
+
+## Step 8: Implement webhooks
+
+`webhooks` is optional, but it is required for providers that support inbound lifecycle events.
+
+The webhook contract has two parts:
+
+- `verify`
+- `handle`
+
+### `verify`
+
+`verify` should validate signatures or authenticity on the raw incoming request.
+
+### `handle`
+
+`handle` should:
+
+- parse the upstream event
+- normalize the event type
+- normalize the event payload
+- return the Paymesh webhook result shape
+
+```ts title="src/index.ts"
+webhooks: {
+  async verify({ headers, body }) {
+    return verifySignature(headers, body);
+  },
+  async handle({ request, includeRaw }) {
+    const upstream = await parseWebhookRequest(request);
+
+    return {
+      deliveryId: upstream.id,
+      event: withRaw(
+        {
+          id: upstream.data.id,
+          provider: "example",
+          amount: upstream.data.amount,
+          currency: upstream.data.currency,
+          status: mapStatus(upstream.data.status),
+        },
+        upstream,
+        includeRaw,
+      ),
+      hook: "payment.succeeded",
+      handled: true,
+      received: true,
+      type: "payment.succeeded",
+    };
+  },
+},
+```
+
+Your webhook mapper is where provider-specific event sprawl gets collapsed into the Paymesh event vocabulary.
+
+## Step 9: Add `catalog` when the provider exposes products and prices
+
+`catalog` lets Paymesh sync provider-side products and prices.
+
+It exposes:
+
+- `list(): Promise<{ products, prices }>`
+
+Implement it when:
+
+- the provider has a real product catalog
+- dashboard or sync flows need it
+
+## Step 10: Add `dashboard` helpers
+
+`dashboard` is optional and exists for operational tooling.
+
+Available helpers include:
+
+- `getBalance?`
+- `getResourceLink?`
+- `syncCheckout?`
+- `syncInvoice?`
+- `syncPix?`
+- `syncSubscription?`
+
+Use these only when the provider can support them meaningfully.
+
+## Real provider construction pattern
+
+The built-in providers follow a stable shape:
+
+1. accept provider options
+2. build headers and request defaults
+3. merge request-level overrides
+4. call upstream APIs
+5. map the results into Paymesh types
+6. attach raw payloads conditionally
+
+```ts title="src/index.ts"
+import {
+  defineProvider,
+  request,
+  withRaw,
+  type ProviderRequestOptions,
+} from "paymesh";
+
+type ExampleProviderOptions = {
+  baseUrl?: string;
+  fetch?: typeof fetch;
+  retry?: ProviderRequestOptions["retry"];
+  secret: string;
+  timeout?: number;
+  webhookSecret?: string;
+};
+
+export const example = ({
+  baseUrl = "https://api.example-payments.com",
+  fetch,
+  retry,
+  secret,
+  timeout,
+  webhookSecret,
+}: ExampleProviderOptions) => {
+  const headers = {
+    authorization: `Bearer ${secret}`,
+    "content-type": "application/json",
+  };
+
+  const resolveRequestOptions = (options?: ProviderRequestOptions<boolean>) => ({
+    baseUrl: options?.baseUrl ?? baseUrl,
+    fetch: options?.fetch ?? fetch,
+    headers,
+    retry: options?.retry ?? retry,
+    timeout: options?.timeout ?? timeout,
+  });
+
+  return defineProvider({
+    id: "example",
+    capabilities: {
+      checkout: true,
+      customers: true,
+      pix: true,
+      webhooks: true,
+    },
+    payments: {
+      async create(data, options) {
+        const upstream = await request("/v1/checkouts", {
+          ...resolveRequestOptions(options),
+          body: JSON.stringify(data),
+          method: "POST",
+          provider: "example",
+        });
+
+        return withRaw(
+          {
+            id: upstream.id,
+            provider: "example",
+            amount: upstream.amount,
+            currency: upstream.currency,
+            status: "pending",
+            checkoutUrl: upstream.checkoutUrl,
+          },
+          upstream,
+          options?.includeRaw,
+        );
+      },
+    },
+    customers: {
+      async get(id, options) {
+        const upstream = await request(`/v1/customers/${id}`, {
+          ...resolveRequestOptions(options),
+          provider: "example",
+        });
+
+        return withRaw(
+          {
+            id: upstream.id,
+            provider: "example",
+            email: upstream.email,
+            name: upstream.name,
+          },
+          upstream,
+          options?.includeRaw,
+        );
+      },
+      async upsert(data, options) {
+        const upstream = await request("/v1/customers", {
+          ...resolveRequestOptions(options),
+          body: JSON.stringify(data),
+          method: "POST",
+          provider: "example",
+        });
+
+        return withRaw(
+          {
+            id: upstream.id,
+            provider: "example",
+            email: upstream.email,
+            name: upstream.name,
+          },
+          upstream,
+          options?.includeRaw,
+        );
+      },
+      async delete(id, options) {
+        const upstream = await request(`/v1/customers/${id}`, {
+          ...resolveRequestOptions(options),
+          method: "DELETE",
+          provider: "example",
+        });
+
+        return withRaw(
+          {
+            id,
+            provider: "example",
+            deleted: upstream.deleted === true,
+          },
+          upstream,
+          options?.includeRaw,
+        );
+      },
+    },
+  });
+};
+```
+
+## Common mistakes
+
+- mapping upstream statuses 1:1 instead of normalizing them
+- lying in `capabilities`
+- ignoring request-level overrides
+- returning provider-shaped objects instead of Paymesh-shaped objects
+- implementing webhooks without raw signature verification
+
+## Next steps
+
+- Read [Payment Providers](/docs/concepts/payment-providers) for the conceptual model.
+- Read the built-in providers: [Stripe](/docs/providers/stripe) and [Polar](/docs/providers/polar).
+- Read [Optimize Performance](/docs/guides/optimize-performance) after your provider works, so you can trim request and persistence costs.

@@ -1,0 +1,671 @@
+---
+title: Create Your First Plugin
+description: Build a real Paymesh plugin from scratch using definePlugin, schema contributions, event definitions, hooks, routes, middleware, setup, and lazy client extensions.
+---
+
+This guide shows how to build a real Paymesh plugin instead of a toy wrapper.
+
+The goal is to create a plugin that:
+
+- contributes its own table
+- listens to normalized Paymesh events
+- emits custom plugin events
+- exposes a runtime API through `extends`
+- ships an internal route
+- validates its runtime requirements
+
+The examples below use the public Paymesh API exactly as it exists in the repository today.
+
+<Callout type="warn" title="Build the server-side contract first">
+  In Paymesh, plugins are runtime extensions of the server client. Start by designing the server contract: schema, hooks, routes, setup, and extensions. Do not start with UI.
+</Callout>
+
+## What a plugin actually is
+
+`definePlugin` accepts a `PaymeshPlugin` definition. At runtime, a plugin can contribute:
+
+- `id`
+- `name`
+- `version`
+- `description`
+- `options`
+- `config`
+- `schema`
+- `events`
+- `hooks`
+- `middleware`
+- `routes`
+- `setup`
+- `extends`
+
+That means plugins are not "helpers". They are first-class runtime modules attached to `createClient`.
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+import { opsNotesPlugin } from "./plugins/ops-notes";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  plugins: [opsNotesPlugin()],
+});
+```
+
+## The plugin we will build
+
+In this guide we will build an operational plugin called `ops-notes`.
+
+It will:
+
+- store internal notes attached to payments
+- listen for `payment.succeeded`
+- emit `ops.note.created`
+- expose `paymesh.opsNotes.list(paymentId)`
+- register a support-only route at `/internal/paymesh/ops-notes`
+
+That is large enough to exercise the real plugin surface without turning the guide into a fake abstraction.
+
+## Step 1: Decide the plugin boundary
+
+Before writing any code, decide what the plugin owns.
+
+For `ops-notes`, the ownership is:
+
+- table ownership: `ops-notes.payment_notes`
+- event ownership: `ops.note.created`
+- runtime API: `opsNotes.list`, `opsNotes.create`
+- route ownership: one internal support route
+- dependencies: database required
+
+If you cannot describe your plugin this explicitly, the design is still fuzzy.
+
+## Step 2: Start with the minimal plugin
+
+```ts title="src/plugins/ops-notes.ts"
+import { definePlugin } from "paymesh";
+
+export const opsNotesPlugin = () =>
+  definePlugin({
+    id: "ops-notes",
+    name: "Ops Notes",
+  });
+```
+
+That is the smallest valid plugin shape.
+
+## Step 3: Understand every top-level plugin option
+
+### `id`
+
+`id` is the stable identity of the plugin.
+
+Use it for:
+
+- plugin registration
+- plugin-owned custom table prefixes
+- route ownership
+- diagnostics
+
+Rules that keep `id` healthy:
+
+- keep it lowercase
+- keep it short
+- do not make it user-facing marketing text
+- do not change it after release unless you are ready for a migration
+
+### `name`
+
+`name` is display-oriented. It appears in dashboards, diagnostics, and plugin lists.
+
+### `version`
+
+Use `version` when you want runtime introspection to expose which plugin revision is mounted.
+
+### `description`
+
+Use `description` for operator-facing context, not as a duplicate of the README title.
+
+### `options`
+
+`options` is arbitrary plugin-owned configuration. Keep it narrow and typed.
+
+Good options:
+
+- `retentionDays`
+- `maxNotesPerPayment`
+- `redactFields`
+
+Bad options:
+
+- raw internal plumbing knobs consumers should never care about
+
+## Step 4: Add runtime requirements with `config`
+
+`config` declares what the plugin needs from the client runtime.
+
+Available options today:
+
+- `database?: boolean`
+- `providers?: readonly string[]`
+- `capabilities?: readonly ProviderCapability[]`
+
+### `database`
+
+Set `database: true` when the plugin cannot function without persistence.
+
+### `providers`
+
+Use `providers` when the plugin only makes sense for a subset of providers.
+
+### `capabilities`
+
+Use `capabilities` when the plugin depends on provider features such as:
+
+- `checkout`
+- `customers`
+- `pix`
+- `refunds`
+- `subscriptions`
+- `webhooks`
+
+```ts title="src/plugins/ops-notes.ts"
+config: {
+  database: true,
+  capabilities: ["webhooks", "customers"],
+},
+```
+
+For our plugin, `database: true` is mandatory.
+
+## Step 5: Define schema
+
+Plugins can contribute schema through `schema`.
+
+`PluginSchema` is a `DatabaseSchemaOptions` shape without the `prefix` field. That matters:
+
+- plugins may extend built-in tables
+- plugins may add `customTables`
+- plugins may not redefine the global prefix
+
+### Built-in table extensions
+
+You can extend built-in tables like `checkouts`, `customers`, or `pix`.
+
+### Custom tables
+
+You can define plugin-owned tables in `customTables`. Paymesh will automatically namespace them by plugin id when it merges schema options.
+
+```ts title="src/plugins/ops-notes.ts"
+schema: {
+  customTables: {
+    payment_notes: {
+      fields: {
+        payment_id: {
+          type: "string",
+          required: true,
+          index: true,
+        },
+        message: {
+          type: "string",
+          required: true,
+        },
+        actor_id: {
+          type: "string",
+          required: true,
+          index: true,
+        },
+        visibility: {
+          type: "enum",
+          enum: ["internal", "finance"],
+          default: "internal",
+        },
+      },
+      indexes: [
+        {
+          columns: ["payment_id", "actor_id"],
+        },
+      ],
+    },
+  },
+},
+```
+
+### Field options
+
+Every extra field can use:
+
+- `type`
+- `required`
+- `column`
+- `index`
+- `unique`
+- `default`
+
+For enum fields:
+
+- `enum`
+- `default`
+
+Supported `type` values are:
+
+- `string`
+- `number`
+- `bigint`
+- `boolean`
+- `date`
+- `json`
+- `decimal`
+- `enum`
+
+### Custom table options
+
+Custom tables support:
+
+- `name`
+- `fields`
+- `pluginId`
+- `primaryKey`
+- `timestamps`
+- `indexes`
+
+### `primaryKey`
+
+Available options:
+
+- `name?: string`
+- `type?: "bigserial" | "text"`
+
+### `timestamps`
+
+Available options:
+
+- `createdAt?: boolean`
+- `updatedAt?: boolean`
+
+### `indexes`
+
+Each index supports:
+
+- `name?: string`
+- `columns: string[]`
+- `unique?: boolean`
+
+## Step 6: Define custom events
+
+Plugins can define their own typed events with `event()`.
+
+Available event definition options:
+
+- `description?: string`
+- `example?: Payload`
+- `async?: boolean`
+- `deprecated?: boolean | string`
+
+```ts title="src/plugins/ops-notes.ts"
+import { definePlugin, event } from "paymesh";
+
+events: {
+  "ops.note.created": event<{
+    paymentId: string;
+    noteId: string;
+    actorId: string;
+    visibility: "internal" | "finance";
+  }>({
+    description: "Emitted when an operator creates a note attached to a payment.",
+    async: true,
+    example: {
+      paymentId: "cs_test_123",
+      noteId: "note_123",
+      actorId: "user_123",
+      visibility: "internal",
+    },
+  }),
+},
+```
+
+Use plugin events when other parts of the app should react to the plugin's own lifecycle.
+
+Do not create plugin events just to rename built-in Paymesh webhook events.
+
+## Step 7: Add `setup`
+
+`setup` runs once when the client boots the plugin.
+
+Use `setup` for:
+
+- validation
+- registries
+- warm-up
+- one-time diagnostics
+
+Do not use `setup` for continuous event logic.
+
+```ts title="src/plugins/ops-notes.ts"
+setup({ plugin, database }) {
+  if (!database) {
+    throw new Error(`Plugin "${plugin.id}" requires a configured database.`);
+  }
+},
+```
+
+## Step 8: Add hooks
+
+`hooks` let the plugin react to built-in webhook events and plugin events.
+
+For Paymesh clients, built-in webhook hooks include:
+
+- `onEvent`
+- `onUnhandledEvent`
+- `onPaymentCreated`
+- `onPaymentSucceeded`
+- `onPaymentFailed`
+- `onPaymentCanceled`
+- `onPaymentRefunded`
+- `onCustomerCreated`
+- `onCustomerUpdated`
+- `onCustomerDeleted`
+- `onSubscriptionCreated`
+- `onSubscriptionUpdated`
+- `onSubscriptionCanceled`
+- `onCheckoutCompleted`
+
+For our plugin, we want to react to `payment.succeeded`.
+
+```ts title="src/plugins/ops-notes.ts"
+hooks: {
+  async onPaymentSucceeded(event) {
+    console.log("payment succeeded", event.data.id);
+  },
+},
+```
+
+### When to use `onEvent`
+
+Use `onEvent` when:
+
+- you need one place for cross-event logic
+- you want pattern matching over many event types
+
+### When to use specific hooks
+
+Use `onPaymentSucceeded`, `onCustomerUpdated`, and the other specific hooks when:
+
+- you want strong event narrowing
+- you do not want to branch manually on `event.type`
+
+## Step 9: Add routes and middleware
+
+Plugins can mount internal HTTP routes. They are served through `client.routes.handle(request)`.
+
+Each route supports:
+
+- `method`
+- `path`
+- `description`
+- `middleware`
+- `handler`
+
+Middleware receives:
+
+- `context`
+- `next()`
+
+Route handlers receive:
+
+- `request`
+- `params`
+- `locals`
+- `route`
+- full plugin setup context
+
+```ts title="src/plugins/ops-notes.ts"
+routes: [
+  {
+    method: "GET",
+    path: "/internal/paymesh/ops-notes/:paymentId",
+    description: "List internal notes for a payment.",
+    handler: async ({ params }) => {
+      return Response.json({
+        paymentId: params.paymentId,
+        notes: [],
+      });
+    },
+  },
+],
+```
+
+### Shared `middleware`
+
+Top-level `middleware` applies to all plugin routes.
+
+Use it for:
+
+- auth
+- role checks
+- request tracing
+
+```ts title="src/plugins/ops-notes.ts"
+middleware: [
+  async ({ request, locals }, next) => {
+    const actorId = request.headers.get("x-actor-id");
+
+    if (!actorId) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    locals.actorId = actorId;
+    return next();
+  },
+],
+```
+
+## Step 10: Add client extensions with `extends`
+
+Use `extends` when the application should call the plugin directly through the Paymesh client.
+
+```ts title="src/plugins/ops-notes.ts"
+extends({ emit }) {
+  return {
+    opsNotes: {
+      async create(input: {
+        paymentId: string;
+        actorId: string;
+        message: string;
+        visibility: "internal" | "finance";
+      }) {
+        const noteId = crypto.randomUUID();
+
+        await emit("ops.note.created", {
+          paymentId: input.paymentId,
+          noteId,
+          actorId: input.actorId,
+          visibility: input.visibility,
+        });
+
+        return {
+          id: noteId,
+          ...input,
+        };
+      },
+    },
+  };
+},
+```
+
+## Step 11: Understand `lazy()`
+
+`lazy()` returns a `LazyPluginExtension`. It defers creating the extension object until someone actually accesses it.
+
+```ts title="src/plugins/ops-notes.ts"
+import { definePlugin, lazy } from "paymesh";
+
+extends() {
+  return lazy(() => ({
+    opsNotes: {
+      async list(paymentId: string) {
+        return [{ id: "note_123", paymentId, message: "Reviewed by support." }];
+      },
+    },
+  }));
+},
+```
+
+### When `lazy()` is useful
+
+- the extension depends on heavy setup
+- the extension closes over expensive resources
+- many apps mount the plugin but only some routes use the extension
+
+### When not to use `lazy()`
+
+- the extension is trivial
+- you need eager initialization
+- you are using `lazy()` only because it looks more advanced
+
+## Full example
+
+```ts title="src/plugins/ops-notes.ts"
+import { definePlugin, event, lazy } from "paymesh";
+
+type OpsNotesOptions = {
+  maxNotesPerPayment?: number;
+};
+
+export const opsNotesPlugin = (options: OpsNotesOptions = {}) =>
+  definePlugin({
+    id: "ops-notes",
+    name: "Ops Notes",
+    version: "1.0.0",
+    description: "Stores operator notes attached to payments.",
+    options,
+    config: {
+      database: true,
+      capabilities: ["webhooks"],
+    },
+    schema: {
+      customTables: {
+        payment_notes: {
+          fields: {
+            payment_id: { type: "string", required: true, index: true },
+            actor_id: { type: "string", required: true, index: true },
+            message: { type: "string", required: true },
+            visibility: {
+              type: "enum",
+              enum: ["internal", "finance"],
+              default: "internal",
+            },
+          },
+          indexes: [{ columns: ["payment_id", "actor_id"] }],
+        },
+      },
+    },
+    events: {
+      "ops.note.created": event<{
+        paymentId: string;
+        noteId: string;
+        actorId: string;
+        visibility: "internal" | "finance";
+      }>({
+        description: "Emitted when an operator creates a note.",
+        async: true,
+      }),
+    },
+    setup({ database, plugin }) {
+      if (!database) {
+        throw new Error(`Plugin "${plugin.id}" requires a configured database.`);
+      }
+    },
+    middleware: [
+      async ({ request, locals }, next) => {
+        const actorId = request.headers.get("x-actor-id");
+
+        if (!actorId) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        locals.actorId = actorId;
+        return next();
+      },
+    ],
+    routes: [
+      {
+        method: "GET",
+        path: "/internal/paymesh/ops-notes/:paymentId",
+        description: "List notes attached to a payment.",
+        handler: async ({ params, locals }) => {
+          return Response.json({
+            actorId: locals.actorId,
+            notes: [],
+            paymentId: params.paymentId,
+          });
+        },
+      },
+    ],
+    hooks: {
+      async onPaymentSucceeded(event) {
+        console.log("payment succeeded", event.data.id);
+      },
+    },
+    extends({ emit }) {
+      return lazy(() => ({
+        opsNotes: {
+          async create(input: {
+            paymentId: string;
+            actorId: string;
+            message: string;
+            visibility: "internal" | "finance";
+          }) {
+            const noteId = crypto.randomUUID();
+
+            await emit("ops.note.created", {
+              paymentId: input.paymentId,
+              noteId,
+              actorId: input.actorId,
+              visibility: input.visibility,
+            });
+
+            return {
+              id: noteId,
+              ...input,
+            };
+          },
+        },
+      }));
+    },
+  });
+```
+
+## Mount the plugin
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+import { opsNotesPlugin } from "../plugins/ops-notes";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+  plugins: [opsNotesPlugin({ maxNotesPerPayment: 30 })],
+});
+```
+
+## Common mistakes
+
+- putting provider-specific raw payload parsing into the plugin instead of relying on normalized events
+- hiding a database requirement instead of declaring `config.database`
+- using `lazy()` everywhere without a runtime reason
+- treating plugin routes like a random second app router
+- defining broad options without a stable contract
+
+## Next steps
+
+- Read [Plugin API](/docs/reference/plugin-api) for the low-level runtime contract.
+- Read [Plugins Overview](/docs/plugins/overview) for the broader extension model.
+- Read [Create a Database Adapter](/docs/guides/create-a-database-adapter) if your plugin needs custom persistence infrastructure.

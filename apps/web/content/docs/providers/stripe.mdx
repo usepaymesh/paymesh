@@ -1,0 +1,210 @@
+---
+title: Stripe
+description: "Detailed guide to the Stripe provider: setup options, capabilities, hosted checkouts, PIX, customers, catalog sync, dashboard helpers, and webhook normalization."
+---
+
+## Overview
+
+`@paymesh/stripe` is the most complete first-party provider in the current repository. It covers the broadest Paymesh surface and is the default choice when you need:
+
+- hosted checkout sessions
+- native PIX support
+- normalized customer lifecycle methods
+- catalog sync
+- webhook verification and event mapping
+- dashboard deep links and sync helpers
+
+## Installation
+
+<InstallTabs packages="paymesh @paymesh/stripe" />
+
+## Provider options
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `secret` | yes in practice | Stripe secret API key used for provider API requests. |
+| `webhookSecret` | recommended | Secret used to validate the `stripe-signature` header. |
+| `baseUrl` | no | Overrides the Stripe API base URL. Defaults to `https://api.stripe.com`. |
+| `retry` | no | Request retry policy forwarded to the shared request layer. |
+| `timeout` | no | Per-request timeout in milliseconds. |
+| `fetch` | no | Custom fetch implementation. Useful for tests or edge-specific wiring. |
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+    timeout: 15_000,
+  }),
+});
+```
+
+## Capability profile
+
+According to the provider constants shipped in the package, Stripe advertises these capabilities:
+
+| Capability | Supported |
+| --- | --- |
+| `checkout` | yes |
+| `pix` | yes |
+| `customers` | yes |
+| `subscriptions` | yes |
+| `webhooks` | yes |
+| `refunds` | yes |
+| `customerPortal` | yes |
+| `coupons` | yes |
+
+## Hosted checkout payments
+
+`paymesh.payments.create()` maps to Stripe Checkout Sessions.
+
+```ts title="src/server/payments.ts"
+const payment = await paymesh.payments.create({
+  amount: 4900,
+  currency: "USD",
+  description: "Growth plan",
+  customer: {
+    email: "team@example.com",
+    externalId: "org_42",
+  },
+  successUrl: "http://localhost:3000/success",
+  cancelUrl: "http://localhost:3000/cancel",
+});
+```
+
+### Request mapping details
+
+Stripe checkout creation in Paymesh currently maps:
+
+- `amount` and `currency` into one synthetic line item
+- `description` into `product_data.name`
+- `successUrl` into `success_url`
+- `cancelUrl` into `cancel_url`
+- `customer.id` into the checkout customer
+- `customer.externalId` into `client_reference_id`
+- `customer.email` into `customer_email`
+- `metadata` into Stripe metadata fields
+
+This is intentionally opinionated. The Paymesh contract favors a clean normalized checkout flow over exposing every Stripe parameter.
+
+## PIX payments
+
+Stripe is the provider that currently exposes the strongest PIX surface in Paymesh.
+
+```ts title="src/server/pix.ts"
+const pix = await paymesh.pix.create({
+  amount: 9900,
+  currency: "BRL",
+  description: "Invoice #99",
+  customer: {
+    name: "Acme Inc.",
+    email: "billing@acme.dev",
+  },
+  pix: {
+    amountIncludesIof: "never",
+    expiresAfterSeconds: 900,
+  },
+});
+```
+
+### PIX-specific options
+
+| Option | Description |
+| --- | --- |
+| `pix.amountIncludesIof` | Mapped into Stripe PIX payment method options. |
+| `pix.expiresAfterSeconds` | Sets PIX expiration relative to now. |
+| `pix.expiresAt` | Sets an absolute expiration timestamp. |
+
+### Fetching a PIX payment
+
+```ts title="src/server/pix-get.ts"
+const pix = await paymesh.pix.get("pi_123");
+```
+
+If the referenced PaymentIntent is not a PIX intent, the provider throws `provider_not_found`.
+
+## Customer operations
+
+Stripe customer methods are normalized through `paymesh.customers`.
+
+```ts title="src/server/customers.ts"
+const customer = await paymesh.customers.upsert({
+  id: "cus_123",
+  email: "team@example.com",
+  name: "Acme Inc.",
+  phone: "+55 11 99999-9999",
+  externalId: "org_42",
+  metadata: {
+    plan: "growth",
+  },
+});
+```
+
+### Customer mapping notes
+
+- `externalId` is stored in Stripe metadata as `externalId`
+- upsert uses Stripe `POST /v1/customers` semantics for both create and update
+- delete returns a normalized `{ id, provider, deleted }` shape
+
+## Catalog sync
+
+Stripe ships `provider.catalog.list()`, which reads:
+
+- `/v1/products`
+- `/v1/prices`
+
+That normalized snapshot is what the CLI uses during catalog push flows.
+
+```ts title="src/server/catalog.ts"
+const catalog = await paymesh.provider.catalog?.list();
+
+console.log(catalog?.products.length, catalog?.prices.length);
+```
+
+## Dashboard helpers
+
+Stripe also implements `provider.dashboard`.
+
+That currently gives Paymesh:
+
+- balance retrieval
+- Stripe dashboard deep links for customers, payments, PIX, and subscriptions
+- sync helpers for payment, PIX, and subscription records
+
+This is what powers operational surfaces like `@paymesh/dash`.
+
+## Webhook verification
+
+The provider verifies webhooks by parsing `stripe-signature`, extracting the timestamp and `v1` signature, and rebuilding the expected HMAC with the configured `webhookSecret`.
+
+If `webhookSecret` is missing, verification returns `false`.
+
+## Webhook event mapping
+
+The provider maps Stripe events into Paymesh event names such as:
+
+| Stripe event | Paymesh event |
+| --- | --- |
+| `checkout.session.completed` | `checkout.completed` |
+| `checkout.session.expired` | `payment.canceled` |
+| `payment_intent.created` | `payment.created` |
+| `payment_intent.succeeded` | `payment.succeeded` |
+| `payment_intent.payment_failed` | `payment.failed` |
+| `payment_intent.canceled` | `payment.canceled` |
+| `charge.refunded` | `payment.refunded` |
+| `customer.created` | `customer.created` |
+| `customer.updated` | `customer.updated` |
+| `customer.deleted` | `customer.deleted` |
+
+## Recommended use cases
+
+Use Stripe when:
+
+- your product needs PIX today
+- you want the broadest first-party Paymesh capability coverage
+- you need a provider that already implements dashboard helpers and richer operational flows
+
+Use a different provider only when the commercial model or product catalog assumptions fit your use case better.

@@ -1,0 +1,38 @@
+---
+title: Webhooks
+description: Build webhook handling around normalized events, request-aware hooks, and a local persistence strategy instead of a pile of raw provider event handlers.
+---
+
+## Webhooks are where most payment systems become expensive
+
+The main value of Paymesh webhook handling is not just signature verification. It is the full pipeline:
+
+- verify the request
+- parse the provider payload
+- map the raw event into a normalized event
+- dispatch the most specific hook
+- optionally persist local state
+
+## Use framework adapters when possible
+
+The adapter packages exist so you do not have to hand-roll request conversion in every service.
+
+```ts title="src/server/webhooks.ts"
+import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
+import { paymesh } from "@/lib/paymesh";
+
+export const app = new Elysia().post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client: paymesh,
+    async onPaymentSucceeded(event) {
+      console.log(event.context.deliveryId, event.data.id);
+    },
+  }),
+);
+```
+
+## Persist webhook state
+
+If a database adapter is configured, Paymesh can persist webhook events and the normalized records they produce. That makes retries, replay analysis, and operational debugging materially easier.

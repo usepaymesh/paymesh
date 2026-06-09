@@ -1,0 +1,74 @@
+---
+title: PIX
+description: Understand why PIX is modeled separately, what the normalized PIX object looks like, and how to build native Brazilian payment flows with Paymesh.
+---
+
+## Why PIX has its own client
+
+PIX is not just "another payment method" from the product point of view.
+
+A native PIX flow often needs:
+
+- QR code image URLs
+- copy-paste payloads
+- expiration windows
+- polling or webhook-driven status updates
+- different customer communication than card checkout
+
+That is why Paymesh exposes `paymesh.pix` separately from `paymesh.payments`.
+
+## Input shape
+
+```ts title="src/server/create-pix.ts"
+const pix = await paymesh.pix.create({
+  amount: 3500,
+  currency: "BRL",
+  description: "Invoice #42",
+  customer: {
+    email: "ada@example.com",
+    externalId: "user_123",
+    name: "Ada Lovelace",
+  },
+  pix: {
+    expiresAfterSeconds: 900,
+  },
+});
+```
+
+PIX-specific options include:
+
+- `amountIncludesIof`
+- `expiresAfterSeconds`
+- `expiresAt`
+
+## Output shape
+
+A normalized PIX object may contain:
+
+- `id`
+- `provider`
+- `amount`
+- `currency`
+- `status`
+- `method: "pix"`
+- `copyPasteCode`
+- `qrCodeImageUrlPng`
+- `qrCodeImageUrlSvg`
+- `instructionsUrl`
+- `expiresAt`
+
+## Current provider support
+
+In the current repository:
+
+- `@paymesh/stripe` advertises `pix: true`
+- `@paymesh/polar` advertises `pix: false`
+
+That means PIX-aware product code should either:
+
+- choose a provider that exposes PIX
+- or gate PIX UI behind provider capability detection
+
+## Persistence model
+
+With a database adapter attached, PIX state is stored separately in the built-in `pix` table. This is important because PIX-specific fields do not fit cleanly inside generic checkout rows.

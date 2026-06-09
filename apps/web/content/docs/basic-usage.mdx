@@ -1,0 +1,244 @@
+---
+title: Basic Usage
+description: Build the first end-to-end billing path with payments, PIX, customers, webhooks, and plugins without leaking provider-specific code into the app.
+---
+
+## The minimal mental model
+
+The client has three core product-facing surfaces:
+
+- `payments` for redirect-style or hosted checkout creation
+- `pix` for native PIX payment flows
+- `customers` for customer lifecycle operations
+
+Everything else exists to support those flows: webhooks normalize inbound events, database adapters persist state, and plugins extend behavior.
+
+## Create a payment
+
+Hosted payments are the most provider-neutral place to start.
+
+<Tabs items={["stripe", "polar"]}>
+  <Tab value="stripe">
+    ```ts title="src/server/create-payment.ts"
+    import { paymesh } from "@/lib/paymesh";
+
+    const payment = await paymesh.payments.create({
+      amount: 1999,
+      currency: "USD",
+      description: "Pro plan",
+      customer: {
+        email: "ada@example.com",
+        externalId: "user_123",
+      },
+      metadata: {
+        plan: "pro",
+      },
+      successUrl: "http://localhost:3000/billing/success",
+      cancelUrl: "http://localhost:3000/billing/cancel",
+    });
+
+    console.log(payment.id);
+    console.log(payment.checkoutUrl);
+    ```
+  </Tab>
+
+  <Tab value="polar">
+    ```ts title="src/server/create-payment.ts"
+    import { paymesh } from "@/lib/paymesh";
+
+    const payment = await paymesh.payments.create({
+      amount: 2900,
+      currency: "USD",
+      productIds: ["prod_monthly"],
+      customer: {
+        email: "ada@example.com",
+        externalId: "user_123",
+      },
+      successUrl: "http://localhost:3000/billing/success",
+      returnUrl: "http://localhost:3000/billing",
+    });
+
+    console.log(payment.id);
+    console.log(payment.checkoutUrl);
+    ```
+  </Tab>
+</Tabs>
+
+## Create a PIX payment
+
+PIX is intentionally separate from `payments` because it has a different response shape and different product requirements.
+
+```ts title="src/server/create-pix.ts"
+import { paymesh } from "@/lib/paymesh";
+
+const pix = await paymesh.pix.create({
+  amount: 3500,
+  currency: "BRL",
+  description: "Invoice #42",
+  customer: {
+    email: "ada@example.com",
+    externalId: "user_123",
+    name: "Ada Lovelace",
+  },
+  pix: {
+    expiresAfterSeconds: 900,
+  },
+});
+
+console.log(pix.id);
+console.log(pix.copyPasteCode);
+console.log(pix.qrCodeImageUrlPng);
+console.log(pix.expiresAt);
+```
+
+<Callout type="info">
+  In the current repository, native `pix` capability is implemented by `@paymesh/stripe`. The Polar provider intentionally does not advertise PIX support.
+</Callout>
+
+## Upsert and read a customer
+
+Customer operations are normalized the same way as payments.
+
+```ts title="src/server/customers.ts"
+import { paymesh } from "@/lib/paymesh";
+
+const customer = await paymesh.customers.upsert({
+  email: "ada@example.com",
+  externalId: "user_123",
+  name: "Ada Lovelace",
+  phone: "+55 11 99999-9999",
+  metadata: {
+    role: "owner",
+  },
+});
+
+const stored = await paymesh.customers.get(customer.id);
+
+console.log(stored.id, stored.email);
+```
+
+## Handle webhooks with normalized hooks
+
+Every framework adapter ends up calling the same webhook engine.
+
+```ts title="src/server/webhooks.ts"
+import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
+import { paymesh } from "@/lib/paymesh";
+
+export const app = new Elysia().post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client: paymesh,
+
+    async onEvent(event) {
+      console.log("event", event.type, event.id);
+    },
+
+    async onCheckoutCompleted(event) {
+      console.log("checkout completed", event.data.id);
+    },
+
+    async onPaymentSucceeded(event) {
+      console.log("payment succeeded", event.data.id);
+    },
+
+    async onCustomerUpdated(event) {
+      console.log("customer updated", event.data.id);
+    },
+  }),
+);
+```
+
+## Add a dashboard and audit trail
+
+Plugins extend the runtime after the core client is already composed.
+
+```ts title="src/lib/paymesh.ts"
+import { auditLog } from "@paymesh/audit-logs";
+import { dash } from "@paymesh/dash";
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+  plugins: [
+    dash({
+      path: "/admin/paymesh",
+      auth({ request }) {
+        const email = request.headers.get("x-user-email");
+
+        if (!email) {
+          throw new Error("Unauthorized");
+        }
+
+        return {
+          id: "user_123",
+          type: "user",
+          email,
+        };
+      },
+    }),
+    auditLog({
+      events: ["payment.*", "customer.*", "checkout.*"],
+      actor({ request }) {
+        const email = request?.headers.get("x-user-email");
+
+        if (!email) return null;
+
+        return {
+          type: "user",
+          id: "user_123",
+          email,
+        };
+      },
+    }),
+  ],
+});
+```
+
+## Use raw payloads only when you need them
+
+If the provider response itself matters, enable raw payload propagation.
+
+```ts title="src/server/raw-mode.ts"
+const payment = await paymesh.payments.create(
+  {
+    amount: 1999,
+    currency: "USD",
+  },
+  {
+    includeRaw: true,
+  },
+);
+
+console.log(payment.raw);
+```
+
+The same applies to webhooks:
+
+```ts title="src/server/webhooks.ts"
+Webhooks({
+  client: paymesh,
+  includeRaw: true,
+  async onPaymentSucceeded(event) {
+    console.log(event.data.raw);
+  },
+});
+```
+
+## What a production baseline usually includes
+
+For most teams, "basic usage" in production means:
+
+- one provider package
+- one database adapter
+- one webhook route
+- one local payments or billing service that owns Paymesh calls
+- normalized hooks that update your product state
+- optional plugins only after the base flow is stable

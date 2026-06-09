@@ -1,0 +1,84 @@
+---
+title: Hooks
+description: Learn the built-in webhook hooks, dispatch order, request context, and how custom plugin events fit into the same runtime.
+---
+
+## Built-in hooks
+
+The core client accepts a shared hook map:
+
+```ts title="src/server/webhooks.ts"
+Webhooks({
+  client: paymesh,
+  async onEvent(event) {
+    console.log(event.type);
+  },
+  async onPaymentSucceeded(event) {
+    console.log(event.data.id);
+  },
+  async onUnhandledEvent(event) {
+    console.log("no specific handler", event.type);
+  },
+});
+```
+
+Built-in hook names:
+
+- `onEvent`
+- `onUnhandledEvent`
+- `onPaymentCreated`
+- `onPaymentSucceeded`
+- `onPaymentFailed`
+- `onPaymentCanceled`
+- `onPaymentRefunded`
+- `onCustomerCreated`
+- `onCustomerUpdated`
+- `onCustomerDeleted`
+- `onSubscriptionCreated`
+- `onSubscriptionUpdated`
+- `onSubscriptionCanceled`
+- `onCheckoutCompleted`
+
+## Dispatch order
+
+Dispatch prefers the most specific hook first.
+
+1. If a specific normalized hook exists, it runs first.
+2. If not, `onEvent` runs.
+3. If neither exists, `onUnhandledEvent` runs.
+
+This gives you a clean way to mix coarse and fine-grained behavior.
+
+## Hook event context
+
+Each webhook hook receives a normalized event plus `context`:
+
+```ts
+type WebhookHookContext = {
+  request: Request;
+  deliveryId: string;
+  dispatchedAt: string;
+  hook?: string;
+};
+```
+
+That means request metadata is available without your framework adapter leaking into business logic.
+
+## Raw payload behavior
+
+When `includeRaw` is enabled, the event payload keeps both normalized fields and the underlying provider payload.
+
+Use that for:
+
+- reconciliation
+- dispute investigation
+- provider-specific debugging
+- audit or compliance review
+
+Avoid using `raw` as the primary application contract.
+
+## Plugin hooks
+
+Plugins can declare their own custom event definitions and the client type system merges those hooks into the runtime hook map.
+
+That is why the core hook model is designed as a composable type rather than a closed enum of built-ins.

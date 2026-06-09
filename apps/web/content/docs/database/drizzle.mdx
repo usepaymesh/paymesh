@@ -1,0 +1,62 @@
+---
+title: Drizzle
+description: Use the Drizzle adapter when your app already runs on Drizzle and you want Paymesh persistence to share the same database runtime.
+---
+
+## Overview
+
+`@paymesh/drizzle` lets Paymesh run against a Drizzle database instance while still using the Paymesh repository contract and migration planning flow.
+
+## Installation
+
+<InstallTabs packages="@paymesh/drizzle drizzle-orm pg" />
+
+## Usage
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { drizzle as paymeshDrizzle } from "@paymesh/drizzle";
+import { stripe } from "@paymesh/stripe";
+import { drizzle } from "drizzle-orm/node-postgres";
+
+const db = drizzle("postgres://postgres:postgres@localhost:5432/paymesh");
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: paymeshDrizzle(db, {
+    persistRaw: true,
+  }),
+});
+```
+
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `persistRaw` | `false` | Stores raw provider payloads in persisted rows. |
+
+## Runtime contract
+
+The adapter expects a Drizzle object that can:
+
+- prepare and execute compiled queries
+- run transactions
+
+It does not force you into a specific application file structure. It only needs the runtime database instance.
+
+## Query execution model
+
+Internally, the adapter uses Drizzle’s session `prepareQuery(...).execute()` flow and normalizes the result into the Paymesh driver contract.
+
+That means Paymesh still controls the repository semantics while Drizzle controls the actual transport.
+
+## When to choose this adapter
+
+Use `@paymesh/drizzle` when:
+
+- your app already uses Drizzle as its main data boundary
+- you want Paymesh persistence to share the same transaction runtime
+- you do not want a separate `pg` pool dedicated only to Paymesh

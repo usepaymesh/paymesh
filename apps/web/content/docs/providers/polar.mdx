@@ -1,0 +1,162 @@
+---
+title: Polar
+description: "Detailed guide to the Polar provider: product-driven checkout creation, customer operations, catalog reads, dashboard helpers, and webhook normalization."
+---
+
+## Overview
+
+`@paymesh/polar` is the Paymesh provider for Polar. It is a good fit when your billing model is product-driven and Polar is already the operational system you want to keep.
+
+In contrast to Stripe, Polar in this repository does not expose `pix`. It focuses on:
+
+- checkout creation
+- customers
+- catalog reads
+- subscription-aware webhook mapping
+- dashboard sync helpers
+
+## Installation
+
+<InstallTabs packages="paymesh @paymesh/polar" />
+
+## Provider options
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `accessToken` | yes in practice | Polar API access token used for authenticated API calls. |
+| `webhookSecret` | recommended | Secret used to verify Polar webhook deliveries. |
+| `baseUrl` | no | Overrides the Polar API base URL. Defaults to `https://api.polar.sh`. |
+| `retry` | no | Retry policy for the shared request layer. |
+| `timeout` | no | Per-request timeout in milliseconds. |
+| `fetch` | no | Custom fetch implementation for tests or runtime-specific environments. |
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { polar } from "@paymesh/polar";
+
+export const paymesh = createClient({
+  provider: polar({
+    accessToken: "polar_access_123",
+    webhookSecret: "whsec_123",
+  }),
+});
+```
+
+## Capability profile
+
+| Capability | Supported |
+| --- | --- |
+| `checkout` | yes |
+| `pix` | no |
+| `customers` | yes |
+| `subscriptions` | yes |
+| `webhooks` | yes |
+| `refunds` | yes |
+| `customerPortal` | yes |
+| `coupons` | yes |
+
+## Checkout creation
+
+Polar checkout creation is more product-oriented than Stripe. The provider requires `productIds`.
+
+```ts title="src/server/polar-checkout.ts"
+const checkout = await paymesh.payments.create({
+  amount: 2900,
+  currency: "USD",
+  productIds: ["prod_abc123"],
+  customer: {
+    email: "ada@example.com",
+    externalId: "user_123",
+  },
+  successUrl: "http://localhost:3000/success",
+  returnUrl: "http://localhost:3000/billing",
+});
+```
+
+### Important constraint
+
+If `productIds` is omitted or empty, the provider throws `invalid_request`.
+
+That is intentional. Polar checkout creation inside Paymesh preserves Polar’s product-first billing model instead of pretending every provider has the same catalog assumptions.
+
+## Customer operations
+
+Polar customer support is fully normalized through `paymesh.customers`.
+
+```ts title="src/server/customers.ts"
+const customer = await paymesh.customers.upsert({
+  email: "ada@example.com",
+  externalId: "user_123",
+  name: "Ada Lovelace",
+});
+```
+
+### Create vs update rules
+
+- creating a customer requires `email` if no `id` is present
+- updates use `PATCH /v1/customers/:id`
+- `externalId` maps into Polar’s `external_id`
+- delete returns a normalized `{ id, provider, deleted }`
+
+If you attempt to create a customer without `email`, the provider throws `invalid_request`.
+
+## Catalog reads
+
+Polar exposes `provider.catalog.list()` and reads products from `/v1/products`.
+
+Paymesh then normalizes:
+
+- products
+- price entries nested under those products
+- version metadata where available
+
+```ts title="src/server/catalog.ts"
+const catalog = await paymesh.provider.catalog?.list();
+
+console.log(catalog?.products, catalog?.prices);
+```
+
+This is what supports local catalog synchronization through the CLI.
+
+## Dashboard helpers
+
+Polar ships `provider.dashboard` with:
+
+- a generic dashboard URL
+- payment sync
+- subscription sync
+
+Balance lookup currently returns `null`, so operational dashboards should not assume every provider exposes live balance information.
+
+## Webhook verification
+
+Polar webhook verification uses:
+
+- `webhook-id`
+- `webhook-timestamp`
+- `webhook-signature`
+
+The provider rebuilds the signed payload and compares the computed HMAC against `v1` entries in the signature header.
+
+If `webhookSecret` is missing, verification returns `false`.
+
+## Webhook normalization
+
+Webhook handling resolves:
+
+- the normalized Paymesh event type
+- the webhook id
+- the data payload shape
+- the hook name that should receive the event
+
+That means the rest of your app stays on Paymesh event names rather than Polar’s delivery format.
+
+## Choosing Polar
+
+Choose Polar when:
+
+- your payment flow is product-centric
+- you already organize monetization around Polar’s catalog model
+- you do not need PIX from this provider
+
+Do not choose Polar just because it is another provider option. The right reason is that the product and catalog model aligns with your billing architecture.

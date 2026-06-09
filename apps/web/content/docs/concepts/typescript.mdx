@@ -1,0 +1,51 @@
+---
+title: TypeScript
+description: Understand how Paymesh uses generics for raw payloads, schema-aware fields, provider contracts, and plugin extensions.
+---
+
+## Type goals
+
+Paymesh types are designed to make three things explicit:
+
+- whether raw payloads are present
+- whether schema customizations add fields to built-in records
+- whether plugins extend the client
+
+## Raw payload typing
+
+Normalized records use a `WithRaw<T, IncludeRaw>` helper.
+
+That means:
+
+- `IncludeRaw = false` produces `{ raw: null }`
+- `IncludeRaw = true` produces `{ raw: unknown }`
+
+Your code can opt into raw payloads per client or per request instead of treating them as always available.
+
+## Schema-aware records
+
+Client input and output types thread the schema type through the managers.
+
+Examples:
+
+- `PaymeshPaymentCreateData<Schema>`
+- `PaymeshPayment<IncludeRaw, Schema>`
+- `PaymeshPixCreateData<Schema>`
+- `PaymeshCustomer<IncludeRaw, Schema>`
+
+The goal is to keep custom database fields visible in application code instead of turning them into untyped side channels.
+
+## Plugin extensions
+
+Plugins can extend the client surface through `extends()` and contribute event hooks through `events`.
+
+That is why the final `PaymeshClient` type is merged with `PluginClientExtensions<Plugins>`.
+
+## Practical guidance
+
+Use the type system the way the repo expects:
+
+- keep one exported client instance per deployment target
+- let the client infer plugin and schema types from the composition site
+- prefer normalized event types over raw provider event types
+- use raw payload types only at integration boundaries

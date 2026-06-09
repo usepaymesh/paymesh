@@ -1,0 +1,124 @@
+---
+title: CLI
+description: Use the Paymesh CLI for migrations, webhook listening, provider catalog sync, plugin inspection, status reporting, and event triggering.
+---
+
+## Overview
+
+The CLI package is built for operations around a configured Paymesh client. Its responsibilities are:
+
+- generate migrations from the resolved schema
+- apply migrations
+- inspect runtime status
+- sync provider catalogs
+- print registered plugins
+- spin up a local webhook listener
+- trigger built-in or plugin events during development
+
+## Commands
+
+### `paymesh generate`
+
+Generates SQL migrations from the configured client schema.
+
+```bash
+bunx paymesh generate --client ./src/lib/paymesh.ts
+```
+
+Use it after:
+
+- changing `schema`
+- adding or removing plugins with tables
+- changing table prefixes or extra fields
+
+### `paymesh migrate`
+
+Applies pending SQL migrations and records them in the migrations table.
+
+```bash
+bunx paymesh migrate --client ./src/lib/paymesh.ts
+```
+
+This command requires a configured database adapter.
+
+### `paymesh status`
+
+Prints a runtime summary of:
+
+- provider id
+- database status
+- migration history
+- pending migrations
+- catalog support
+- PIX support
+- webhook persistence support
+- resolved schema prefix
+
+```bash
+bunx paymesh status --client ./src/lib/paymesh.ts
+```
+
+### `paymesh push`
+
+Synchronizes the provider catalog into the configured database.
+
+```bash
+bunx paymesh push --client ./src/lib/paymesh.ts
+```
+
+This is useful when your provider exposes catalog reads and you want local product and price snapshots.
+
+### `paymesh plugins`
+
+Lists every registered plugin in the client.
+
+```bash
+bunx paymesh plugins --client ./src/lib/paymesh.ts
+```
+
+### `paymesh listen`
+
+Starts a local webhook listener that prints normalized events.
+
+```bash
+bunx paymesh listen 4321 --client ./src/lib/paymesh.ts
+```
+
+This is useful for local provider testing when you want to inspect normalized events before they hit your full application flow.
+
+### `paymesh trigger`
+
+Triggers a built-in webhook event or a registered plugin event.
+
+```bash
+bunx paymesh trigger payment.failed --client ./src/lib/paymesh.ts
+```
+
+You can also pass custom data:
+
+```bash
+bunx paymesh trigger payment.failed \
+  --client ./src/lib/paymesh.ts \
+  --data '{"id":"pi_123","amount":4900}'
+```
+
+## `--client`
+
+Almost every command accepts `--client <path>`. That path should point to the module exporting the configured Paymesh client instance.
+
+The CLI loads that client and treats it as the source of truth for:
+
+- provider
+- database adapter
+- resolved schema
+- plugin registration
+
+## Recommended workflow
+
+1. Configure `src/lib/paymesh.ts`
+2. Run `paymesh generate`
+3. Run `paymesh migrate`
+4. Run `paymesh status`
+5. Run `paymesh push` if your provider catalog should be persisted
+
+That sequence keeps schema, storage, and provider data aligned.

@@ -1,0 +1,46 @@
+---
+title: Fastify Adapter
+description: Use Paymesh inside Fastify while preserving raw request bodies for webhook verification and keeping normalized hook dispatch in the core client.
+---
+
+## Installation
+
+<InstallTabs packages="@paymesh/fastify fastify" />
+
+## Basic usage
+
+```ts title="src/server/webhooks.ts"
+import Fastify from "fastify";
+import { Webhooks } from "@paymesh/fastify";
+import { paymesh } from "./paymesh";
+
+const app = Fastify();
+
+app.post(
+  "/webhooks/paymesh",
+  {
+    config: {
+      rawBody: true,
+    },
+  },
+  Webhooks({
+    client: paymesh,
+  }),
+);
+```
+
+<Callout type="warn" title="Raw body access is mandatory">
+  Paymesh must receive the untouched request body so the provider signature can be verified against the original payload. In Fastify that means enabling `rawBody` for the webhook route. If raw body capture is missing, webhook verification will fail and the adapter will not be able to validate incoming events correctly.
+</Callout>
+
+## Raw body requirements
+
+Like Express, Fastify integrations need raw request access for many provider verification flows. If raw body is unavailable, the provider may reject the delivery as unsigned or invalid.
+
+Do not treat `config.rawBody = true` as optional tuning. It is part of the required webhook contract.
+
+## What the adapter does
+
+The adapter reconstructs a standard `Request` from Fastify request metadata and body content, then delegates the rest to the Paymesh webhook runtime.
+
+That means the Fastify adapter is only a framework bridge. Business behavior still belongs in normalized hooks.

@@ -1,0 +1,74 @@
+---
+title: Skills
+description: Install Paymesh agent skills so your coding assistant follows the library's conventions, docs structure, and integration patterns.
+---
+
+Install Paymesh agent skills so your coding assistant follows Paymesh conventions and patterns.
+
+[Agent skills](https://agentskills.io) are portable instruction files, usually shipped as `SKILL.md`, that teach coding agents how to work with a codebase, where to find the right docs, and which integration patterns are safe to use. The Paymesh skill pack lives in the [usepaymesh/skills](https://github.com/usepaymesh/skills) repository.
+
+Install it with the `skills` CLI:
+
+```bash
+npx skills add usepaymesh/skills
+```
+
+Your editor or coding agent loads skills from its configured skills directory. In most setups this is either:
+
+- a project-level skills directory committed with the app
+- a user-level skills directory shared across projects
+- a tool-specific skills directory managed by your editor or agent runtime
+
+After installing the Paymesh skill pack, restart the agent or reload skills if your tool requires it.
+
+<Callout type="info" title="Repository status">
+  The [usepaymesh/skills](https://github.com/usepaymesh/skills) repository is intentionally linked now, but it is still being populated. Keep this page as the canonical install target, and add real skill files to that repository as they are published.
+</Callout>
+
+## What the Paymesh skills should cover
+
+The goal of the Paymesh skill pack is not to duplicate the entire documentation site. It should teach agents how to apply Paymesh correctly inside real repositories.
+
+That usually means skills should encode:
+
+- how to choose between providers such as [@paymesh/stripe](/docs/providers/stripe) and [@paymesh/polar](/docs/providers/polar)
+- when to add a database adapter such as [@paymesh/postgres](/docs/database/postgres), [@paymesh/drizzle](/docs/database/drizzle), or [@paymesh/prisma](/docs/database/prisma)
+- how webhook verification works in each runtime adapter
+- how to mount [@paymesh/express](/docs/adapters/express), [@paymesh/fastify](/docs/adapters/fastify), [@paymesh/hono](/docs/adapters/hono), [@paymesh/elysia](/docs/adapters/elysia), and [@paymesh/next](/docs/adapters/next) correctly
+- how to use official plugins such as [@paymesh/dash](/docs/plugins/dash) and [@paymesh/audit-logs](/docs/plugins/audit-logs)
+- how to avoid unsafe assumptions about provider-specific raw payloads versus normalized Paymesh objects
+
+## When to use skills instead of plain docs
+
+Use the skill pack when you want your coding assistant to:
+
+- generate code that follows Paymesh conventions automatically
+- wire adapters and providers without guessing imports
+- mount webhooks in the correct runtime shape
+- prefer normalized Paymesh APIs instead of leaking provider-specific logic everywhere
+- follow the documented plugin and database adapter contracts when extending Paymesh itself
+
+Use plain docs when you are reading architecture details manually or validating exact API behavior page by page.
+
+## Recommended companion resources
+
+Use this page together with:
+
+- [LLMs.txt](/llms.txt) for a concise machine-readable overview of Paymesh
+- [Installation](/docs/installation) for first-time setup
+- [Create Your First Plugin](/docs/guides/create-your-first-plugin) for plugin authoring
+- [Create a Database Adapter](/docs/guides/create-a-database-adapter) for persistence integrations
+- [Create a Provider](/docs/guides/create-a-provider) for provider authoring
+- [Webhooks at Scale](/docs/guides/webhooks-at-scale) for production webhook handling
+
+## Expected workflow
+
+The intended workflow is:
+
+1. install the skills from [usepaymesh/skills](https://github.com/usepaymesh/skills)
+2. reload your coding assistant so the new skills are available
+3. point the agent at the relevant Paymesh docs page when needed
+4. let the agent generate code using the skill guidance plus the docs
+5. review the result like normal application code
+
+That keeps the skill pack small and operational, while the docs remain the deep source of truth.

@@ -1,0 +1,98 @@
+---
+title: Introduction
+description: Provider-agnostic payments infrastructure for TypeScript teams that want one billing surface instead of one SDK per provider.
+---
+
+Paymesh is the layer that sits between your product code and payment providers.
+
+Instead of writing your application directly against Stripe today, then reworking checkout flows, customer sync, webhook parsing, and persistence later, you build against one typed client and let provider packages implement the provider-specific work.
+
+## What Paymesh solves
+
+Most teams do not struggle with "calling Stripe". They struggle with everything around it:
+
+- keeping checkout code from leaking provider assumptions everywhere
+- mapping raw webhook events into product-side lifecycle events
+- persisting billing state into a local database
+- exposing operational tooling for support and finance
+- adding regional payment methods like PIX without forking the rest of the billing stack
+- creating room for a second provider later without rewriting the app
+
+Paymesh exists to normalize those concerns.
+
+## Core model
+
+At runtime, Paymesh is built from four layers:
+
+1. A `client` created with `createClient`.
+2. A `provider` such as `@paymesh/stripe` or `@paymesh/polar`.
+3. An optional `database` adapter such as `@paymesh/postgres`, `@paymesh/drizzle`, or `@paymesh/prisma`.
+4. Optional `plugins` such as `@paymesh/dash` and `@paymesh/audit-logs`.
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+});
+```
+
+## Normalized primitives
+
+Paymesh intentionally keeps the public surface small:
+
+- `paymesh.payments` for hosted or redirect-based payment creation
+- `paymesh.pix` for native PIX flows
+- `paymesh.customers` for customer lifecycle operations
+- `paymesh.webhooks.handle()` for verified inbound events
+- `plugins` for runtime extensions, routes, custom events, schema, and tooling
+
+That smaller surface is what makes the rest of the docs simpler to reason about.
+
+## Why not just use the provider SDK directly?
+
+If you know you will only ever use a single provider, never need local persistence, never build operational tooling, and never expose billing behavior outside one service, the direct SDK is fine.
+
+Paymesh is for teams that want stronger boundaries:
+
+- product code should not care whether checkout came from Stripe or Polar
+- webhook code should operate on `payment.succeeded`, not twenty raw provider event names
+- the database should contain a normalized record of billing state
+- plugins should be able to extend routes, schema, and client behavior without patching application internals
+
+## Feature surface today
+
+The current repository exposes these first-party modules:
+
+| Area | Package |
+| --- | --- |
+| Core client | `paymesh` |
+| Providers | `@paymesh/stripe`, `@paymesh/polar` |
+| Database adapters | `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma` |
+| Framework adapters | `@paymesh/next`, `@paymesh/express`, `@paymesh/fastify`, `@paymesh/hono`, `@paymesh/elysia` |
+| Plugins | `@paymesh/dash`, `@paymesh/audit-logs` |
+| Tooling | `@paymesh/cli` |
+
+<Callout type="info">
+  The docs below stay anchored to what is actually exported in the repository. Planned providers like AbacatePay, PayPal, and Dodo are treated as planned work, not presented like shipped integrations.
+</Callout>
+
+## Read this documentation like a system
+
+The fastest way to understand Paymesh is:
+
+1. Read [Installation](/docs/installation).
+2. Read [Basic Usage](/docs/basic-usage).
+3. Read [API](/docs/concepts/api) and [Hooks](/docs/concepts/hooks).
+4. Pick your provider and database adapter pages.
+5. Add plugins only after the core billing path is stable.
+
+That order mirrors the way the codebase is structured.

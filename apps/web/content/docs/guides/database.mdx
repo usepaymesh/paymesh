@@ -1,0 +1,37 @@
+---
+title: Database
+description: Decide when to add persistence, what the built-in schema stores, and how to choose between Postgres, Drizzle, and Prisma adapters.
+---
+
+## When to add a database
+
+Add persistence when you need:
+
+- local customer and payment state
+- durable webhook delivery records
+- catalog snapshots
+- plugin-owned tables
+- operational tooling such as dashboards and audit trails
+
+## Built-in tables
+
+The schema layer knows about these built-in table keys:
+
+- `customers`
+- `pix`
+- `checkouts`
+- `invoices`
+- `paymentMethods`
+- `entitlements`
+- `usage`
+- `webhookEvents`
+- `subscriptions`
+- `products`
+- `prices`
+- `migrations`
+
+## Adapter choice
+
+- Use `@paymesh/postgres` for the shortest path to direct Postgres persistence.
+- Use `@paymesh/drizzle` if your app already owns a Drizzle instance.
+- Use `@paymesh/prisma` if your stack already standardizes on Prisma.
