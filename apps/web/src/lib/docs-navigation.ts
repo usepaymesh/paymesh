@@ -200,8 +200,8 @@ export const docsNavigation: DocNavGroup[] = [
 			},
 			{
 				label: 'Skills',
-				status: 'planned',
 				icon: 'scroll-text',
+				href: '/docs/ai-resources/skills',
 			},
 		],
 	},
