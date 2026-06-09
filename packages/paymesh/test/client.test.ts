@@ -440,7 +440,7 @@ describe('client', () => {
 	test('types onEvent as a discriminated union of normalized webhook events', () => {
 		const client = createClient({
 			provider: createStubProvider(),
-
+			hooks: {
 				onEvent(event) {
 					expectType<string>(event.id);
 					expectType<string>(event.provider);

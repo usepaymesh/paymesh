@@ -751,7 +751,9 @@ describe('cli helpers', () => {
 		expect(sandboxMigration?.sql).toContain(
 			'UNIQUE (provider, sandbox, provider_id)',
 		);
-		expect(sandboxMigration?.sql).toContain('provider_sandbox_provider_id_uniq');
+		expect(sandboxMigration?.sql).toContain(
+			'provider_sandbox_provider_id_uniq',
+		);
 	});
 
 	test('paymesh_sandbox_isolation migration covers all built-in sandbox tables', () => {
@@ -803,9 +805,7 @@ describe('cli helpers', () => {
 			'ADD COLUMN IF NOT EXISTS sandbox BOOLEAN NOT NULL DEFAULT FALSE',
 		);
 		// It should also include the constraint replacement
-		expect(plan.files[0]?.sql).toContain(
-			'provider_sandbox_provider_id_uniq',
-		);
+		expect(plan.files[0]?.sql).toContain('provider_sandbox_provider_id_uniq');
 	});
 
 	test('getPaymeshStatus uses sandbox filter in database queries', async () => {
