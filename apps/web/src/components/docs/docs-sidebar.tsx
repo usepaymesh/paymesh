@@ -29,6 +29,7 @@ const sectionIcons = {
 	Plugins: Package,
 	Database: Database,
 	Reference: Braces,
+	'Using with AI': Cable,
 } as const;
 
 export function DocsSidebar() {

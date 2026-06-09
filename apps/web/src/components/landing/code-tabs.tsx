@@ -90,11 +90,11 @@ export function CodeTabs({ tabs }: CodeTabsProps) {
 
 	return (
 		<div className="relative mb-6 rounded-md border border-[var(--code-block-border)] bg-[var(--code-block-bg)]">
-			<div className="flex items-center border-b border-[var(--code-block-border)]">
+			<div className="no-scrollbar flex items-center overflow-x-auto border-b border-[var(--code-block-border)]">
 				{tabs.map((tab) => (
 					<button
 						className={cn(
-							'relative px-4 py-2 text-[12px] transition-colors',
+							'relative shrink-0 px-4 py-2 text-[12px] transition-colors',
 							tab.id === active.id
 								? 'text-[color:var(--landing-text)]'
 								: 'text-[color:var(--landing-text-muted)]',

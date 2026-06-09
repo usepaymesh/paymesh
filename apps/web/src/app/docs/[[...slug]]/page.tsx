@@ -5,10 +5,8 @@ import {
 	DocsTitle,
 } from 'fumadocs-ui/page';
 import type { Metadata, Route } from 'next';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { docsMdxComponents } from '../../../components/docs/mdx-components';
-import { docsNavigation } from '../../../lib/docs-navigation';
 import { source } from '../../../lib/source';
 
 export async function generateStaticParams() {
@@ -76,32 +74,6 @@ export default async function DocPage({
 			<DocsBody>
 				<MDX components={docsMdxComponents} />
 			</DocsBody>
-
-			<div className="border-b border-transparent px-4 py-3 lg:hidden">
-				<div className="no-scrollbar flex gap-2 overflow-x-auto">
-					{docsNavigation
-						.flatMap((group) => group.items)
-						.filter((item) => Boolean(item.href))
-						.map((item) => {
-							if (!item.href) return null;
-							const active = item.href === page.url;
-
-							return (
-								<Link
-									className={`shrink-0 border px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider ${
-										active
-											? 'border-foreground/12 bg-foreground/5 text-foreground'
-											: 'border-foreground/8 text-foreground/45'
-									}`}
-									href={item.href as Route}
-									key={item.href}
-								>
-									{item.label}
-								</Link>
-							);
-						})}
-				</div>
-			</div>
 		</DocsPage>
 	);
 }

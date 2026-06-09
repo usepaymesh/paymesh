@@ -60,9 +60,9 @@ function SponsorButton({ compact = false }: { compact?: boolean }) {
 	return (
 		<span
 			className={cn(
-				'inline-flex items-center justify-center gap-2 bg-[var(--landing-panel-bg)] text-[color:var(--landing-text)] transition-colors',
+				'inline-flex items-center justify-center gap-2 whitespace-nowrap bg-[var(--landing-panel-bg)] text-[color:var(--landing-text)] transition-colors',
 				compact
-					? 'min-h-9 px-3 text-sm'
+					? 'min-h-8 px-2 text-[11px] sm:min-h-9 sm:px-3 sm:text-sm'
 					: 'min-h-10 border border-dashed border-[color:var(--landing-border-strong)] px-5 py-2 text-sm font-medium hover:bg-[color:var(--landing-panel-bg-hover)]',
 			)}
 		>
@@ -718,7 +718,7 @@ export default async function Home() {
 							{topLinks.map((link) => (
 								<a
 									className={cn(
-										'flex min-h-16 items-center justify-center border-l border-[color:var(--landing-border)] px-3 text-[12px] tracking-[0.09em] text-[color:var(--landing-text-muted)] transition-colors hover:text-[color:var(--landing-text-soft)]',
+										'flex min-h-14 items-center justify-center border-l border-[color:var(--landing-border)] px-2 text-[11px] tracking-[0.09em] text-[color:var(--landing-text-muted)] transition-colors hover:text-[color:var(--landing-text-soft)] sm:min-h-16 sm:px-3 sm:text-[12px]',
 										link.active &&
 											'text-[color:var(--landing-text)] shadow-[inset_0_-1px_0_var(--landing-border-strong)]',
 									)}
