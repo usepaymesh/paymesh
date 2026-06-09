@@ -25,6 +25,7 @@ In contrast to Stripe, Polar in this repository does not expose `pix`. It focuse
 | --- | --- | --- |
 | `accessToken` | yes in practice | Polar API access token used for authenticated API calls. |
 | `webhookSecret` | recommended | Secret used to verify Polar webhook deliveries. |
+| `sandbox` | no | Forces sandbox mode. Auto-detected from base URL (`sandbox-api.polar.sh` / `api.polar.sh`) when omitted. |
 | `baseUrl` | no | Overrides the Polar API base URL. Defaults to `https://api.polar.sh`. |
 | `retry` | no | Retry policy for the shared request layer. |
 | `timeout` | no | Per-request timeout in milliseconds. |

@@ -76,6 +76,7 @@ That is the smallest meaningful provider shape.
 `ProviderDefinition` supports:
 
 - `id`
+- `isSandbox`
 - `payments`
 - `pix?`
 - `customers`
@@ -84,7 +85,38 @@ That is the smallest meaningful provider shape.
 - `dashboard?`
 - `capabilities`
 
-## Step 1: Choose a stable `id`
+## Step 1: Implement `isSandbox`
+
+Every provider must implement `isSandbox`. This tells the client and database layer whether operations target test or production data.
+
+```ts title="src/index.ts"
+export const example = () => {
+  const resolveSandbox = (options?: { sandbox?: boolean }) => {
+    if (typeof options?.sandbox === "boolean") return options.sandbox;
+    // Auto-detect from configuration, e.g. key prefix or base URL
+    return false;
+  };
+
+  return defineProvider({
+    id: "example",
+    isSandbox: () => resolveSandbox(),
+    // ...
+  });
+};
+```
+
+The `sandbox` option should also be accepted in the provider factory so callers can force it:
+
+```ts title="src/index.ts"
+type ExampleProviderOptions = {
+  sandbox?: boolean;
+  // ...
+};
+```
+
+Paymesh providers typically auto-detect sandbox (e.g. Stripe from key prefix, Polar from base URL) but always allow an explicit override.
+
+## Step 2: Choose a stable `id`
 
 `id` should be:
 
@@ -103,7 +135,7 @@ Bad:
 - `StripeProvider`
 - `my-new-best-provider-v2`
 
-## Step 2: Advertise capabilities truthfully
+## Step 3: Advertise capabilities truthfully
 
 Supported capability keys today are:
 
@@ -129,7 +161,7 @@ Do not mark unsupported capabilities as `true` just because the upstream API has
 
 The client runtime enforces capability checks based on this map.
 
-## Step 3: Implement `payments.create`
+## Step 4: Implement `payments.create`
 
 The payment input contract is `PaymentCreateData`.
 
@@ -197,7 +229,7 @@ The Paymesh status contract is small on purpose:
 
 Your provider should collapse upstream status sprawl into those values.
 
-## Step 4: Implement `customers`
+## Step 5: Implement `customers`
 
 The customer contract has three methods:
 
@@ -257,7 +289,7 @@ customers: {
 },
 ```
 
-## Step 5: Add PIX support when the provider has a native PIX flow
+## Step 6: Add PIX support when the provider has a native PIX flow
 
 `pix` is optional. Only implement it when the provider has a real PIX API.
 
@@ -317,7 +349,7 @@ pix: {
 },
 ```
 
-## Step 6: Respect request-level overrides
+## Step 7: Respect request-level overrides
 
 Provider methods can receive `ProviderRequestOptions`.
 
@@ -328,6 +360,7 @@ Supported options are:
 - `retry?`
 - `fetch?`
 - `includeRaw?`
+- `sandbox?`
 
 Use these to merge client defaults with per-call overrides.
 
@@ -344,7 +377,7 @@ function resolveRequestOptions(options?: ProviderRequestOptions<boolean>) {
 }
 ```
 
-## Step 7: Attach raw payloads with `withRaw`
+## Step 8: Attach raw payloads with `withRaw`
 
 When `includeRaw` is enabled, the returned object should carry the upstream payload.
 
@@ -366,7 +399,7 @@ return withRaw(
 );
 ```
 
-## Step 8: Implement webhooks
+## Step 9: Implement webhooks
 
 `webhooks` is optional, but it is required for providers that support inbound lifecycle events.
 
@@ -420,7 +453,7 @@ webhooks: {
 
 Your webhook mapper is where provider-specific event sprawl gets collapsed into the Paymesh event vocabulary.
 
-## Step 9: Add `catalog` when the provider exposes products and prices
+## Step 10: Add `catalog` when the provider exposes products and prices
 
 `catalog` lets Paymesh sync provider-side products and prices.
 
@@ -433,7 +466,7 @@ Implement it when:
 - the provider has a real product catalog
 - dashboard or sync flows need it
 
-## Step 10: Add `dashboard` helpers
+## Step 11: Add `dashboard` helpers
 
 `dashboard` is optional and exists for operational tooling.
 
@@ -476,14 +509,21 @@ type ExampleProviderOptions = {
   webhookSecret?: string;
 };
 
-export const example = ({
+  export const example = ({
   baseUrl = "https://api.example-payments.com",
   fetch,
   retry,
+  sandbox,
   secret,
   timeout,
   webhookSecret,
 }: ExampleProviderOptions) => {
+  const resolveSandbox = () => {
+    if (typeof sandbox === "boolean") return sandbox;
+    // auto-detect from key prefix, base URL, etc.
+    return false;
+  };
+
   const headers = {
     authorization: `Bearer ${secret}`,
     "content-type": "application/json",
@@ -499,6 +539,7 @@ export const example = ({
 
   return defineProvider({
     id: "example",
+    isSandbox: resolveSandbox,
     capabilities: {
       checkout: true,
       customers: true,
@@ -591,6 +632,7 @@ export const example = ({
 
 - mapping upstream statuses 1:1 instead of normalizing them
 - lying in `capabilities`
+- forgetting to implement `isSandbox`
 - ignoring request-level overrides
 - returning provider-shaped objects instead of Paymesh-shaped objects
 - implementing webhooks without raw signature verification

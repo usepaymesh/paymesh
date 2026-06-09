@@ -1,0 +1,168 @@
+---
+title: Sandbox
+description: Learn how sandbox mode separates test from production data, how providers detect it, and how to override it per call.
+---
+
+Every provider in Paymesh has a sandbox mode. It controls whether operations run against test or production data on the upstream provider and how Paymesh partitions data in its own database.
+
+## How providers detect sandbox mode
+
+Providers resolve sandbox automatically based on their configuration.
+
+**Stripe** inspects the secret key prefix:
+
+```ts
+// @paymesh/stripe resolves:
+// sk_test_... → sandbox: true
+// sk_live_... → sandbox: false
+// no key      → sandbox: false (default assumption)
+```
+
+**Polar** inspects the base URL:
+
+```ts
+// @paymesh/polar resolves:
+// https://sandbox-api.polar.sh → sandbox: true
+// https://api.polar.sh         → sandbox: false (default)
+```
+
+Both providers also accept an explicit `sandbox` option that overrides auto-detection:
+
+```ts title="src/lib/paymesh.ts"
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_live_123",
+    sandbox: true, // force sandbox even with a live key
+  }),
+});
+```
+
+## Checking sandbox mode at runtime
+
+Every provider implements `isSandbox()`, which is also exposed on the client:
+
+```ts title="src/server/check-sandbox.ts"
+const client = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+  }),
+});
+
+console.log(client.isSandbox());    // true
+console.log(client.provider.isSandbox()); // true
+```
+
+This is useful when your application needs to branch behavior based on environment:
+
+```ts title="src/server/branch.ts"
+if (client.isSandbox()) {
+  console.log("Running against test data");
+}
+```
+
+## Client-level sandbox assertion
+
+`createClient` accepts an optional `sandbox` option that acts as an assertion:
+
+```ts title="src/lib/paymesh.ts"
+createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+  }),
+  sandbox: true, // passes — provider is already sandbox
+});
+```
+
+If the assertion does not match the provider, the client throws:
+
+```ts
+createClient({
+  provider: stripe({
+    secret: "sk_live_123",
+  }),
+  sandbox: true, // throws: mismatch
+});
+```
+
+This guards against accidental production use in development or test environments.
+
+## Per-call sandbox override
+
+When a database is configured, read operations filter by sandbox mode automatically.
+
+You can override the sandbox mode for a single call:
+
+```ts title="src/server/override.ts"
+// Provider is in sandbox mode, but this call reads live data
+const customer = await paymesh.customers.get("cus_123", {
+  sandbox: false,
+});
+
+// Same override works on list queries
+const page = await paymesh.customers.list({
+  sandbox: false, // return live customers instead of test
+});
+```
+
+This is useful for migration scripts, admin tooling, or cross-environment debugging.
+
+The override is available on:
+
+- `customers.get(id, { sandbox })`
+- `customers.list({ sandbox })`
+- `pix.get(id, { sandbox })`
+
+Without the override, every read uses `provider.isSandbox()` as the filter value.
+
+## Database partitioning
+
+Every normalized record stored by Paymesh carries a `sandbox` field:
+
+```ts
+type BaseCustomer = {
+  id: string;
+  provider: string;
+  sandbox: boolean; // ← always present
+  // ...
+};
+```
+
+Database queries always filter by sandbox, so test and production data never mix in the same result set. The sandbox mode used in the query comes from either the provider or the per-call override.
+
+## Common patterns
+
+### One client per environment
+
+The most common setup is one client per environment, each with a different provider configuration:
+
+```ts title="src/lib/paymesh.ts"
+export const paymesh = createClient({
+  provider: stripe({
+    secret: process.env.STRIPE_API_KEY!, // resolves sandbox from key prefix
+  }),
+  database: postgres(process.env.DATABASE_URL!),
+});
+```
+
+The same codebase works in development (test keys) and production (live keys) without modification.
+
+### Admin override
+
+Admin interfaces that need to inspect both environments can override sandbox per call:
+
+```ts title="src/server/admin.ts"
+async function findCustomerGlobally(id: string) {
+  // Try sandbox first, then live
+  const sandbox = await paymesh.customers.get(id, { sandbox: true })
+    .catch(() => null);
+  if (sandbox) return sandbox;
+
+  return paymesh.customers.get(id, { sandbox: false });
+}
+```
+
+### Bulk migration between environments
+
+Migration scripts can read from one sandbox mode and write to another by combining overrides with provider configuration.
