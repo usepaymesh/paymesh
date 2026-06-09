@@ -217,6 +217,8 @@ export interface ProviderRequestOptions<IncludeRaw extends boolean = false> {
 	fetch?: typeof fetch;
 	/** Include the raw provider response on the returned object. Defaults to `false`. */
 	includeRaw?: IncludeRaw;
+	/** Overrides the sandbox mode for this request. Defaults to the provider sandbox mode. */
+	sandbox?: boolean;
 }
 
 /** Snapshot of a provider catalog product. */

@@ -76,7 +76,7 @@ export function createPixClient<
 				const pix = await database.repositories.pix.findByProviderId(
 					schema,
 					provider.id,
-					provider.isSandbox(),
+					mergedOptions.sandbox ?? provider.isSandbox(),
 					id,
 					{
 						includeRaw: mergedOptions.includeRaw,

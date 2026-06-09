@@ -7,6 +7,7 @@ interface ClientRequestDefaults {
 	retry?: RetryOptions;
 	fetch?: typeof fetch;
 	includeRaw?: boolean;
+	sandbox?: boolean;
 }
 
 /**
@@ -29,5 +30,6 @@ export function createRequestOptionsMerger(defaults: ClientRequestDefaults) {
 		includeRaw: (requestOptions?.includeRaw ??
 			defaults.includeRaw ??
 			false) as IncludeRaw,
+		sandbox: requestOptions?.sandbox ?? defaults.sandbox,
 	});
 }

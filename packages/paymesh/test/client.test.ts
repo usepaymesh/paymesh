@@ -318,6 +318,35 @@ describe('client', () => {
 		});
 	});
 
+	test('overrides sandbox mode in customers.list() per call', async () => {
+		const database = createListDatabase();
+		const client = createClient({
+			provider: createStubProvider({ sandbox: true }),
+			database,
+			schema: {
+				tables: {
+					customers: {
+						fields: {
+							segment: {
+								type: 'string',
+								required: true,
+							},
+						},
+					},
+				},
+			},
+		});
+
+		const page = await client.customers.list({ sandbox: false });
+
+		expect(page.data).toHaveLength(2);
+		expect(page.data[0]).toMatchObject({
+			id: 'cus_1',
+			provider: 'stub',
+			sandbox: false,
+		});
+	});
+
 	test('types schema defaults from the field discriminator', () => {
 		createClient({
 			provider: createStubProvider(),

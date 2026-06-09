@@ -400,6 +400,8 @@ export interface PaymeshCustomerListOptions<
 	before?: string;
 	/** Include raw payloads in returned values. Defaults to `false`. */
 	includeRaw?: IncludeRaw;
+	/** Overrides the sandbox mode for this query. Defaults to the provider sandbox mode. */
+	sandbox?: boolean;
 }
 
 /**
