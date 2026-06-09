@@ -4,6 +4,7 @@ import {
 	BookOpen,
 	Braces,
 	Cable,
+	ChevronRight,
 	Database,
 	Package,
 	Plug,
@@ -34,10 +35,6 @@ const sectionIcons = {
 export function DocsMobileNav() {
 	const pathname = usePathname() || '/docs/introduction';
 	const [open, setOpen] = useState(false);
-	const currentItem =
-		docsNavigation
-			.flatMap((section) => section.items)
-			.find((item) => item.href === pathname) ?? null;
 
 	useEffect(() => {
 		if (!open) return;
@@ -52,140 +49,113 @@ export function DocsMobileNav() {
 	return (
 		<>
 			<div className="flex items-center gap-2 lg:hidden">
+				<button
+					aria-expanded={open}
+					aria-label={open ? 'Close docs navigation' : 'Open docs navigation'}
+					className="inline-flex items-center gap-2 border border-foreground/10 bg-background/80 px-3 py-1.5 text-sm text-foreground/75 transition-colors hover:text-foreground"
+					onClick={() => setOpen((value) => !value)}
+					type="button"
+				>
+					<BookOpen className="size-4" />
+					<span>Docs</span>
+				</button>
 				<div className="[&_button]:text-foreground/65 [&_button:hover]:text-foreground">
 					<ThemeToggle />
 				</div>
 			</div>
 
-			<div className="fixed inset-x-0 top-12 z-30 border-b border-foreground/8 bg-background/92 backdrop-blur-xl lg:hidden">
-				<div className="mx-auto max-w-3xl px-4 py-2.5">
-					<button
-						aria-expanded={open}
-						aria-label={open ? 'Close navigation' : 'Open navigation'}
-						className="flex w-full min-w-0 items-center gap-2 border border-foreground/10 bg-background/80 px-3 py-2 text-left text-foreground/75 transition-colors hover:text-foreground"
-						onClick={() => setOpen((value) => !value)}
-						type="button"
-					>
-						<BookOpen className="size-4 shrink-0" />
-						<span className="flex min-w-0 flex-1 flex-col leading-none">
-							<span className="font-mono text-[9px] uppercase tracking-[0.14em] text-foreground/45">
-								Browse docs
-							</span>
-							<span className="truncate pt-1 text-[12px] text-foreground/80">
-								{currentItem?.label ?? 'Documentation'}
-							</span>
-						</span>
-						<span className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/40">
-							{open ? 'Close' : 'Open'}
-						</span>
-					</button>
-				</div>
-			</div>
-
 			{open ? (
-				<div className="fixed inset-x-0 bottom-0 top-[97px] z-50 overflow-y-auto border-t border-foreground/8 bg-background/96 backdrop-blur-xl lg:hidden">
-					<div className="sticky top-0 z-10 flex items-center justify-between border-b border-foreground/8 bg-background/96 px-4 py-3 backdrop-blur-xl">
-						<div className="min-w-0">
-							<div className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/45">
+				<div className="fixed inset-0 z-50 lg:hidden">
+					<button
+						aria-label="Close docs navigation"
+						className="absolute inset-0 bg-black/55"
+						onClick={() => setOpen(false)}
+						type="button"
+					/>
+
+					<aside className="absolute bottom-0 left-0 top-0 flex w-[86vw] max-w-[340px] flex-col border-r border-foreground/8 bg-background shadow-2xl">
+						<div className="flex items-center justify-between border-b border-foreground/8 px-4 py-3">
+							<div className="font-mono text-[11px] uppercase tracking-[0.14em] text-foreground/55">
 								Documentation
 							</div>
-							<div className="truncate text-sm text-foreground">
-								{currentItem?.label ?? 'Browse docs'}
-							</div>
+							<button
+								aria-label="Close docs navigation"
+								className="inline-flex size-8 items-center justify-center text-foreground/65"
+								onClick={() => setOpen(false)}
+								type="button"
+							>
+								<X className="size-4" />
+							</button>
 						</div>
-						<button
-							aria-label="Close navigation"
-							className="inline-flex size-8 items-center justify-center border border-foreground/10 bg-background/80 text-foreground/70 transition-colors hover:text-foreground"
-							onClick={() => setOpen(false)}
-							type="button"
-						>
-							<X className="size-4" />
-						</button>
-					</div>
-					<nav className="mx-auto flex max-w-3xl flex-col px-4 py-4">
-						{docsNavigation.map((section) => {
-							const Icon =
-								sectionIcons[section.title as keyof typeof sectionIcons] ??
-								BookOpen;
 
-							return (
-								<div
-									className="border-b border-foreground/6 py-3 last:border-b-0"
-									key={section.title}
-								>
-									<div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
-										<Icon className="size-4" />
-										<span>{section.title}</span>
-									</div>
+						<nav className="flex-1 overflow-y-auto px-3 py-3">
+							<div className="space-y-4">
+								{docsNavigation.map((section) => {
+									const Icon =
+										sectionIcons[section.title as keyof typeof sectionIcons] ??
+										BookOpen;
 
-									<div className="space-y-1">
-										{section.items.map((item) => {
-											if (!item.href) {
-												return (
-													<div
-														className="flex items-center justify-between border border-dashed border-foreground/18 px-3 py-2 text-sm text-foreground/50"
-														key={item.label}
-													>
-														<div className="flex min-w-0 items-center gap-2">
+									return (
+										<div key={section.title}>
+											<div className="mb-2 flex items-center gap-2 px-2 text-sm font-medium text-foreground">
+												<Icon className="size-4" />
+												<span>{section.title}</span>
+											</div>
+
+											<div className="space-y-1">
+												{section.items.map((item) => {
+													if (!item.href) {
+														return (
+															<div
+																className="flex items-center justify-between border border-dashed border-foreground/18 px-3 py-2 text-sm text-foreground/45"
+																key={item.label}
+															>
+																<div className="flex min-w-0 items-center gap-2">
+																	<DocNavIcon
+																		className="size-3.5 shrink-0"
+																		icon={item.icon}
+																	/>
+																	<span className="truncate">{item.label}</span>
+																</div>
+																<span className="font-mono text-[9px] uppercase tracking-wider">
+																	planned
+																</span>
+															</div>
+														);
+													}
+
+													const active = pathname === item.href;
+
+													return (
+														<Link
+															className={cn(
+																'flex items-center gap-2 px-3 py-2 text-sm transition-colors',
+																active
+																	? 'bg-foreground/6 text-foreground'
+																	: 'text-foreground/65 hover:bg-foreground/4 hover:text-foreground',
+															)}
+															href={item.href as Route}
+															key={item.href}
+															onClick={() => setOpen(false)}
+														>
 															<DocNavIcon
 																className="size-3.5 shrink-0"
 																icon={item.icon}
 															/>
-															<span className="truncate">{item.label}</span>
-														</div>
-														<span className="font-mono text-[10px] uppercase tracking-wider text-foreground/35">
-															planned
-														</span>
-													</div>
-												);
-											}
-
-											const active = pathname === item.href;
-
-											return (
-												<Link
-													className={cn(
-														'flex items-center gap-2 px-3 py-2 text-sm transition-colors',
-														active
-															? 'bg-foreground/6 text-foreground'
-															: 'text-foreground/70 hover:bg-foreground/4 hover:text-foreground',
-													)}
-													href={item.href as Route}
-													key={item.href}
-													onClick={() => setOpen(false)}
-												>
-													<DocNavIcon
-														className="size-3.5 shrink-0"
-														icon={item.icon}
-													/>
-													<span className="truncate">{item.label}</span>
-												</Link>
-											);
-										})}
-									</div>
-								</div>
-							);
-						})}
-
-						<div className="mt-4 flex items-center gap-3 px-1 pb-3 text-sm text-foreground/55">
-							<a
-								className="inline-flex items-center gap-2 hover:text-foreground"
-								href="https://github.com/usepaymesh/paymesh"
-								rel="noreferrer noopener"
-								target="_blank"
-							>
-								<svg
-									aria-hidden="true"
-									className="size-4"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-								</svg>
-								<span>GitHub</span>
-							</a>
-						</div>
-					</nav>
+															<span className="min-w-0 flex-1 truncate">
+																{item.label}
+															</span>
+															<ChevronRight className="size-3.5 shrink-0 text-foreground/30" />
+														</Link>
+													);
+												})}
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						</nav>
+					</aside>
 				</div>
 			) : null}
 		</>
