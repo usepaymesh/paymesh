@@ -97,6 +97,7 @@
 	--landing-edge-fade: linear-gradient(to left, #f4f3ed, transparent);
 	--radius: 0.2rem;
 	--landing-topbar-height: 48px;
+	--docs-mobile-nav-height: 49px;
 	--fd-nav-height: 56px;
 	--fd-banner-height: 0px;
 	--fd-tocnav-height: 0px;
@@ -309,7 +310,10 @@ html:not([data-anchor-scrolling]) {
 	--fd-page-width: 900px;
 	--fd-banner-height: var(--landing-topbar-height);
 	--landing-left-pane-width: min(22vw, 300px);
-	padding-top: var(--landing-topbar-height);
+	padding-top: calc(
+		var(--landing-topbar-height) +
+		var(--docs-mobile-nav-height)
+	);
 }
 
 @media (min-width: 64rem) {
@@ -318,6 +322,7 @@ html:not([data-anchor-scrolling]) {
 			calc(100vw - var(--landing-left-pane-width)),
 			1200px
 		);
+		padding-top: var(--landing-topbar-height);
 		padding-inline-start: var(--landing-left-pane-width);
 	}
 

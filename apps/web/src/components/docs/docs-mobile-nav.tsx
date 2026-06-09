@@ -34,6 +34,10 @@ const sectionIcons = {
 export function DocsMobileNav() {
 	const pathname = usePathname() || '/docs/introduction';
 	const [open, setOpen] = useState(false);
+	const currentItem =
+		docsNavigation
+			.flatMap((section) => section.items)
+			.find((item) => item.href === pathname) ?? null;
 
 	useEffect(() => {
 		if (!open) return;
@@ -51,19 +55,53 @@ export function DocsMobileNav() {
 				<div className="[&_button]:text-foreground/65 [&_button:hover]:text-foreground">
 					<ThemeToggle />
 				</div>
-				<button
-					aria-expanded={open}
-					aria-label={open ? 'Close navigation' : 'Open navigation'}
-					className="inline-flex size-8 items-center justify-center border border-foreground/10 bg-background/80 text-foreground/70 transition-colors hover:text-foreground"
-					onClick={() => setOpen((value) => !value)}
-					type="button"
-				>
-					{open ? <X className="size-4" /> : <BookOpen className="size-4" />}
-				</button>
+			</div>
+
+			<div className="fixed inset-x-0 top-12 z-30 border-b border-foreground/8 bg-background/92 backdrop-blur-xl lg:hidden">
+				<div className="mx-auto max-w-3xl px-4 py-2.5">
+					<button
+						aria-expanded={open}
+						aria-label={open ? 'Close navigation' : 'Open navigation'}
+						className="flex w-full min-w-0 items-center gap-2 border border-foreground/10 bg-background/80 px-3 py-2 text-left text-foreground/75 transition-colors hover:text-foreground"
+						onClick={() => setOpen((value) => !value)}
+						type="button"
+					>
+						<BookOpen className="size-4 shrink-0" />
+						<span className="flex min-w-0 flex-1 flex-col leading-none">
+							<span className="font-mono text-[9px] uppercase tracking-[0.14em] text-foreground/45">
+								Browse docs
+							</span>
+							<span className="truncate pt-1 text-[12px] text-foreground/80">
+								{currentItem?.label ?? 'Documentation'}
+							</span>
+						</span>
+						<span className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/40">
+							{open ? 'Close' : 'Open'}
+						</span>
+					</button>
+				</div>
 			</div>
 
 			{open ? (
-				<div className="fixed inset-x-0 bottom-0 top-12 z-50 overflow-y-auto border-t border-foreground/8 bg-background/96 backdrop-blur-xl lg:hidden">
+				<div className="fixed inset-x-0 bottom-0 top-[97px] z-50 overflow-y-auto border-t border-foreground/8 bg-background/96 backdrop-blur-xl lg:hidden">
+					<div className="sticky top-0 z-10 flex items-center justify-between border-b border-foreground/8 bg-background/96 px-4 py-3 backdrop-blur-xl">
+						<div className="min-w-0">
+							<div className="font-mono text-[10px] uppercase tracking-[0.14em] text-foreground/45">
+								Documentation
+							</div>
+							<div className="truncate text-sm text-foreground">
+								{currentItem?.label ?? 'Browse docs'}
+							</div>
+						</div>
+						<button
+							aria-label="Close navigation"
+							className="inline-flex size-8 items-center justify-center border border-foreground/10 bg-background/80 text-foreground/70 transition-colors hover:text-foreground"
+							onClick={() => setOpen(false)}
+							type="button"
+						>
+							<X className="size-4" />
+						</button>
+					</div>
 					<nav className="mx-auto flex max-w-3xl flex-col px-4 py-4">
 						{docsNavigation.map((section) => {
 							const Icon =
