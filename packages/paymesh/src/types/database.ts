@@ -400,6 +400,8 @@ export interface PaymeshCustomerListOptions<
 	before?: string;
 	/** Include raw payloads in returned values. Defaults to `false`. */
 	includeRaw?: IncludeRaw;
+	/** Overrides the sandbox mode for this query. Defaults to the provider sandbox mode. */
+	sandbox?: boolean;
 }
 
 /**
@@ -430,6 +432,7 @@ export interface PaymeshCustomersRepository {
 	>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
+		sandbox: boolean,
 		id: string,
 		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
 	): Promise<TCustomer | null>;
@@ -445,6 +448,7 @@ export interface PaymeshCustomersRepository {
 	>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
+		sandbox: boolean,
 		options?: PaymeshCustomerListOptions<IncludeRaw>,
 	): Promise<PaymeshCustomerListResult<IncludeRaw, TCustomer>>;
 	/** Marks a customer as deleted. */
@@ -462,6 +466,7 @@ export interface PaymeshCheckoutsRepository {
 	findByProviderId<TPayment extends BasePayment = BasePayment>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
+		sandbox: boolean,
 		id: string,
 	): Promise<TPayment | null>;
 	/** Inserts or updates a checkout row. */
@@ -482,6 +487,7 @@ export interface PaymeshPixRepository {
 	>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
+		sandbox: boolean,
 		id: string,
 		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
 	): Promise<TPix | null>;
@@ -504,6 +510,7 @@ export interface PaymeshInvoicesRepository {
 	>(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
+		sandbox: boolean,
 		id: string,
 	): Promise<TPayment | null>;
 	/** Inserts or updates an invoice or payment row. */
@@ -522,6 +529,7 @@ export interface PaymeshSubscriptionsRepository {
 	findByProviderId(
 		schema: ResolvedDatabaseSchema,
 		provider: string,
+		sandbox: boolean,
 		id: string,
 	): Promise<Record<string, unknown> | null>;
 	/** Inserts or updates a subscription row. */

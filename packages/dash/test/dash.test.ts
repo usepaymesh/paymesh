@@ -202,6 +202,7 @@ function createDashboardProvider(options?: {
 }) {
 	return defineProvider({
 		id: 'stub',
+		isSandbox: () => false,
 		capabilities: {
 			checkout: true,
 			customers: true,
@@ -214,6 +215,7 @@ function createDashboardProvider(options?: {
 				return {
 					id: 'pay_created',
 					provider: 'stub',
+					sandbox: false,
 					amount: 1200,
 					currency: 'usd',
 					status: 'pending' as const,
@@ -231,6 +233,7 @@ function createDashboardProvider(options?: {
 				return {
 					id: 'pix_created',
 					provider: 'stub',
+					sandbox: false,
 					amount: data.amount,
 					copyPasteCode: '000201PIXDASH',
 					currency: data.currency.toLowerCase(),
@@ -243,6 +246,7 @@ function createDashboardProvider(options?: {
 				return {
 					id,
 					provider: 'stub',
+					sandbox: false,
 					amount: 2300,
 					copyPasteCode: '000201PIXDASH',
 					currency: 'brl',
@@ -257,6 +261,7 @@ function createDashboardProvider(options?: {
 				return {
 					id,
 					provider: 'stub',
+					sandbox: false,
 					email: 'customer@example.com',
 					raw: null,
 				};
@@ -270,6 +275,7 @@ function createDashboardProvider(options?: {
 				return {
 					id: 'cus_created',
 					provider: 'stub',
+					sandbox: false,
 					email: data.email,
 					name: data.name,
 					raw: null,
@@ -279,6 +285,7 @@ function createDashboardProvider(options?: {
 				return {
 					id,
 					provider: 'stub',
+					sandbox: false,
 					deleted: true,
 					raw: null,
 				};
@@ -393,6 +400,7 @@ function createDashboardDatabase() {
 						last_error: null,
 						processed_at: '2026-06-04T10:00:01.000Z',
 						provider: 'stub',
+						sandbox: false,
 						provider_id: 'evt_1',
 						raw: {
 							id: 'evt_1',

@@ -73,6 +73,7 @@ export function createClientManagers<
 
 	const client = {
 		provider,
+		isSandbox: provider.isSandbox,
 		database,
 		schema,
 		hooks: options.hooks,

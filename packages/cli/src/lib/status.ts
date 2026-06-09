@@ -36,7 +36,10 @@ export interface CliStatus {
 }
 
 export async function getPaymeshStatus(
-	client: Pick<PaymeshClient<boolean>, 'provider' | 'database' | 'schema'>,
+	client: Pick<
+		PaymeshClient<boolean>,
+		'provider' | 'database' | 'schema' | 'isSandbox'
+	>,
 	appliedMigrations: string[],
 	expectedMigrations: string[],
 	history: PaymeshMigrationHistoryStatus,
@@ -95,10 +98,11 @@ export async function getPaymeshStatus(
 				prices.price_count,
 				webhook_events.webhook_event_count
 			FROM
-				(SELECT COUNT(*)::text AS pix_count FROM ${tableName(client.schema, 'pix')}) pix,
-				(SELECT COUNT(*)::text AS product_count FROM ${tableName(client.schema, 'products')}) products,
-				(SELECT COUNT(*)::text AS price_count FROM ${tableName(client.schema, 'prices')}) prices,
-				(SELECT COUNT(*)::text AS webhook_event_count FROM ${tableName(client.schema, 'webhookEvents')}) webhook_events`,
+				(SELECT COUNT(*)::text AS pix_count FROM ${tableName(client.schema, 'pix')} WHERE sandbox = $1) pix,
+				(SELECT COUNT(*)::text AS product_count FROM ${tableName(client.schema, 'products')} WHERE sandbox = $1) products,
+				(SELECT COUNT(*)::text AS price_count FROM ${tableName(client.schema, 'prices')} WHERE sandbox = $1) prices,
+				(SELECT COUNT(*)::text AS webhook_event_count FROM ${tableName(client.schema, 'webhookEvents')} WHERE sandbox = $1) webhook_events`,
+			[client.isSandbox()],
 		),
 	);
 

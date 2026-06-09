@@ -63,8 +63,15 @@ export const stripe = ({
 	timeout,
 	baseUrl = STRIPE_BASE_URL,
 	secret = process.env.STRIPE_API_KEY,
+	sandbox,
 	webhookSecret = process.env.STRIPE_WEBHOOK_SECRET,
 }: StripeProviderOptions = {}) => {
+	const resolveProviderSandbox = () => {
+		if (typeof sandbox === 'boolean') return sandbox;
+		if (secret?.startsWith('sk_test_')) return true;
+		if (secret?.startsWith('sk_live_')) return false;
+		return false;
+	};
 	const headers = {
 		authorization: `Bearer ${secret}`,
 		'content-type': 'application/x-www-form-urlencoded',
@@ -90,6 +97,7 @@ export const stripe = ({
 
 	return defineProvider({
 		id: 'stripe',
+		isSandbox: resolveProviderSandbox,
 		capabilities: STRIPE_CAPABILITIES,
 		payments: {
 			async create<IncludeRaw extends boolean = false>(
@@ -141,6 +149,7 @@ export const stripe = ({
 					{
 						id: session.id,
 						provider: 'stripe',
+						sandbox: resolveProviderSandbox(),
 						amount: session.amount_total ?? 0,
 						currency: session.currency ?? 'usd',
 						status,
@@ -241,7 +250,7 @@ export const stripe = ({
 				});
 
 				return withRaw(
-					mapStripePixIntent(paymentIntent),
+					mapStripePixIntent(paymentIntent, resolveProviderSandbox()),
 					paymentIntent,
 					options?.includeRaw,
 				);
@@ -266,7 +275,7 @@ export const stripe = ({
 				}
 
 				return withRaw(
-					mapStripePixIntent(paymentIntent),
+					mapStripePixIntent(paymentIntent, resolveProviderSandbox()),
 					paymentIntent,
 					options?.includeRaw,
 				);
@@ -301,7 +310,7 @@ export const stripe = ({
 				);
 
 				return withRaw(
-					mapStripeCustomer(customer),
+					mapStripeCustomer(customer, resolveProviderSandbox()),
 					customer,
 					options?.includeRaw,
 				);
@@ -319,7 +328,7 @@ export const stripe = ({
 				);
 
 				return withRaw(
-					mapStripeCustomer(customer),
+					mapStripeCustomer(customer, resolveProviderSandbox()),
 					customer,
 					options?.includeRaw,
 				);
@@ -341,6 +350,7 @@ export const stripe = ({
 					{
 						id: customer.id,
 						provider: 'stripe',
+						sandbox: resolveProviderSandbox(),
 						deleted: customer.deleted,
 					},
 					customer,
@@ -370,6 +380,7 @@ export const stripe = ({
 				return {
 					products: products.data.map((product) => ({
 						id: product.id,
+						sandbox: resolveProviderSandbox(),
 						name: product.name,
 						description: product.description ?? undefined,
 						active: product.active ?? true,
@@ -379,6 +390,7 @@ export const stripe = ({
 					})),
 					prices: prices.data.map((price) => ({
 						id: price.id,
+						sandbox: resolveProviderSandbox(),
 						productId:
 							typeof price.product === 'string' ? price.product : undefined,
 						active: price.active ?? true,
@@ -438,16 +450,19 @@ export const stripe = ({
 				syncStripePayment({
 					...input,
 					requestOptions: baseRequestOptions,
+					sandbox: resolveProviderSandbox(),
 				}),
 			syncPix: (input) =>
 				syncStripePix({
 					...input,
 					requestOptions: baseRequestOptions,
+					sandbox: resolveProviderSandbox(),
 				}),
 			syncSubscription: (input) =>
 				syncStripeSubscription({
 					...input,
 					requestOptions: baseRequestOptions,
+					sandbox: resolveProviderSandbox(),
 				}),
 		},
 		webhooks: {
@@ -485,6 +500,10 @@ export const stripe = ({
 				const event = body as unknown as StripeEvent;
 				const object = event.data?.object;
 				const type = STRIPE_EVENTS[event.type] ?? 'payment.created';
+				const eventSandbox =
+					typeof event.livemode === 'boolean'
+						? !event.livemode
+						: resolveProviderSandbox();
 
 				let data: unknown = body;
 
@@ -496,6 +515,7 @@ export const stripe = ({
 							{
 								id: customer.id,
 								provider: 'stripe',
+								sandbox: eventSandbox,
 								deleted: customer.deleted,
 							},
 							customer,
@@ -508,26 +528,14 @@ export const stripe = ({
 						const customer = object as StripeCustomer;
 
 						data = withRaw(
-							{
-								id: customer.id,
-								provider: 'stripe',
-								externalId:
-									typeof customer.metadata?.externalId === 'string' &&
-									customer.metadata.externalId.length > 0
-										? customer.metadata.externalId
-										: undefined,
-								name: customer.name ?? undefined,
-								email: customer.email ?? undefined,
-								phone: customer.phone ?? undefined,
-								metadata: customer.metadata ?? undefined,
-							},
+							mapStripeCustomer(customer, eventSandbox),
 							customer,
 							includeRaw,
 						);
 					} else {
 						const payment = object as StripePaymentObject;
 						data = withRaw(
-							mapStripePaymentObject(payment),
+							mapStripePaymentObject(payment, eventSandbox),
 							payment,
 							includeRaw,
 						);
@@ -542,6 +550,7 @@ export const stripe = ({
 							id: event.id,
 							type,
 							provider: 'stripe',
+							sandbox: eventSandbox,
 							data,
 						},
 						body,

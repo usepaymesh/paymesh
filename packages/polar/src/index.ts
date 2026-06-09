@@ -47,10 +47,15 @@ export const polar = ({
 	accessToken = process.env.POLAR_ACCESS_TOKEN,
 	webhookSecret = process.env.POLAR_WEBHOOK_SECRET,
 	baseUrl = POLAR_BASE_URL,
+	sandbox,
 	retry,
 	timeout,
 	fetch,
 }: PolarProviderOptions = {}) => {
+	const resolveProviderSandbox = () =>
+		typeof sandbox === 'boolean'
+			? sandbox
+			: baseUrl === 'https://sandbox-api.polar.sh';
 	const headers = {
 		authorization: `Bearer ${accessToken}`,
 		'content-type': 'application/json',
@@ -76,6 +81,7 @@ export const polar = ({
 
 	return defineProvider({
 		id: 'polar',
+		isSandbox: resolveProviderSandbox,
 		capabilities: POLAR_CAPABILITIES,
 		payments: {
 			async create<IncludeRaw extends boolean = false>(
@@ -119,6 +125,7 @@ export const polar = ({
 					{
 						id: checkout.id,
 						provider: 'polar',
+						sandbox: resolveProviderSandbox(),
 						amount: checkout.total_amount ?? checkout.amount ?? 0,
 						currency: checkout.currency ?? 'usd',
 						status:
@@ -195,7 +202,7 @@ export const polar = ({
 				);
 
 				return withRaw(
-					mapPolarCustomer(customer),
+					mapPolarCustomer(customer, resolveProviderSandbox()),
 					customer,
 					options?.includeRaw,
 				);
@@ -213,7 +220,7 @@ export const polar = ({
 				);
 
 				return withRaw(
-					mapPolarCustomer(customer),
+					mapPolarCustomer(customer, resolveProviderSandbox()),
 					customer,
 					options?.includeRaw,
 				);
@@ -232,6 +239,7 @@ export const polar = ({
 					{
 						id,
 						provider: 'polar',
+						sandbox: resolveProviderSandbox(),
 						deleted: true,
 					},
 					{ id, deleted: true },
@@ -256,6 +264,7 @@ export const polar = ({
 				return {
 					products: products.map((product) => ({
 						id: product.id,
+						sandbox: resolveProviderSandbox(),
 						name: product.name,
 						description: product.description ?? undefined,
 						active: !product.is_archived,
@@ -266,6 +275,7 @@ export const polar = ({
 					prices: products.flatMap((product) =>
 						(product.prices ?? []).map((price) => ({
 							id: price.id,
+							sandbox: resolveProviderSandbox(),
 							productId: product.id,
 							active: !product.is_archived,
 							type:
@@ -297,11 +307,13 @@ export const polar = ({
 				syncPolarPayment({
 					...input,
 					requestOptions: baseRequestOptions,
+					sandbox: resolveProviderSandbox(),
 				}),
 			syncSubscription: (input) =>
 				syncPolarSubscription({
 					...input,
 					requestOptions: baseRequestOptions,
+					sandbox: resolveProviderSandbox(),
 				}),
 		},
 		webhooks: {
@@ -350,7 +362,13 @@ export const polar = ({
 				const body = payload as Record<string, unknown>;
 				const event = body as unknown as PolarWebhookEvent;
 				const type = resolvePolarWebhookType(event);
-				const data = resolvePolarWebhookData(type, event, includeRaw);
+				const eventSandbox = resolveProviderSandbox();
+				const data = resolvePolarWebhookData(
+					type,
+					event,
+					includeRaw,
+					eventSandbox,
+				);
 				const id = resolvePolarWebhookId(event);
 				const hook = resolvePolarWebhookHook(type);
 
@@ -362,6 +380,7 @@ export const polar = ({
 							id,
 							type,
 							provider: 'polar',
+							sandbox: eventSandbox,
 							data,
 						},
 						body,

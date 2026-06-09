@@ -14,8 +14,12 @@ export const syncStripePix = async ({
 	id,
 	schema,
 	database,
+	sandbox,
 	requestOptions,
-}: ProviderDashboardSyncInput & { requestOptions?: RequestOptions }) => {
+}: ProviderDashboardSyncInput & {
+	requestOptions?: RequestOptions;
+	sandbox: boolean;
+}) => {
 	if (!id.startsWith('pi_'))
 		throw new PaymeshError({
 			code: 'invalid_request',
@@ -39,7 +43,12 @@ export const syncStripePix = async ({
 		});
 
 	const normalized = withRaw(
-		mapStripePixIntent(paymentIntent),
+		mapStripePixIntent(
+			paymentIntent,
+			typeof paymentIntent.livemode === 'boolean'
+				? !paymentIntent.livemode
+				: sandbox,
+		),
 		paymentIntent,
 		true,
 	);
@@ -56,8 +65,12 @@ export const syncStripeSubscription = async ({
 	id,
 	schema,
 	database,
+	sandbox,
 	requestOptions,
-}: ProviderDashboardSyncInput & { requestOptions?: RequestOptions }) => {
+}: ProviderDashboardSyncInput & {
+	requestOptions?: RequestOptions;
+	sandbox: boolean;
+}) => {
 	const subscription = await request<StripeSubscription>(
 		`/v1/subscriptions/${encodeURIComponent(id)}`,
 		{
@@ -73,8 +86,23 @@ export const syncStripeSubscription = async ({
 		{
 			id,
 			provider: 'stripe',
+			sandbox:
+				typeof subscription.livemode === 'boolean'
+					? !subscription.livemode
+					: sandbox,
 			type: eventType,
-			data: withRaw(subscription, subscription, true),
+			data: withRaw(
+				{
+					...subscription,
+					provider: 'stripe',
+					sandbox:
+						typeof subscription.livemode === 'boolean'
+							? !subscription.livemode
+							: sandbox,
+				},
+				subscription,
+				true,
+			),
 		},
 		subscription,
 		true,
@@ -89,14 +117,21 @@ export const syncStripePayment = async ({
 	id,
 	schema,
 	database,
+	sandbox,
 	requestOptions,
-}: ProviderDashboardSyncInput & { requestOptions: RequestOptions }) => {
+}: ProviderDashboardSyncInput & {
+	requestOptions: RequestOptions;
+	sandbox: boolean;
+}) => {
 	const payment = await readStripePayment(id, requestOptions);
 
 	if (payment.kind === 'checkout') {
 		const checkout = payment.raw as StripeCheckoutSession;
 		const normalized = withRaw(
-			mapStripePaymentObject(checkout),
+			mapStripePaymentObject(
+				checkout,
+				typeof checkout.livemode === 'boolean' ? !checkout.livemode : sandbox,
+			),
 			checkout,
 			true,
 		);
@@ -107,7 +142,12 @@ export const syncStripePayment = async ({
 	}
 
 	const paymentObject = payment.raw as StripePaymentObject;
-	const normalizedPayment = mapStripePaymentObject(paymentObject);
+	const normalizedPayment = mapStripePaymentObject(
+		paymentObject,
+		typeof paymentObject.livemode === 'boolean'
+			? !paymentObject.livemode
+			: sandbox,
+	);
 	const normalized = withRaw(normalizedPayment, paymentObject, true);
 
 	const promises = [database.repositories.invoices.upsert(schema, normalized)];

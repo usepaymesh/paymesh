@@ -24,6 +24,7 @@ description: "Detailed guide to the Stripe provider: setup options, capabilities
 | --- | --- | --- |
 | `secret` | yes in practice | Stripe secret API key used for provider API requests. |
 | `webhookSecret` | recommended | Secret used to validate the `stripe-signature` header. |
+| `sandbox` | no | Forces sandbox mode. Auto-detected from key prefix (`sk_test_` / `sk_live_`) when omitted. |
 | `baseUrl` | no | Overrides the Stripe API base URL. Defaults to `https://api.stripe.com`. |
 | `retry` | no | Request retry policy forwarded to the shared request layer. |
 | `timeout` | no | Per-request timeout in milliseconds. |

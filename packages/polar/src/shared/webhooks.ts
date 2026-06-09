@@ -70,6 +70,7 @@ export function resolvePolarWebhookData(
 	type: PaymeshEventType,
 	event: PolarWebhookEvent,
 	includeRaw: boolean,
+	sandbox: boolean,
 ) {
 	let data: unknown = event.data;
 
@@ -82,20 +83,25 @@ export function resolvePolarWebhookData(
 	) {
 		if (isRecord(event.data) && 'status' in event.data) {
 			const checkout = event.data as unknown as PolarCheckout;
-			data = withRaw(mapPolarCheckoutPayment(checkout), checkout, includeRaw);
+			data = withRaw(
+				mapPolarCheckoutPayment(checkout, sandbox),
+				checkout,
+				includeRaw,
+			);
 		} else if (isRecord(event.data)) {
 			const order = event.data as unknown as PolarOrder;
-			data = withRaw(mapPolarOrderPayment(order), order, includeRaw);
+			data = withRaw(mapPolarOrderPayment(order, sandbox), order, includeRaw);
 		}
 	} else if (type === 'customer.created' || type === 'customer.updated') {
 		const customer = event.data as PolarCustomer;
-		data = withRaw(mapPolarCustomer(customer), customer, includeRaw);
+		data = withRaw(mapPolarCustomer(customer, sandbox), customer, includeRaw);
 	} else if (type === 'customer.deleted') {
 		const customer = event.data as PolarCustomer;
 		data = withRaw(
 			{
 				id: customer.id,
 				provider: 'polar',
+				sandbox,
 				deleted: true,
 			},
 			customer,
@@ -107,7 +113,15 @@ export function resolvePolarWebhookData(
 		type === 'subscription.canceled'
 	) {
 		const subscription = event.data as PolarSubscription;
-		data = withRaw(subscription, subscription, includeRaw);
+		data = withRaw(
+			{
+				...subscription,
+				provider: 'polar',
+				sandbox,
+			},
+			subscription,
+			includeRaw,
+		);
 	}
 
 	return data;

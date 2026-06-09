@@ -7,10 +7,11 @@ import type {
 import { STRIPE_PAYMENT_STATUSES } from './constants';
 import { getStripeExternalId, isStripePixPaymentIntent } from './utils';
 
-export function mapStripeCustomer(customer: StripeCustomer) {
+export function mapStripeCustomer(customer: StripeCustomer, sandbox: boolean) {
 	return {
 		id: customer.id,
 		provider: 'stripe' as const,
+		sandbox,
 		externalId: getStripeExternalId(customer.metadata),
 		name: customer.name ?? undefined,
 		email: customer.email ?? undefined,
@@ -21,19 +22,22 @@ export function mapStripeCustomer(customer: StripeCustomer) {
 
 export function mapStripePaymentObject(
 	payment: StripeCheckoutSession,
+	sandbox: boolean,
 ): BasePayment;
 export function mapStripePaymentObject(
 	payment: StripePaymentObject,
+	sandbox: boolean,
 ): BaseAnyPayment;
 
 export function mapStripePaymentObject(
 	payment: StripePaymentObject,
+	sandbox: boolean,
 ): BaseAnyPayment {
 	if (
 		payment.object === 'payment_intent' &&
 		isStripePixPaymentIntent(payment)
 	) {
-		return mapStripePixIntent(payment);
+		return mapStripePixIntent(payment, sandbox);
 	}
 
 	const status: PaymentStatus =
@@ -84,6 +88,7 @@ export function mapStripePaymentObject(
 	return {
 		id: payment.id,
 		provider: 'stripe' as const,
+		sandbox,
 		amount:
 			'amount_total' in payment
 				? (payment.amount_total ?? 0)
@@ -100,6 +105,7 @@ export function mapStripePaymentObject(
 
 export function mapStripePixIntent(
 	payment: Extract<StripePaymentObject, { object: 'payment_intent' }>,
+	sandbox: boolean,
 ): Extract<BaseAnyPayment, { method: 'pix' }> {
 	const status: PaymentStatus =
 		STRIPE_PAYMENT_STATUSES[payment.status ?? ''] ?? 'pending';
@@ -109,6 +115,7 @@ export function mapStripePixIntent(
 	return {
 		id: payment.id,
 		provider: 'stripe' as const,
+		sandbox,
 		amount: payment.amount,
 		copyPasteCode: qrCode?.data ?? undefined,
 		currency: payment.currency ?? 'brl',

@@ -6,6 +6,8 @@ import type { RetryOptions } from 'paymesh';
 export interface StripeProviderOptions {
 	/** API secret used for authenticated requests. Defaults to `process.env.STRIPE_API_KEY`. */
 	secret?: string;
+	/** Explicit sandbox override. When omitted, Stripe infers from the API secret when possible. */
+	sandbox?: boolean;
 	/** Signing secret used to verify webhooks. Defaults to `process.env.STRIPE_WEBHOOK_SECRET`. */
 	webhookSecret?: string;
 	/** Base API URL. Defaults to `https://api.stripe.com`. */
@@ -24,6 +26,7 @@ export interface StripeProviderOptions {
 export interface StripeCheckoutSession {
 	id: string;
 	object: 'checkout.session';
+	livemode?: boolean;
 	amount_total?: number | null;
 	client_reference_id?: string | null;
 	currency?: string | null;
@@ -46,6 +49,7 @@ export interface StripeCheckoutSession {
 export interface StripeCustomer {
 	id: string;
 	object: 'customer';
+	livemode?: boolean;
 	name?: string | null;
 	email?: string | null;
 	phone?: string | null;
@@ -58,6 +62,7 @@ export interface StripeCustomer {
 export interface StripeDeletedCustomer {
 	id: string;
 	object: 'customer';
+	livemode?: boolean;
 	deleted: boolean;
 }
 
@@ -67,6 +72,7 @@ export interface StripeDeletedCustomer {
 export interface StripePaymentIntent {
 	id: string;
 	object: 'payment_intent';
+	livemode?: boolean;
 	amount: number;
 	currency: string;
 	customer?: string | null;
@@ -101,6 +107,7 @@ export interface StripePaymentIntent {
 export interface StripeCharge {
 	id: string;
 	object: 'charge';
+	livemode?: boolean;
 	amount: number;
 	currency: string;
 	metadata?: Record<string, string> | null;
@@ -114,6 +121,7 @@ export interface StripeCharge {
 export interface StripeSubscription {
 	id: string;
 	object: 'subscription';
+	livemode?: boolean;
 	amount?: number | null;
 	cancel_at_period_end?: boolean;
 	canceled_at?: number | null;
@@ -157,6 +165,7 @@ export interface StripeBalance {
  */
 export interface StripeEvent {
 	id: string;
+	livemode?: boolean;
 	type: string;
 	data?: {
 		object?:
@@ -191,6 +200,7 @@ export interface StripeListResponse<T> {
 export interface StripeProduct {
 	id: string;
 	object: 'product';
+	livemode?: boolean;
 	active?: boolean;
 	description?: string | null;
 	metadata?: Record<string, string> | null;
@@ -203,6 +213,7 @@ export interface StripeProduct {
 export interface StripePrice {
 	id: string;
 	object: 'price';
+	livemode?: boolean;
 	active?: boolean;
 	currency?: string | null;
 	metadata?: Record<string, string> | null;

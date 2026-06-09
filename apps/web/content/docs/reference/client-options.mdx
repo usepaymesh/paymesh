@@ -61,6 +61,7 @@ export const paymesh = createClient({
 | `provider` | yes | none | The provider implementation created by packages such as `@paymesh/stripe` or `@paymesh/polar`. |
 | `database` | no | `undefined` | Persists normalized data, enables migrations, webhook deduplication, catalog sync, plugins that require storage, and operational tooling. |
 | `includeRaw` | no | `false` | Propagates raw provider payloads through client reads and webhook events when enabled. |
+| `sandbox` | no | `undefined` | Asserts sandbox mode matches the provider. Throws if the provider reports a different mode. |
 | `schema` | no | generated defaults | Renames built-in tables, changes the prefix, and adds extra columns or custom tables. |
 | `plugins` | no | `[]` | Registers plugin routes, hooks, schema extensions, setup logic, and runtime client extensions. |
 
@@ -134,6 +135,49 @@ export const paymesh = createClient({
 <Callout type="info">
   `persistRaw` is configured on the database adapter, not on `createClient`. When it is enabled, stored rows retain provider payloads for reconciliation and debugging.
 </Callout>
+
+## `sandbox`
+
+The `sandbox` option in `createClient` is an **assertion**. It does not change the provider's sandbox mode — it validates that the provider matches your expectation.
+
+```ts title="src/lib/paymesh.ts"
+createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+  }),
+  sandbox: true, // passes — provider auto-detected sandbox
+});
+```
+
+If the assertion fails, the client throws:
+
+```ts
+createClient({
+  provider: stripe({
+    secret: "sk_live_123",
+  }),
+  sandbox: true, // PaymeshError: client sandbox does not match provider
+});
+```
+
+This catches accidental production usage in development environments.
+
+### Per-call sandbox override
+
+When a database is configured, read methods also accept a per-call `sandbox` override:
+
+```ts title="src/server/admin.ts"
+// Override sandbox for a single read
+const customer = await paymesh.customers.get("cus_123", {
+  sandbox: false,
+});
+
+const page = await paymesh.customers.list({
+  sandbox: true,
+});
+```
+
+The per-call option is available on `customers.get`, `customers.list`, and `pix.get`.
 
 ## `includeRaw`
 

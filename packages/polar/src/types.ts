@@ -6,6 +6,8 @@ import type { RetryOptions } from 'paymesh';
 export interface PolarProviderOptions {
 	/** API access token used for authenticated requests. Defaults to `process.env.POLAR_ACCESS_TOKEN`. */
 	accessToken?: string;
+	/** Explicit sandbox override. When omitted, Polar infers from the configured base URL. */
+	sandbox?: boolean;
 	/** Signing secret used to verify webhooks. Defaults to `process.env.POLAR_WEBHOOK_SECRET`. */
 	webhookSecret?: string;
 	/** Base API URL. Defaults to `https://api.polar.sh`. */

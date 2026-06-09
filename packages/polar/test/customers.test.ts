@@ -143,6 +143,7 @@ describe('polar customers', () => {
 		expect(deleted).toEqual({
 			id: 'cus_create',
 			provider: 'polar',
+			sandbox: false,
 			deleted: true,
 			raw: null,
 		});
@@ -210,6 +211,7 @@ describe('polar customers', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: false,

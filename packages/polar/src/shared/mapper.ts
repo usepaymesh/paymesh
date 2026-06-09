@@ -4,10 +4,11 @@ import type { PolarCheckout, PolarCustomer, PolarOrder } from '../types';
 /**
  * Maps a Polar customer payload into a normalized Paymesh customer.
  */
-export function mapPolarCustomer(customer: PolarCustomer) {
+export function mapPolarCustomer(customer: PolarCustomer, sandbox: boolean) {
 	return {
 		id: customer.id,
 		provider: 'polar' as const,
+		sandbox,
 		externalId: customer.external_id ?? undefined,
 		name: customer.name ?? undefined,
 		email: customer.email ?? undefined,
@@ -18,7 +19,10 @@ export function mapPolarCustomer(customer: PolarCustomer) {
 /**
  * Maps a Polar checkout into a normalized Paymesh payment.
  */
-export function mapPolarCheckoutPayment(checkout: PolarCheckout) {
+export function mapPolarCheckoutPayment(
+	checkout: PolarCheckout,
+	sandbox: boolean,
+) {
 	let status: PaymentStatus = 'pending';
 	if (checkout.status === 'succeeded') status = 'paid';
 	if (checkout.status === 'expired') status = 'canceled';
@@ -27,6 +31,7 @@ export function mapPolarCheckoutPayment(checkout: PolarCheckout) {
 	return {
 		id: checkout.id,
 		provider: 'polar' as const,
+		sandbox,
 		amount: checkout.total_amount ?? checkout.amount ?? 0,
 		currency: checkout.currency ?? 'usd',
 		status,
@@ -50,7 +55,7 @@ export function mapPolarCheckoutPayment(checkout: PolarCheckout) {
 /**
  * Maps a Polar order into a normalized Paymesh payment.
  */
-export function mapPolarOrderPayment(order: PolarOrder) {
+export function mapPolarOrderPayment(order: PolarOrder, sandbox: boolean) {
 	const status: PaymentStatus =
 		order.status === 'refunded'
 			? 'refunded'
@@ -63,6 +68,7 @@ export function mapPolarOrderPayment(order: PolarOrder) {
 	return {
 		id: order.id,
 		provider: 'polar' as const,
+		sandbox,
 		amount: order.total_amount ?? 0,
 		currency: order.currency ?? 'usd',
 		status,

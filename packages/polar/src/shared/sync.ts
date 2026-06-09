@@ -12,8 +12,12 @@ export const syncPolarPayment = async ({
 	id,
 	schema,
 	database,
+	sandbox,
 	requestOptions,
-}: ProviderDashboardSyncInput & { requestOptions?: RequestOptions }) => {
+}: ProviderDashboardSyncInput & {
+	requestOptions?: RequestOptions;
+	sandbox: boolean;
+}) => {
 	try {
 		const order = await request<PolarOrder>(
 			`/v1/orders/${encodeURIComponent(id)}`,
@@ -22,7 +26,11 @@ export const syncPolarPayment = async ({
 				...requestOptions,
 			},
 		);
-		const normalized = withRaw(mapPolarOrderPayment(order), order, true);
+		const normalized = withRaw(
+			mapPolarOrderPayment(order, sandbox),
+			order,
+			true,
+		);
 
 		await database.repositories.invoices.upsert(schema, normalized);
 		return normalized;
@@ -37,7 +45,11 @@ export const syncPolarPayment = async ({
 			...requestOptions,
 		},
 	);
-	const normalized = withRaw(mapPolarCheckoutPayment(checkout), checkout, true);
+	const normalized = withRaw(
+		mapPolarCheckoutPayment(checkout, sandbox),
+		checkout,
+		true,
+	);
 
 	await database.repositories.checkouts.upsert(schema, normalized);
 	return normalized;
@@ -50,8 +62,12 @@ export const syncPolarSubscription = async ({
 	id,
 	schema,
 	database,
+	sandbox,
 	requestOptions,
-}: ProviderDashboardSyncInput & { requestOptions?: RequestOptions }) => {
+}: ProviderDashboardSyncInput & {
+	requestOptions?: RequestOptions;
+	sandbox: boolean;
+}) => {
 	const subscription = await request<PolarSubscription>(
 		`/v1/subscriptions/${encodeURIComponent(id)}`,
 		{
@@ -67,8 +83,17 @@ export const syncPolarSubscription = async ({
 		{
 			id,
 			provider: 'polar',
+			sandbox,
 			type,
-			data: withRaw(subscription, subscription, true),
+			data: withRaw(
+				{
+					...subscription,
+					provider: 'polar',
+					sandbox,
+				},
+				subscription,
+				true,
+			),
 		},
 		subscription,
 		true,

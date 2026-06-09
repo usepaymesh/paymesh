@@ -56,6 +56,18 @@ export const paymesh = createClient({
 
 That changes return types across the client so normalized objects include a real `raw` payload instead of `null`.
 
+## Sandbox mode
+
+Every client has a sandbox mode inherited from its provider.
+
+```ts title="src/server/check-sandbox.ts"
+console.log(client.isSandbox()); // true or false
+```
+
+Paymesh stores the sandbox flag on every normalized record and filters by it in database queries. This keeps test and production data completely separate.
+
+See [Sandbox](/docs/concepts/sandbox) for the full reference.
+
 ## Schema-aware types
 
 When you customize database schema fields, client input and output types can be extended so those extra fields become part of the payment, PIX, or customer shape.

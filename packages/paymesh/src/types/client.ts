@@ -345,6 +345,8 @@ export interface PaymeshClient<
 > {
 	/** Provider instance backing the client. */
 	provider: Provider<string>;
+	/** Returns whether the active provider is configured for sandbox mode. */
+	isSandbox(): boolean;
 	/** Hook map configured for the client. */
 	hooks?: PaymeshHooks<IncludeRaw, Plugins>;
 	/** Whether raw payloads are returned from client methods. */
@@ -386,6 +388,8 @@ export interface ClientOptions<
 	baseUrl?: string;
 	/** Default request timeout in milliseconds. */
 	timeout?: number;
+	/** Explicit sandbox expectation for the configured provider. Throws when it mismatches `provider.isSandbox()`. */
+	sandbox?: boolean;
 	/** Default retry configuration. */
 	retry?: RetryOptions;
 	/** Fetch implementation to use. */

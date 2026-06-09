@@ -129,6 +129,7 @@ describe('@paymesh/audit-logs', () => {
 function createWebhookProvider() {
 	return defineProvider({
 		id: 'stub',
+		isSandbox: () => false,
 		capabilities: {
 			checkout: true,
 			customers: true,
@@ -140,6 +141,7 @@ function createWebhookProvider() {
 					{
 						id: 'chk_123',
 						provider: 'stub',
+						sandbox: false,
 						amount: 1000,
 						currency: 'usd',
 						status: 'pending' as const,
@@ -154,6 +156,7 @@ function createWebhookProvider() {
 					{
 						id: 'cus_123',
 						provider: 'stub',
+						sandbox: false,
 					},
 					{ id: 'raw_customer' },
 					options?.includeRaw,
@@ -163,6 +166,7 @@ function createWebhookProvider() {
 					{
 						id: 'cus_123',
 						provider: 'stub',
+						sandbox: false,
 					},
 					{ id: 'raw_customer' },
 					options?.includeRaw,
@@ -172,6 +176,7 @@ function createWebhookProvider() {
 					{
 						id: 'cus_123',
 						provider: 'stub',
+						sandbox: false,
 						deleted: true,
 					},
 					{ id: 'raw_customer' },
@@ -191,10 +196,12 @@ function createWebhookProvider() {
 							id: 'evt_123',
 							type: 'customer.created' as const,
 							provider: 'stub',
+							sandbox: false,
 							data: withRaw(
 								{
 									id: String(payload.id ?? 'cus_123'),
 									provider: 'stub',
+									sandbox: false,
 									email:
 										typeof payload.email === 'string'
 											? payload.email

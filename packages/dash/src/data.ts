@@ -35,6 +35,10 @@ interface DashboardRouteContextShape {
 }
 
 export async function getOverviewData(context: DashboardRequestContext) {
+	const providerParams = [
+		context.client.provider.id,
+		context.client.isSandbox(),
+	];
 	const [countsResult, recentWebhooks, balance] = await Promise.all([
 		context.database.query<{
 			checkout_count: number | string;
@@ -59,15 +63,15 @@ export async function getOverviewData(context: DashboardRequestContext) {
 					products.product_count,
 					prices.price_count
 				FROM
-					(SELECT COUNT(*)::text AS customer_count FROM ${tableName(context.schema, 'customers')} WHERE provider = $1 AND deleted_at IS NULL) customers,
-					(SELECT COUNT(*)::text AS pix_count FROM ${tableName(context.schema, 'pix')} WHERE provider = $1) pix,
-					(SELECT COUNT(*)::text AS checkout_count FROM ${tableName(context.schema, 'checkouts')} WHERE provider = $1) checkouts,
-					(SELECT COUNT(*)::text AS invoice_count FROM ${tableName(context.schema, 'invoices')} WHERE provider = $1) invoices,
-					(SELECT COUNT(*)::text AS subscription_count FROM ${tableName(context.schema, 'subscriptions')} WHERE provider = $1) subscriptions,
-					(SELECT COUNT(*)::text AS webhook_count, COUNT(*) FILTER (WHERE status = 'failed')::text AS failed_webhook_count FROM ${tableName(context.schema, 'webhookEvents')} WHERE provider = $1) webhooks,
-					(SELECT COUNT(*)::text AS product_count FROM ${tableName(context.schema, 'products')} WHERE provider = $1) products,
-					(SELECT COUNT(*)::text AS price_count FROM ${tableName(context.schema, 'prices')} WHERE provider = $1) prices`,
-				[context.client.provider.id],
+					(SELECT COUNT(*)::text AS customer_count FROM ${tableName(context.schema, 'customers')} WHERE provider = $1 AND sandbox = $2 AND deleted_at IS NULL) customers,
+					(SELECT COUNT(*)::text AS pix_count FROM ${tableName(context.schema, 'pix')} WHERE provider = $1 AND sandbox = $2) pix,
+					(SELECT COUNT(*)::text AS checkout_count FROM ${tableName(context.schema, 'checkouts')} WHERE provider = $1 AND sandbox = $2) checkouts,
+					(SELECT COUNT(*)::text AS invoice_count FROM ${tableName(context.schema, 'invoices')} WHERE provider = $1 AND sandbox = $2) invoices,
+					(SELECT COUNT(*)::text AS subscription_count FROM ${tableName(context.schema, 'subscriptions')} WHERE provider = $1 AND sandbox = $2) subscriptions,
+					(SELECT COUNT(*)::text AS webhook_count, COUNT(*) FILTER (WHERE status = 'failed')::text AS failed_webhook_count FROM ${tableName(context.schema, 'webhookEvents')} WHERE provider = $1 AND sandbox = $2) webhooks,
+					(SELECT COUNT(*)::text AS product_count FROM ${tableName(context.schema, 'products')} WHERE provider = $1 AND sandbox = $2) products,
+					(SELECT COUNT(*)::text AS price_count FROM ${tableName(context.schema, 'prices')} WHERE provider = $1 AND sandbox = $2) prices`,
+				providerParams,
 			),
 		),
 		listWebhooksData(context, 6),
@@ -103,11 +107,12 @@ export async function listCustomersData(
 	const rows = await context.database.query<CustomerRow>(
 		compileQuery(
 			`SELECT provider, provider_id, external_id, name, email, phone, metadata, data, raw, created_at, updated_at
+				, sandbox
 				FROM ${tableName(context.schema, 'customers')}
-				WHERE provider = $1 AND deleted_at IS NULL
+				WHERE provider = $1 AND sandbox = $2 AND deleted_at IS NULL
 				ORDER BY created_at DESC
-				LIMIT $2`,
-			[context.client.provider.id, limit],
+				LIMIT $3`,
+			[context.client.provider.id, context.client.isSandbox(), limit],
 		),
 	);
 
@@ -121,10 +126,11 @@ export async function getCustomerData(
 	const [row] = await context.database.query<CustomerRow>(
 		compileQuery(
 			`SELECT provider, provider_id, external_id, name, email, phone, metadata, data, raw, created_at, updated_at
+				, sandbox
 				FROM ${tableName(context.schema, 'customers')}
-				WHERE provider = $1 AND provider_id = $2 AND deleted_at IS NULL
+				WHERE provider = $1 AND sandbox = $2 AND provider_id = $3 AND deleted_at IS NULL
 				LIMIT 1`,
-			[context.client.provider.id, id],
+			[context.client.provider.id, context.client.isSandbox(), id],
 		),
 	);
 	if (!row) return null;
@@ -149,17 +155,17 @@ export async function listPaymentsData(
 		compileQuery(
 			`SELECT *
 				FROM (
-					SELECT 'invoice'::text AS source, 1 AS source_order, provider, provider_id, customer_provider_id, amount, currency, status, metadata, data, raw, NULL::text AS checkout_url, created_at, updated_at
+					SELECT 'invoice'::text AS source, 1 AS source_order, provider, provider_id, sandbox, customer_provider_id, amount, currency, status, metadata, data, raw, NULL::text AS checkout_url, created_at, updated_at
 					FROM ${tableName(context.schema, 'invoices')}
-					WHERE provider = $1
+					WHERE provider = $1 AND sandbox = $2
 					UNION ALL
-					SELECT 'checkout'::text AS source, 2 AS source_order, provider, provider_id, customer_provider_id, amount, currency, status, metadata, data, raw, checkout_url, created_at, updated_at
+					SELECT 'checkout'::text AS source, 2 AS source_order, provider, provider_id, sandbox, customer_provider_id, amount, currency, status, metadata, data, raw, checkout_url, created_at, updated_at
 					FROM ${tableName(context.schema, 'checkouts')}
-					WHERE provider = $1
+					WHERE provider = $1 AND sandbox = $2
 				) payments
 				ORDER BY created_at DESC, source_order ASC
-				LIMIT $2`,
-			[context.client.provider.id, limit],
+				LIMIT $3`,
+			[context.client.provider.id, context.client.isSandbox(), limit],
 		),
 	);
 
@@ -172,12 +178,12 @@ export async function listPixData(
 ) {
 	const rows = await context.database.query<PixRow>(
 		compileQuery(
-			`SELECT provider, provider_id, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw, created_at, updated_at
+			`SELECT provider, provider_id, sandbox, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw, created_at, updated_at
 				FROM ${tableName(context.schema, 'pix')}
-				WHERE provider = $1
+				WHERE provider = $1 AND sandbox = $2
 				ORDER BY created_at DESC
-				LIMIT $2`,
-			[context.client.provider.id, limit],
+				LIMIT $3`,
+			[context.client.provider.id, context.client.isSandbox(), limit],
 		),
 	);
 
@@ -192,17 +198,17 @@ export async function getPaymentData(
 		compileQuery(
 			`SELECT *
 				FROM (
-					SELECT 'invoice'::text AS source, 1 AS source_order, provider, provider_id, customer_provider_id, amount, currency, status, metadata, data, raw, NULL::text AS checkout_url, created_at, updated_at
+					SELECT 'invoice'::text AS source, 1 AS source_order, provider, provider_id, sandbox, customer_provider_id, amount, currency, status, metadata, data, raw, NULL::text AS checkout_url, created_at, updated_at
 					FROM ${tableName(context.schema, 'invoices')}
-					WHERE provider = $1 AND provider_id = $2
+					WHERE provider = $1 AND sandbox = $2 AND provider_id = $3
 					UNION ALL
-					SELECT 'checkout'::text AS source, 2 AS source_order, provider, provider_id, customer_provider_id, amount, currency, status, metadata, data, raw, checkout_url, created_at, updated_at
+					SELECT 'checkout'::text AS source, 2 AS source_order, provider, provider_id, sandbox, customer_provider_id, amount, currency, status, metadata, data, raw, checkout_url, created_at, updated_at
 					FROM ${tableName(context.schema, 'checkouts')}
-					WHERE provider = $1 AND provider_id = $2
+					WHERE provider = $1 AND sandbox = $2 AND provider_id = $3
 				) payments
 				ORDER BY source_order ASC
 				LIMIT 1`,
-			[context.client.provider.id, id],
+			[context.client.provider.id, context.client.isSandbox(), id],
 		),
 	);
 	if (!row) return null;
@@ -222,11 +228,11 @@ export async function getPaymentData(
 export async function getPixData(context: DashboardRequestContext, id: string) {
 	const [row] = await context.database.query<PixRow>(
 		compileQuery(
-			`SELECT provider, provider_id, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw, created_at, updated_at
+			`SELECT provider, provider_id, sandbox, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw, created_at, updated_at
 				FROM ${tableName(context.schema, 'pix')}
-				WHERE provider = $1 AND provider_id = $2
+				WHERE provider = $1 AND sandbox = $2 AND provider_id = $3
 				LIMIT 1`,
-			[context.client.provider.id, id],
+			[context.client.provider.id, context.client.isSandbox(), id],
 		),
 	);
 	if (!row) return null;
@@ -249,12 +255,12 @@ export async function listSubscriptionsData(
 ) {
 	const rows = await context.database.query<SubscriptionRow>(
 		compileQuery(
-			`SELECT provider, provider_id, customer_provider_id, product_provider_id, price_provider_id, status, amount, currency, cancel_at_period_end, data, raw, created_at, updated_at
+			`SELECT provider, provider_id, sandbox, customer_provider_id, product_provider_id, price_provider_id, status, amount, currency, cancel_at_period_end, data, raw, created_at, updated_at
 				FROM ${tableName(context.schema, 'subscriptions')}
-				WHERE provider = $1
+				WHERE provider = $1 AND sandbox = $2
 				ORDER BY created_at DESC
-				LIMIT $2`,
-			[context.client.provider.id, limit],
+				LIMIT $3`,
+			[context.client.provider.id, context.client.isSandbox(), limit],
 		),
 	);
 
@@ -267,11 +273,11 @@ export async function getSubscriptionData(
 ) {
 	const [row] = await context.database.query<SubscriptionRow>(
 		compileQuery(
-			`SELECT provider, provider_id, customer_provider_id, product_provider_id, price_provider_id, status, amount, currency, cancel_at_period_end, data, raw, created_at, updated_at
+			`SELECT provider, provider_id, sandbox, customer_provider_id, product_provider_id, price_provider_id, status, amount, currency, cancel_at_period_end, data, raw, created_at, updated_at
 				FROM ${tableName(context.schema, 'subscriptions')}
-				WHERE provider = $1 AND provider_id = $2
+				WHERE provider = $1 AND sandbox = $2 AND provider_id = $3
 				LIMIT 1`,
-			[context.client.provider.id, id],
+			[context.client.provider.id, context.client.isSandbox(), id],
 		),
 	);
 	if (!row) return null;
@@ -295,11 +301,12 @@ export async function listWebhooksData(
 	const rows = await context.database.query<WebhookRow>(
 		compileQuery(
 			`SELECT provider, provider_id, event_type, status, attempts, last_error, data, raw, processed_at, created_at, updated_at
+				, sandbox
 				FROM ${tableName(context.schema, 'webhookEvents')}
-				WHERE provider = $1
+				WHERE provider = $1 AND sandbox = $2
 				ORDER BY created_at DESC
-				LIMIT $2`,
-			[context.client.provider.id, limit],
+				LIMIT $3`,
+			[context.client.provider.id, context.client.isSandbox(), limit],
 		),
 	);
 
@@ -313,10 +320,11 @@ export async function getWebhookData(
 	const [row] = await context.database.query<WebhookRow>(
 		compileQuery(
 			`SELECT provider, provider_id, event_type, status, attempts, last_error, data, raw, processed_at, created_at, updated_at
+				, sandbox
 				FROM ${tableName(context.schema, 'webhookEvents')}
-				WHERE provider = $1 AND provider_id = $2
+				WHERE provider = $1 AND sandbox = $2 AND provider_id = $3
 				LIMIT 1`,
-			[context.client.provider.id, id],
+			[context.client.provider.id, context.client.isSandbox(), id],
 		),
 	);
 	if (!row) return null;
@@ -344,9 +352,9 @@ export async function getProviderData(context: DashboardRequestContext) {
 					products.product_count,
 					prices.price_count
 				FROM
-					(SELECT COUNT(*)::text AS product_count FROM ${tableName(context.schema, 'products')} WHERE provider = $1) products,
-					(SELECT COUNT(*)::text AS price_count FROM ${tableName(context.schema, 'prices')} WHERE provider = $1) prices`,
-				[context.client.provider.id],
+					(SELECT COUNT(*)::text AS product_count FROM ${tableName(context.schema, 'products')} WHERE provider = $1 AND sandbox = $2) products,
+					(SELECT COUNT(*)::text AS price_count FROM ${tableName(context.schema, 'prices')} WHERE provider = $1 AND sandbox = $2) prices`,
+				[context.client.provider.id, context.client.isSandbox()],
 			),
 		),
 		getProviderBalance(context.client),
@@ -380,15 +388,16 @@ export async function getDatabaseData(context: DashboardRequestContext) {
 				prices.prices,
 				migrations.migrations
 			FROM
-				(SELECT COUNT(*)::text AS customers FROM ${tableName(context.schema, 'customers')}) customers,
-				(SELECT COUNT(*)::text AS pix FROM ${tableName(context.schema, 'pix')}) pix,
-				(SELECT COUNT(*)::text AS checkouts FROM ${tableName(context.schema, 'checkouts')}) checkouts,
-				(SELECT COUNT(*)::text AS invoices FROM ${tableName(context.schema, 'invoices')}) invoices,
-				(SELECT COUNT(*)::text AS subscriptions FROM ${tableName(context.schema, 'subscriptions')}) subscriptions,
-				(SELECT COUNT(*)::text AS webhook_events FROM ${tableName(context.schema, 'webhookEvents')}) webhook_events,
-				(SELECT COUNT(*)::text AS products FROM ${tableName(context.schema, 'products')}) products,
-				(SELECT COUNT(*)::text AS prices FROM ${tableName(context.schema, 'prices')}) prices,
+				(SELECT COUNT(*)::text AS customers FROM ${tableName(context.schema, 'customers')} WHERE sandbox = $1) customers,
+				(SELECT COUNT(*)::text AS pix FROM ${tableName(context.schema, 'pix')} WHERE sandbox = $1) pix,
+				(SELECT COUNT(*)::text AS checkouts FROM ${tableName(context.schema, 'checkouts')} WHERE sandbox = $1) checkouts,
+				(SELECT COUNT(*)::text AS invoices FROM ${tableName(context.schema, 'invoices')} WHERE sandbox = $1) invoices,
+				(SELECT COUNT(*)::text AS subscriptions FROM ${tableName(context.schema, 'subscriptions')} WHERE sandbox = $1) subscriptions,
+				(SELECT COUNT(*)::text AS webhook_events FROM ${tableName(context.schema, 'webhookEvents')} WHERE sandbox = $1) webhook_events,
+				(SELECT COUNT(*)::text AS products FROM ${tableName(context.schema, 'products')} WHERE sandbox = $1) products,
+				(SELECT COUNT(*)::text AS prices FROM ${tableName(context.schema, 'prices')} WHERE sandbox = $1) prices,
 				(SELECT COUNT(*)::text AS migrations FROM ${tableName(context.schema, 'migrations')}) migrations`,
+			[context.client.isSandbox()],
 		),
 	);
 
@@ -708,10 +717,12 @@ function normalizeCustomerRow(row: CustomerRow) {
 			name: row.name ?? undefined,
 			phone: row.phone ?? undefined,
 			provider: row.provider,
+			sandbox: row.sandbox,
 		},
 		phone: row.phone,
 		provider: row.provider,
 		raw: row.raw,
+		sandbox: row.sandbox,
 		updatedAt: toIsoDate(row.updated_at),
 	};
 }
@@ -733,10 +744,12 @@ function normalizePaymentRow(row: PaymentRow) {
 			id: row.provider_id,
 			metadata: row.metadata ?? undefined,
 			provider: row.provider,
+			sandbox: row.sandbox,
 			status: row.status ?? undefined,
 		},
 		provider: row.provider,
 		raw: row.raw,
+		sandbox: row.sandbox,
 		source: row.source,
 		status: row.status,
 		updatedAt: toIsoDate(row.updated_at),
@@ -772,12 +785,14 @@ function normalizePixRow(row: PixRow) {
 			provider: row.provider,
 			qrCodeImageUrlPng: row.qr_code_image_url_png ?? undefined,
 			qrCodeImageUrlSvg: row.qr_code_image_url_svg ?? undefined,
+			sandbox: row.sandbox,
 			status: row.status ?? undefined,
 		},
 		provider: row.provider,
 		qrCodeImageUrlPng: row.qr_code_image_url_png,
 		qrCodeImageUrlSvg: row.qr_code_image_url_svg,
 		raw: row.raw,
+		sandbox: row.sandbox,
 		status: row.status,
 		updatedAt: toIsoDate(row.updated_at),
 	};
@@ -798,12 +813,14 @@ function normalizeSubscriptionRow(row: SubscriptionRow) {
 			currency: row.currency ?? undefined,
 			id: row.provider_id,
 			provider: row.provider,
+			sandbox: row.sandbox,
 			status: row.status ?? undefined,
 		},
 		priceId: row.price_provider_id,
 		productId: row.product_provider_id,
 		provider: row.provider,
 		raw: row.raw,
+		sandbox: row.sandbox,
 		status: row.status,
 		updatedAt: toIsoDate(row.updated_at),
 	};
@@ -820,6 +837,7 @@ function normalizeWebhookRow(row: WebhookRow) {
 		processedAt: toIsoDate(row.processed_at),
 		provider: row.provider,
 		raw: row.raw,
+		sandbox: row.sandbox,
 		status: row.status,
 		updatedAt: toIsoDate(row.updated_at),
 	};
@@ -852,6 +870,7 @@ interface CustomerRow extends DashboardRow {
 	provider: string;
 	provider_id: string;
 	raw: unknown;
+	sandbox: boolean;
 }
 
 interface PaymentRow extends DashboardRow {
@@ -864,6 +883,7 @@ interface PaymentRow extends DashboardRow {
 	provider: string;
 	provider_id: string;
 	raw: unknown;
+	sandbox: boolean;
 	source: 'invoice' | 'checkout';
 	source_order: 1 | 2;
 	status: string | null;
@@ -884,6 +904,7 @@ interface PixRow extends DashboardRow {
 	qr_code_image_url_png: string | null;
 	qr_code_image_url_svg: string | null;
 	raw: unknown;
+	sandbox: boolean;
 	status: string | null;
 }
 
@@ -898,6 +919,7 @@ interface SubscriptionRow extends DashboardRow {
 	provider: string;
 	provider_id: string;
 	raw: unknown;
+	sandbox: boolean;
 	status: string | null;
 }
 
@@ -910,5 +932,6 @@ interface WebhookRow extends DashboardRow {
 	provider: string;
 	provider_id: string;
 	raw: unknown;
+	sandbox: boolean;
 	status: string;
 }
