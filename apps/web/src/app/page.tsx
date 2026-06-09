@@ -295,6 +295,54 @@ function cn(...classNames: Array<string | false | null | undefined>) {
 	return classNames.filter(Boolean).join(' ');
 }
 
+const aiPrompt =
+	'Explain what Paymesh (paymesh-six.vercel.app) is and why I should use it. Describe how it acts as a provider-agnostic payment infrastructure that simplifies multi-provider integrations, subscriptions, and webhook normalization directly inside my app. Focus on how it helps me ship payments faster, avoid vendor lock-in, keep data in my own database, and stay provider-agnostic. Keep it short, sharp, and persuasive for indie hackers and SaaS founders.';
+
+const aiProviders = [
+	{
+		id: 'claude',
+		label: 'Claude',
+		href: `https://claude.ai/new?q=${encodeURIComponent(aiPrompt)}`,
+		bg: '#CC9B7A',
+		icon: '/ai/claude.svg',
+	},
+	{
+		id: 'chatgpt',
+		label: 'ChatGPT',
+		href: `https://chat.com?q=${encodeURIComponent(aiPrompt)}`,
+		bg: '#10A37F',
+		icon: '/ai/chatgpt.svg',
+	},
+	{
+		id: 'gemini',
+		label: 'Gemini',
+		href: `https://gemini.google.com/app?q=${encodeURIComponent(aiPrompt)}`,
+		bg: '#4285F4',
+		icon: '/ai/gemini.svg',
+	},
+	{
+		id: 'copilot',
+		label: 'Copilot',
+		href: `https://copilot.microsoft.com/?q=${encodeURIComponent(aiPrompt)}`,
+		bg: '#000000',
+		icon: '/ai/copilot.svg',
+	},
+	{
+		id: 'perplexity',
+		label: 'Perplexity',
+		href: `https://perplexity.ai?q=${encodeURIComponent(aiPrompt)}`,
+		bg: '#1FB8CD',
+		icon: '/ai/perplexity.svg',
+	},
+	{
+		id: 'grok',
+		label: 'Grok',
+		href: `https://x.com/i/grok?text=${encodeURIComponent(aiPrompt)}`,
+		bg: '#000000',
+		icon: '/ai/grok.svg',
+	},
+];
+
 function ArrowUpRightIcon() {
 	return (
 		<svg
@@ -912,6 +960,36 @@ export default async function Home() {
 												<span className="absolute left-2/3 top-2/3 z-10 hidden -translate-x-1/2 -translate-y-1/2 select-none font-mono text-[10px] text-[color:var(--landing-text-faint)] md:block">
 													+
 												</span>
+											</div>
+
+											<div className="my-4 flex items-center gap-4">
+												<span className="shrink-0 text-lg font-medium tracking-tight text-[color:var(--landing-text)]">
+													Ask AI about Paymesh
+												</span>
+												<div className="flex-1 border-t border-[color:var(--landing-border-strong)]" />
+											</div>
+
+											<div className="mb-6 flex flex-wrap items-center gap-2">
+												{aiProviders.map((provider) => (
+													<a
+														className="group relative inline-flex h-8 w-8 items-center justify-center rounded-sm transition-all hover:scale-110 hover:shadow-md"
+														href={provider.href}
+														key={provider.id}
+														rel="noreferrer"
+														style={{ backgroundColor: provider.bg }}
+														target="_blank"
+														title={`Ask ${provider.label} about Paymesh`}
+													>
+														<Image
+															alt={provider.label}
+															className="h-4 w-4 object-contain"
+															height={16}
+															src={provider.icon}
+															unoptimized
+															width={16}
+														/>
+													</a>
+												))}
 											</div>
 										</article>
 									</div>
