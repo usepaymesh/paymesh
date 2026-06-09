@@ -28,7 +28,49 @@ interface ProviderCard {
 const topLinks = [
 	{ label: 'README', href: '#readme', active: true },
 	{ label: 'DOCS', href: '/docs/introduction', active: false },
+	{
+		label: 'SPONSOR',
+		href: 'https://github.com/sponsors/almeidazs',
+		active: false,
+		external: true,
+	},
 ];
+
+function GitHubSponsorHeart({ className }: { className?: string }) {
+	return (
+		<svg
+			aria-hidden="true"
+			className={className}
+			fill="none"
+			height="16"
+			viewBox="0 0 16 16"
+			width="16"
+			xmlns="http://www.w3.org/2000/svg"
+		>
+			<path
+				d="M8 14.25C3.75 11.33 1.5 8.97 1.5 6.08C1.5 3.91 3.16 2.25 5.18 2.25C6.42 2.25 7.42 2.81 8 3.76C8.58 2.81 9.58 2.25 10.82 2.25C12.84 2.25 14.5 3.91 14.5 6.08C14.5 8.97 12.25 11.33 8 14.25Z"
+				stroke="#DB61A2"
+				strokeWidth="1.5"
+			/>
+		</svg>
+	);
+}
+
+function SponsorButton({ compact = false }: { compact?: boolean }) {
+	return (
+		<span
+			className={cn(
+				'inline-flex items-center justify-center gap-2 bg-[var(--landing-panel-bg)] text-[color:var(--landing-text)] transition-colors',
+				compact
+					? 'min-h-9 px-3 text-sm'
+					: 'min-h-10 border border-dashed border-[color:var(--landing-border-strong)] px-5 py-2 text-sm font-medium hover:bg-[color:var(--landing-panel-bg-hover)]',
+			)}
+		>
+			<GitHubSponsorHeart />
+			<span>Sponsor</span>
+		</span>
+	);
+}
 
 const trustedLogos = [
 	'Stripe',
@@ -658,13 +700,21 @@ export default async function Home() {
 									>
 										Get Started
 									</a>
+									<a
+										className="relative z-10"
+										href="https://github.com/sponsors/almeidazs"
+										rel="noreferrer"
+										target="_blank"
+									>
+										<SponsorButton />
+									</a>
 								</div>
 							</div>
 						</div>
 					</div>
 
 					<div className="relative z-0 w-full overflow-x-hidden lg:w-[60%]">
-						<nav className="sticky top-0 z-20 grid grid-cols-2 border-b border-[color:var(--landing-border)] bg-[var(--landing-panel-bg)]">
+						<nav className="sticky top-0 z-20 grid grid-cols-3 border-b border-[color:var(--landing-border)] bg-[var(--landing-panel-bg)]">
 							{topLinks.map((link) => (
 								<a
 									className={cn(
@@ -674,8 +724,14 @@ export default async function Home() {
 									)}
 									href={link.href}
 									key={link.label}
+									rel={link.external ? 'noreferrer' : undefined}
+									target={link.external ? '_blank' : undefined}
 								>
-									{link.label}
+									{link.label === 'SPONSOR' ? (
+										<SponsorButton compact />
+									) : (
+										link.label
+									)}
 								</a>
 							))}
 						</nav>
