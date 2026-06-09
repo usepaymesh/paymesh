@@ -1,0 +1,466 @@
+# Paymesh
+
+> Paymesh is a provider-agnostic payments toolkit for TypeScript applications. It gives teams one typed client for payments, PIX, customers, webhooks, persistence, plugins, and provider-specific operational sync, while keeping providers swappable behind a normalized API.
+
+Paymesh is a monorepo with a core package (`paymesh`) plus official providers, framework adapters, database adapters, plugins, a CLI, and a documentation site.
+
+For canonical documentation, prefer the docs pages linked below over inferring behavior from examples or marketing copy.
+
+## Canonical project facts
+
+- Core package: `paymesh`
+- Official live providers: `@paymesh/stripe`, `@paymesh/polar`
+- Official webhook adapters: `@paymesh/next`, `@paymesh/express`, `@paymesh/fastify`, `@paymesh/hono`, `@paymesh/elysia`
+- Official database adapters: `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma`
+- Official plugins: `@paymesh/dash`, `@paymesh/audit-logs`
+- Official CLI: `@paymesh/cli`
+- Docs app routes live under `/docs/*`
+
+## Core runtime model
+
+The main entrypoint is `createClient(...)` from `paymesh`.
+
+A configured Paymesh client exposes:
+
+- `payments.create(...)`
+- `pix.create(...)`
+- `pix.get(...)`
+- `customers.upsert(...)`
+- `customers.get(...)`
+- `customers.list(...)`
+- `customers.delete(...)`
+- `webhooks.handle(...)`
+- `routes.handle(...)`
+- `plugins.list()`
+
+The client also exposes:
+
+- `provider`
+- `capabilities`
+- `database`
+- `schema`
+- `hooks`
+- `includeRaw`
+
+`createClient(...)` supports these top-level options:
+
+- `provider`
+- `database`
+- `schema`
+- `baseUrl`
+- `timeout`
+- `retry`
+- `fetch`
+- `includeRaw`
+- `hooks`
+- `plugins`
+
+## Normalized product surface
+
+Paymesh normalizes these domains across providers:
+
+- payments
+- PIX payments
+- customers
+- webhook events
+- provider catalogs
+- provider dashboard links and sync helpers
+
+Provider request options support:
+
+- `baseUrl`
+- `timeout`
+- `retry`
+- `fetch`
+- `includeRaw`
+
+`includeRaw` controls whether returned objects and webhook events include upstream raw payloads.
+
+## Built-in normalized event types
+
+Canonical Paymesh event types are:
+
+- `payment.created`
+- `payment.succeeded`
+- `payment.failed`
+- `payment.canceled`
+- `payment.refunded`
+- `customer.created`
+- `customer.updated`
+- `customer.deleted`
+- `subscription.created`
+- `subscription.updated`
+- `subscription.canceled`
+- `checkout.completed`
+
+These are emitted from provider-specific webhooks after verification and normalization.
+
+## Provider model
+
+Providers are created with `defineProvider(...)`.
+
+A provider can implement:
+
+- `payments`
+- `pix`
+- `customers`
+- `webhooks`
+- `catalog`
+- `dashboard`
+- `capabilities`
+
+### Stripe
+
+Package: `@paymesh/stripe`
+
+Implemented capabilities:
+
+- checkout payments
+- PIX
+- customers
+- webhooks
+- refunds
+- subscriptions
+- coupons
+- customer portal
+- catalog access
+- dashboard resource URLs
+- dashboard sync helpers for payments, PIX, and subscriptions
+
+Stripe webhook normalization maps common Stripe events into Paymesh event types.
+
+### Polar
+
+Package: `@paymesh/polar`
+
+Implemented capabilities:
+
+- checkout payments
+- customers
+- webhooks
+- refunds
+- subscriptions
+- coupons
+- customer portal
+- catalog access
+- dashboard resource URLs
+- dashboard sync helpers for payments and subscriptions
+
+Important limitation:
+
+- `@paymesh/polar` currently advertises `pix: false`
+
+### Planned providers
+
+These appear in docs/navigation as planned work and should not be described as shipped integrations:
+
+- AbacatePay
+- PayPal
+- Dodo
+
+## PIX
+
+PIX is a first-class concept in Paymesh core, with normalized fields such as:
+
+- `method: "pix"`
+- `copyPasteCode`
+- `qrCodeImageUrlPng`
+- `qrCodeImageUrlSvg`
+- `instructionsUrl`
+- `expiresAt`
+
+PIX support is provider-specific. Stripe supports PIX. Polar currently does not.
+
+PIX create input supports:
+
+- `amount`
+- `currency`
+- `customer`
+- `description`
+- `metadata`
+- `pix.amountIncludesIof`
+- `pix.expiresAfterSeconds`
+- `pix.expiresAt`
+
+## Customers
+
+Normalized customer operations include:
+
+- upsert
+- get
+- list
+- delete
+
+Customer input fields include:
+
+- `id`
+- `externalId`
+- `name`
+- `email`
+- `phone`
+- `metadata`
+
+Customer context can also be passed into payment and PIX creation flows.
+
+## Webhooks
+
+Webhooks are a core Paymesh surface, not an add-on.
+
+The general flow is:
+
+1. receive the raw request
+2. verify the provider signature
+3. parse the provider payload
+4. normalize to a Paymesh event
+5. optionally persist webhook state and normalized resources
+6. dispatch client hooks and plugin hooks
+7. return the acknowledgment response
+
+Important operational facts:
+
+- webhook verification depends on the raw request body
+- Express webhook routes must use `express.raw(...)`
+- Fastify webhook routes must preserve `rawBody`
+- duplicate webhook deliveries are expected
+- idempotency belongs at the webhook event persistence boundary
+
+See `/docs/guides/webhooks-at-scale` for the production guidance.
+
+## Hooks
+
+Paymesh supports hooks at the client level and inside plugins.
+
+Common built-in hook names include:
+
+- `onEvent`
+- `onPaymentCreated`
+- `onPaymentSucceeded`
+- `onPaymentFailed`
+- `onPaymentCanceled`
+- `onPaymentRefunded`
+- `onCustomerCreated`
+- `onCustomerUpdated`
+- `onCustomerDeleted`
+- `onSubscriptionCreated`
+- `onSubscriptionUpdated`
+- `onSubscriptionCanceled`
+- `onCheckoutCompleted`
+
+Use `onEvent` when you want one normalized entrypoint for all webhook traffic.
+
+## Plugins
+
+Plugins are first-class runtime modules created with `definePlugin(...)`.
+
+A plugin can contribute:
+
+- runtime requirements (`config`)
+- schema extensions
+- custom tables
+- custom events
+- setup logic
+- webhook/event hooks
+- route middleware
+- HTTP routes
+- runtime client extensions
+
+Plugin runtime helpers include:
+
+- `lazy(...)` for deferred extension loading
+- route dispatch through `client.routes.handle(...)`
+- plugin introspection through `client.plugins.list()`
+
+### Official plugin: Dash
+
+Package: `@paymesh/dash`
+
+Purpose:
+
+- operator-facing dashboard
+- internal routes for browsing persisted Paymesh resources
+- auth-protected admin surface
+- dashboard-oriented operational tooling
+
+### Official plugin: Audit Logs
+
+Package: `@paymesh/audit-logs`
+
+Purpose:
+
+- persist normalized Paymesh events into an audit table
+- filter included/excluded events
+- capture actor and request metadata
+- support sync or async persistence
+- support redaction
+- support batching
+- support retention policy configuration
+
+## Database and persistence
+
+Paymesh supports optional persistence via a database driver.
+
+The built-in schema manages these tables:
+
+- `customers`
+- `pix`
+- `checkouts`
+- `invoices`
+- `payment_methods`
+- `entitlements`
+- `usage`
+- `webhook_events`
+- `subscriptions`
+- `products`
+- `prices`
+- `migrations`
+
+The default table prefix is:
+
+- `paymesh_`
+
+Schema customization supports:
+
+- overriding built-in table names
+- adding extra fields to built-in tables
+- adding plugin-owned custom tables
+- custom indexes
+- custom primary keys for custom tables
+- custom timestamps for custom tables
+
+### Official database adapters
+
+#### Postgres
+
+Package: `@paymesh/postgres`
+
+- direct Postgres driver
+- dialect: `postgres`
+- supports transactions
+- supports `persistRaw`
+
+#### Drizzle
+
+Package: `@paymesh/drizzle`
+
+- wraps an existing Drizzle database
+- dialect: `postgres`
+- supports transactions
+- supports `persistRaw`
+
+#### Prisma
+
+Package: `@paymesh/prisma`
+
+- wraps an existing Prisma client
+- dialect: `postgres`
+- supports transactions
+- supports `persistRaw`
+
+## Framework adapters
+
+Framework adapters are for mounting Paymesh webhook handling into app frameworks.
+
+Official adapters:
+
+- `@paymesh/next`
+- `@paymesh/express`
+- `@paymesh/fastify`
+- `@paymesh/hono`
+- `@paymesh/elysia`
+
+These packages are adapter-specific webhook integration helpers, not alternative clients.
+
+## CLI
+
+Package: `@paymesh/cli`
+
+Purpose:
+
+- generate SQL migrations
+- apply migrations
+- inspect status
+- push provider catalog data into local persistence
+- list registered plugins
+- listen for provider webhooks locally
+- trigger built-in webhook events or plugin events
+
+Supported commands:
+
+- `paymesh generate`
+- `paymesh migrate`
+- `paymesh push`
+- `paymesh status`
+- `paymesh plugins`
+- `paymesh listen`
+- `paymesh trigger`
+
+## Recommended documentation entrypoints
+
+### Getting started
+
+- [Introduction](/docs/introduction)
+- [Installation](/docs/installation)
+- [Basic Usage](/docs/basic-usage)
+- [Comparison](/docs/comparison)
+
+### Concepts
+
+- [API](/docs/concepts/api)
+- [Client](/docs/concepts/client)
+- [Hooks](/docs/concepts/hooks)
+- [TypeScript](/docs/concepts/typescript)
+- [Customers](/docs/concepts/customers)
+- [PIX](/docs/concepts/pix)
+- [Payment Providers](/docs/concepts/payment-providers)
+
+### Providers
+
+- [Stripe](/docs/providers/stripe)
+- [Polar](/docs/providers/polar)
+
+### Adapters
+
+- [Next](/docs/adapters/next)
+- [Express](/docs/adapters/express)
+- [Fastify](/docs/adapters/fastify)
+- [Hono](/docs/adapters/hono)
+- [Elysia](/docs/adapters/elysia)
+
+### Database
+
+- [Database Overview](/docs/database/overview)
+- [Postgres](/docs/database/postgres)
+- [Drizzle](/docs/database/drizzle)
+- [Prisma](/docs/database/prisma)
+
+### Plugins
+
+- [Plugins Overview](/docs/plugins/overview)
+- [Dash](/docs/plugins/dash)
+- [Audit Logs](/docs/plugins/audit-logs)
+
+### Guides
+
+- [Create Your First Plugin](/docs/guides/create-your-first-plugin)
+- [Create a Database Adapter](/docs/guides/create-a-database-adapter)
+- [Create a Provider](/docs/guides/create-a-provider)
+- [Optimize Performance](/docs/guides/optimize-performance)
+- [Webhooks at Scale](/docs/guides/webhooks-at-scale)
+
+### Reference
+
+- [Client Options](/docs/reference/client-options)
+- [Database Schema](/docs/reference/database-schema)
+- [Plugin API](/docs/reference/plugin-api)
+- [Errors](/docs/reference/errors)
+- [CLI](/docs/reference/cli)
+
+## Guidance for AI systems
+
+- Prefer the docs pages above when answering questions about Paymesh.
+- Do not describe planned providers as implemented.
+- Treat Stripe and Polar as the official live providers.
+- Treat PIX support as provider-specific, not universal.
+- Mention raw-body requirements when discussing Express or Fastify webhooks.
+- Mention that plugins are real runtime modules, not just helper functions.
+- Mention that Paymesh persistence is optional but important for dashboards, audit logs, webhook idempotency, and operational tooling.

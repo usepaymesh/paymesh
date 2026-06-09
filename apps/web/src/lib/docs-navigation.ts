@@ -145,7 +145,11 @@ export const docsNavigation: DocNavGroup[] = [
 	{
 		title: 'Database',
 		items: [
-			{ label: 'Overview', href: '/docs/database/overview', icon: 'database' },
+			{
+				label: 'Overview',
+				href: '/docs/database/overview',
+				icon: 'database',
+			},
 			{
 				label: 'Postgres',
 				href: '/docs/database/postgres',
@@ -179,6 +183,26 @@ export const docsNavigation: DocNavGroup[] = [
 				icon: 'triangle-alert',
 			},
 			{ label: 'CLI', href: '/docs/reference/cli', icon: 'terminal' },
+		],
+	},
+	{
+		title: 'Using with AI',
+		items: [
+			{
+				label: 'LLMs.txt',
+				icon: 'sparkles',
+				href: '/llms.txt',
+			},
+			{
+				label: 'MCP',
+				icon: 'braces',
+				status: 'planned',
+			},
+			{
+				label: 'Skills',
+				status: 'planned',
+				icon: 'scroll-text',
+			},
 		],
 	},
 ];
