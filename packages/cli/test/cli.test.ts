@@ -17,6 +17,7 @@ import {
 	getExpectedMigrationNames,
 	getMigrationHistoryStatus,
 	getPaymeshMigrationFiles,
+	getPaymeshStatus,
 	loadClient,
 	planGenerateMigrations,
 	pushProviderCatalog,
@@ -702,6 +703,354 @@ describe('cli helpers', () => {
 		expect(initial?.sql).not.toContain('"updated_at" TIMESTAMPTZ');
 		expect(incremental?.sql).toContain('paymesh_audit_logs_resource_idx');
 		expect(incremental?.sql).toContain('("resource_type", "action")');
+	});
+
+	test('initial migration includes sandbox column in all built-in tables', () => {
+		const schema = resolveDatabaseSchema();
+		const files = getPaymeshMigrationFiles(schema);
+		const initial = files.find((file) => file.version === 1);
+
+		expect(initial).toBeDefined();
+		// sandbox column appears once per table — 11 built-in sandbox tables
+		const sandboxColumnMatches =
+			initial?.sql.match(/sandbox BOOLEAN NOT NULL DEFAULT FALSE/g) ?? [];
+		expect(sandboxColumnMatches.length).toBeGreaterThanOrEqual(11);
+		// unique constraint includes sandbox — appears once per built-in table
+		const uniqueConstraintMatches =
+			initial?.sql.match(/UNIQUE \(provider, sandbox, provider_id\)/g) ?? [];
+		expect(uniqueConstraintMatches.length).toBeGreaterThanOrEqual(11);
+	});
+
+	test('initial migration does not use old provider-only unique constraint', () => {
+		const schema = resolveDatabaseSchema();
+		const files = getPaymeshMigrationFiles(schema);
+		const initial = files.find((file) => file.version === 1);
+
+		// Old constraint should not appear in fresh schema
+		expect(initial?.sql).not.toContain('UNIQUE (provider, provider_id)');
+	});
+
+	test('generates paymesh_sandbox_isolation as migration version 3', () => {
+		const schema = resolveDatabaseSchema();
+		const files = getPaymeshMigrationFiles(schema);
+		const sandboxMigration = files.find((file) => file.version === 3);
+
+		expect(sandboxMigration).toBeDefined();
+		expect(sandboxMigration?.name).toBe('paymesh_sandbox_isolation');
+		expect(sandboxMigration?.file).toBe('0003_paymesh_sandbox_isolation.sql');
+	});
+
+	test('paymesh_sandbox_isolation migration replaces old unique constraint with sandbox-aware one', () => {
+		const schema = resolveDatabaseSchema();
+		const files = getPaymeshMigrationFiles(schema);
+		const sandboxMigration = files.find((file) => file.version === 3);
+
+		expect(sandboxMigration?.sql).toContain(
+			"pg_get_constraintdef(oid) = 'UNIQUE (provider, provider_id)'",
+		);
+		expect(sandboxMigration?.sql).toContain(
+			'UNIQUE (provider, sandbox, provider_id)',
+		);
+		expect(sandboxMigration?.sql).toContain(
+			'provider_sandbox_provider_id_uniq',
+		);
+	});
+
+	test('paymesh_sandbox_isolation migration covers all built-in sandbox tables', () => {
+		const schema = resolveDatabaseSchema();
+		const files = getPaymeshMigrationFiles(schema);
+		const sandboxMigration = files.find((file) => file.version === 3);
+
+		// Each built-in sandbox table should have a DO $$ block for constraint replacement
+		const doBlocks = (sandboxMigration?.sql.match(/DO \$\$/g) ?? []).length;
+		// 11 built-in sandbox tables: customers, pix, checkouts, invoices,
+		// paymentMethods, entitlements, usage, webhookEvents, subscriptions, products, prices
+		expect(doBlocks).toBe(11);
+	});
+
+	test('schema sync migration includes sandbox column and constraint update', async () => {
+		const directory = await createTempProject();
+		const migrationsDir = path.join(directory, 'paymesh', 'migrations');
+		const historyPath = resolveHistoryPath(directory);
+		// Use an outdated schema snapshot that lacks the sandbox column marker
+		// by writing the current files and then modifying the schema to add a field
+		const initialSchema = resolveDatabaseSchema();
+		const initialFiles = getPaymeshMigrationFiles(initialSchema);
+		await writeMigrationFiles(migrationsDir, initialFiles);
+		await writeMigrationHistory(
+			historyPath,
+			createMigrationHistory(initialFiles, initialSchema),
+		);
+
+		const nextSchema = resolveDatabaseSchema({
+			tables: {
+				customers: {
+					fields: {
+						loyalty_tier: {
+							type: 'string',
+						},
+					},
+				},
+			},
+		});
+		const plan = await planGenerateMigrations(
+			migrationsDir,
+			historyPath,
+			nextSchema,
+		);
+
+		expect(plan.changed).toBe(true);
+		// Schema sync migration should include sandbox column sync for built-in tables
+		expect(plan.files[0]?.sql).toContain(
+			'ADD COLUMN IF NOT EXISTS sandbox BOOLEAN NOT NULL DEFAULT FALSE',
+		);
+		// It should also include the constraint replacement
+		expect(plan.files[0]?.sql).toContain('provider_sandbox_provider_id_uniq');
+	});
+
+	test('getPaymeshStatus uses sandbox filter in database queries', async () => {
+		const executedQueries: Array<{ sql: string; params: unknown[] }> = [];
+		const database = defineDatabaseAdapter({
+			id: 'mock',
+			dialect: 'postgres',
+			persistRaw: false,
+			repositories: {
+				customers: {
+					async findByProviderId() {
+						return null;
+					},
+					async list() {
+						return { data: [], total: 0, previous: null, next: null };
+					},
+					async upsert() {},
+					async markDeleted() {},
+				},
+				pix: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				checkouts: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				invoices: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				subscriptions: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				webhookEvents: {
+					async acquire() {
+						return { duplicate: false };
+					},
+					async markProcessed() {},
+					async markFailed() {},
+				},
+				products: {
+					async upsertMany() {},
+				},
+				prices: {
+					async upsertMany() {},
+				},
+				migrations: {
+					async ensureTable() {},
+					async listApplied() {
+						return [];
+					},
+					async recordApplied() {},
+				},
+			},
+			async query<Row = unknown>(query: CompiledQuery) {
+				executedQueries.push({ sql: query.sql, params: query.params });
+				return [
+					{
+						pix_count: '0',
+						product_count: '0',
+						price_count: '0',
+						webhook_event_count: '0',
+					},
+				] as Row[];
+			},
+			async execute() {},
+			async transaction(callback) {
+				return callback(database);
+			},
+		});
+		const client = {
+			provider: defineProvider({
+				id: 'stub',
+				isSandbox: () => false,
+				capabilities: {
+					checkout: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('not used');
+					},
+				},
+				customers: {
+					get: async () => {
+						throw new Error('not used');
+					},
+					upsert: async () => {
+						throw new Error('not used');
+					},
+					delete: async () => {
+						throw new Error('not used');
+					},
+				},
+			}),
+			schema: resolveDatabaseSchema(),
+			database,
+			isSandbox: () => false,
+		};
+
+		await getPaymeshStatus(client, [], [], {
+			exists: true,
+			valid: true,
+			missingFiles: [],
+			checksumMismatches: [],
+			migrations: [],
+		});
+
+		// Status query should include sandbox parameter
+		const statusQuery = executedQueries.find((q) =>
+			q.sql.includes('pix_count'),
+		);
+		expect(statusQuery).toBeDefined();
+		expect(statusQuery?.sql).toContain('WHERE sandbox = $1');
+		expect(statusQuery?.params).toContain(false);
+	});
+
+	test('getPaymeshStatus passes sandbox=true when provider is sandbox', async () => {
+		const executedQueries: Array<{ sql: string; params: unknown[] }> = [];
+		const database = defineDatabaseAdapter({
+			id: 'mock',
+			dialect: 'postgres',
+			persistRaw: false,
+			repositories: {
+				customers: {
+					async findByProviderId() {
+						return null;
+					},
+					async list() {
+						return { data: [], total: 0, previous: null, next: null };
+					},
+					async upsert() {},
+					async markDeleted() {},
+				},
+				pix: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				checkouts: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				invoices: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				subscriptions: {
+					async findByProviderId() {
+						return null;
+					},
+					async upsert() {},
+				},
+				webhookEvents: {
+					async acquire() {
+						return { duplicate: false };
+					},
+					async markProcessed() {},
+					async markFailed() {},
+				},
+				products: {
+					async upsertMany() {},
+				},
+				prices: {
+					async upsertMany() {},
+				},
+				migrations: {
+					async ensureTable() {},
+					async listApplied() {
+						return [];
+					},
+					async recordApplied() {},
+				},
+			},
+			async query<Row = unknown>(query: CompiledQuery) {
+				executedQueries.push({ sql: query.sql, params: query.params });
+				return [
+					{
+						pix_count: '5',
+						product_count: '2',
+						price_count: '3',
+						webhook_event_count: '1',
+					},
+				] as Row[];
+			},
+			async execute() {},
+			async transaction(callback) {
+				return callback(database);
+			},
+		});
+		const client = {
+			provider: defineProvider({
+				id: 'stub',
+				isSandbox: () => true,
+				capabilities: {
+					checkout: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('not used');
+					},
+				},
+				customers: {
+					get: async () => {
+						throw new Error('not used');
+					},
+					upsert: async () => {
+						throw new Error('not used');
+					},
+					delete: async () => {
+						throw new Error('not used');
+					},
+				},
+			}),
+			schema: resolveDatabaseSchema(),
+			database,
+			isSandbox: () => true,
+		};
+
+		await getPaymeshStatus(client, [], [], {
+			exists: true,
+			valid: true,
+			missingFiles: [],
+			checksumMismatches: [],
+			migrations: [],
+		});
+
+		const statusQuery = executedQueries.find((q) =>
+			q.sql.includes('pix_count'),
+		);
+		expect(statusQuery?.params).toContain(true);
 	});
 
 	test('pushes catalog through cli helper', async () => {
