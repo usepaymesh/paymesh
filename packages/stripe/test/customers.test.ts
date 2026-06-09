@@ -146,6 +146,7 @@ describe('customers', () => {
 		expect(deleted).toEqual({
 			id: 'cus_create',
 			provider: 'stripe',
+			sandbox: true,
 			deleted: true,
 			raw: null,
 		});
@@ -238,6 +239,7 @@ describe('customers', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: false,
@@ -275,6 +277,7 @@ describe('customers', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: false,
 					customers: true,

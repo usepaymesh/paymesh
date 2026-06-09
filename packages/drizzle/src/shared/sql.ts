@@ -32,15 +32,23 @@ export async function findDataByProviderId(
 	provider: string,
 	id: string,
 ) {
-	const [row] = await executor.query<{ data: Record<string, unknown> | null }>({
-		sql: `SELECT data
+	const [row] = await executor.query<{
+		data: Record<string, unknown> | null;
+		sandbox: boolean | null;
+	}>({
+		sql: `SELECT data, sandbox
 				FROM ${tableName(schema, tableKey)}
 				WHERE provider = $1 AND provider_id = $2
 				LIMIT 1`,
 		params: [provider, id],
 	});
 
-	return row?.data ?? null;
+	if (!row) return null;
+
+	return {
+		...(row.data ?? {}),
+		sandbox: row.sandbox ?? false,
+	};
 }
 
 /**

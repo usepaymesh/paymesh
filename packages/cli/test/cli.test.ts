@@ -331,6 +331,7 @@ describe('cli helpers', () => {
 			data: {
 				id: 'pay_123',
 				provider: 'stub',
+				sandbox: false,
 			},
 		});
 		const request = new Request('http://localhost/webhooks', {
@@ -356,6 +357,7 @@ describe('cli helpers', () => {
 			id: 'evt_123',
 			type: 'payment.succeeded',
 			provider: 'stub',
+			sandbox: false,
 		});
 	});
 
@@ -416,6 +418,7 @@ describe('cli helpers', () => {
 					data: {
 						id: 'pay_123',
 						provider: 'stub',
+						sandbox: false,
 					},
 				}),
 			});
@@ -464,6 +467,7 @@ describe('cli helpers', () => {
 				client: {
 					provider: defineProvider({
 						id: 'stub',
+						isSandbox: () => false,
 						capabilities: {
 							checkout: true,
 						},
@@ -785,6 +789,7 @@ describe('cli helpers', () => {
 		const client = {
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: true,
@@ -807,10 +812,13 @@ describe('cli helpers', () => {
 				},
 				catalog: {
 					list: async () => ({
-						products: [{ id: 'prod_1', name: 'Starter', version: 'v2' }],
+						products: [
+							{ id: 'prod_1', sandbox: false, name: 'Starter', version: 'v2' },
+						],
 						prices: [
 							{
 								id: 'price_1',
+								sandbox: false,
 								productId: 'prod_1',
 								amount: 990,
 								currency: 'usd',
@@ -862,6 +870,7 @@ const coupons = definePlugin({
 export default createClient({
 	provider: defineProvider({
 		id: 'stub',
+		isSandbox: () => false,
 		capabilities: {
 			checkout: true,
 			customers: true,
@@ -914,6 +923,7 @@ function createWebhookClient() {
 	return {
 		provider: defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -960,6 +970,7 @@ function createWebhookClient() {
 								id: payload.id,
 								type: payload.type,
 								provider: 'stub',
+								sandbox: false,
 								data: payload.data,
 							},
 							payload,

@@ -345,6 +345,8 @@ export interface PaymeshClient<
 > {
 	/** Provider instance backing the client. */
 	provider: Provider<string>;
+	/** Returns whether the active provider is configured for sandbox mode. */
+	isSandbox(): boolean;
 	/** Hook map configured for the client. */
 	hooks?: PaymeshHooks<IncludeRaw, Plugins>;
 	/** Whether raw payloads are returned from client methods. */

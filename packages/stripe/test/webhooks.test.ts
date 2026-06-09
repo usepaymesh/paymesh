@@ -8,6 +8,7 @@ describe('provider webhooks', () => {
 		const request = stripeWebhookRequest(
 			{
 				id: 'evt_failed',
+				livemode: false,
 				type: 'payment_intent.payment_failed',
 				data: {
 					object: {
@@ -33,8 +34,10 @@ describe('provider webhooks', () => {
 			id: 'evt_failed',
 			type: 'payment.failed',
 			provider: 'stripe',
+			sandbox: true,
 			data: {
 				id: 'pi_failed',
+				sandbox: true,
 				status: 'failed',
 				raw: null,
 			},

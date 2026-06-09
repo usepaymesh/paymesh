@@ -33,14 +33,24 @@ export function findDataByProviderId(
 	id: string,
 ) {
 	return executor
-		.query<{ data: Record<string, unknown> | null }>({
-			sql: `SELECT data
+		.query<{
+			data: Record<string, unknown> | null;
+			sandbox: boolean | null;
+		}>({
+			sql: `SELECT data, sandbox
 				FROM ${tableName(schema, tableKey)}
 				WHERE provider = $1 AND provider_id = $2
 				LIMIT 1`,
 			params: [provider, id],
 		})
-		.then(([row]) => row?.data ?? null);
+		.then(([row]) =>
+			row
+				? {
+						...(row.data ?? {}),
+						sandbox: row.sandbox ?? false,
+					}
+				: null,
+		);
 }
 
 /**

@@ -47,11 +47,12 @@ export function createRepositories(
 					{
 						provider: string;
 						provider_id: string;
+						sandbox: boolean | null;
 						data: Record<string, unknown> | null;
 						raw: unknown;
 					} & Record<string, unknown>
 				>({
-					sql: `SELECT provider, provider_id, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+					sql: `SELECT provider, provider_id, sandbox, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
 						FROM ${tableName(schema, 'customers')}
 						WHERE provider = $1 AND provider_id = $2 AND deleted_at IS NULL
 						LIMIT 1`,
@@ -67,6 +68,7 @@ export function createRepositories(
 						...data,
 						id: row.provider_id,
 						provider: row.provider,
+						sandbox: row.sandbox ?? false,
 					},
 					row.raw,
 					options?.includeRaw,
@@ -121,12 +123,13 @@ export function createRepositories(
 					{
 						provider: string;
 						provider_id: string;
+						sandbox: boolean | null;
 						created_at: Date | string;
 						data: Record<string, unknown> | null;
 						raw: unknown;
 					} & Record<string, unknown>
 				>({
-					sql: `SELECT provider, provider_id, created_at, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+					sql: `SELECT provider, provider_id, sandbox, created_at, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
 						FROM ${tableName(schema, 'customers')}
 						WHERE provider = $1 AND deleted_at IS NULL${cursorSql}
 						ORDER BY created_at ${order}, provider_id ${order}
@@ -146,6 +149,7 @@ export function createRepositories(
 							...data,
 							id: row.provider_id,
 							provider: row.provider,
+							sandbox: row.sandbox ?? false,
 						},
 						row.raw,
 						includeRaw,
@@ -179,6 +183,7 @@ export function createRepositories(
 					provider: customer.provider,
 					provider_id: customer.id,
 					version: getVersion(customer, getInternalRaw(customer)),
+					sandbox: customer.sandbox,
 					external_id: customer.externalId ?? null,
 					name: customer.name ?? null,
 					email: customer.email ?? null,
@@ -227,10 +232,11 @@ export function createRepositories(
 						qr_code_image_url_png: string | null;
 						qr_code_image_url_svg: string | null;
 						raw: unknown;
+						sandbox: boolean | null;
 						status: string | null;
 					} & Record<string, unknown>
 				>({
-					sql: `SELECT provider, provider_id, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+					sql: `SELECT provider, provider_id, sandbox, customer_provider_id, amount, currency, status, method, copy_paste_code, qr_code_image_url_png, qr_code_image_url_svg, instructions_url, expires_at, metadata, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
 						FROM ${tableName(schema, 'pix')}
 						WHERE provider = $1 AND provider_id = $2
 						LIMIT 1`,
@@ -246,6 +252,7 @@ export function createRepositories(
 						...data,
 						id: row.provider_id,
 						provider: row.provider,
+						sandbox: row.sandbox ?? false,
 						amount: toNullableNumber(row.amount) ?? 0,
 						copyPasteCode: row.copy_paste_code ?? undefined,
 						currency: row.currency ?? 'usd',
@@ -269,6 +276,7 @@ export function createRepositories(
 					provider: pix.provider,
 					provider_id: pix.id,
 					version: getVersion(pix, getInternalRaw(pix)),
+					sandbox: pix.sandbox,
 					customer_provider_id: pix.customer?.id ?? null,
 					amount: pix.amount,
 					currency: pix.currency,
@@ -296,6 +304,7 @@ export function createRepositories(
 					provider: payment.provider,
 					provider_id: payment.id,
 					version: getVersion(payment, getInternalRaw(payment)),
+					sandbox: payment.sandbox,
 					customer_provider_id: payment.customer?.id ?? null,
 					amount: payment.amount,
 					currency: payment.currency,
@@ -321,6 +330,7 @@ export function createRepositories(
 					provider: payment.provider,
 					provider_id: payment.id,
 					version: getVersion(payment, getInternalRaw(payment)),
+					sandbox: payment.sandbox,
 					customer_provider_id: payment.customer?.id ?? null,
 					checkout_provider_id: payment.checkoutUrl ? payment.id : null,
 					subscription_provider_id: null,
@@ -345,6 +355,7 @@ export function createRepositories(
 							? data.id
 							: event.id,
 					version: getVersion(data, getInternalRaw(event.data)),
+					sandbox: event.sandbox,
 					customer_provider_id:
 						typeof data.customer_id === 'string' ? data.customer_id : null,
 					product_provider_id:
@@ -376,14 +387,14 @@ export function createRepositories(
 					retried: boolean;
 				}>({
 					sql: `WITH inserted AS (
-						INSERT INTO ${tableName(schema, 'webhookEvents')} (provider, provider_id, version, event_type, status, attempts, data, raw, updated_at)
-						VALUES ($1, $2, $3, $4, 'processing', 1, $5, $6, NOW())
+						INSERT INTO ${tableName(schema, 'webhookEvents')} (provider, provider_id, version, sandbox, event_type, status, attempts, data, raw, updated_at)
+						VALUES ($1, $2, $3, $4, $5, 'processing', 1, $6, $7, NOW())
 						ON CONFLICT (provider, provider_id) DO NOTHING
 						RETURNING 1
 					),
 					retried AS (
 						UPDATE ${tableName(schema, 'webhookEvents')}
-						SET status = 'processing', attempts = attempts + 1, last_error = NULL, event_type = $4, data = $5, raw = $6, updated_at = NOW()
+						SET status = 'processing', attempts = attempts + 1, last_error = NULL, sandbox = $4, event_type = $5, data = $6, raw = $7, updated_at = NOW()
 						WHERE provider = $1 AND provider_id = $2 AND status = 'failed'
 						RETURNING 1
 					)
@@ -394,6 +405,7 @@ export function createRepositories(
 						event.provider,
 						deliveryId,
 						getVersion(event, getInternalRaw(event)),
+						event.sandbox,
 						event.type,
 						withoutRaw(event),
 						getPersistableRaw(executor, event),
@@ -433,6 +445,7 @@ export function createRepositories(
 						provider,
 						provider_id: product.id,
 						version: product.version ?? 'v1',
+						sandbox: product.sandbox,
 						name: product.name ?? null,
 						description: product.description ?? null,
 						active: product.active ?? null,
@@ -453,6 +466,7 @@ export function createRepositories(
 						provider,
 						provider_id: price.id,
 						version: price.version ?? 'v1',
+						sandbox: price.sandbox,
 						product_provider_id: price.productId ?? null,
 						active: price.active ?? null,
 						type: price.type ?? null,

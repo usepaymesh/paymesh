@@ -33,6 +33,7 @@ describe('client', () => {
 						{
 							id: 'pay_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'paid' as const,
@@ -153,6 +154,15 @@ describe('client', () => {
 		expect(defaultPix.method).toBe('pix');
 	});
 
+	test('delegates client.isSandbox() to the provider', () => {
+		const client = createClient({
+			provider: createStubProvider({ sandbox: true }),
+		});
+
+		expect(client.isSandbox()).toBe(true);
+		expect(client.provider.isSandbox()).toBe(true);
+	});
+
 	test('types onEvent as a discriminated union of normalized webhook events', () => {
 		const client = createClient({
 			provider: createStubProvider(),
@@ -258,6 +268,7 @@ describe('client', () => {
 		expect(firstCustomer).toMatchObject({
 			id: 'cus_1',
 			provider: 'stub',
+			sandbox: false,
 			segment: 'vip',
 		});
 	});
@@ -323,6 +334,7 @@ describe('client', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: false,
@@ -360,6 +372,7 @@ describe('client', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: false,
 					customers: true,
@@ -405,6 +418,7 @@ describe('client', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: true,
@@ -523,6 +537,7 @@ describe('client', () => {
 							{
 								id: 'pix_extra',
 								provider: 'stub',
+								sandbox: false,
 								amount: 1800,
 								currency: 'brl',
 								status: 'pending' as const,
@@ -594,6 +609,7 @@ describe('client', () => {
 							{
 								id: 'pay_extra',
 								provider: 'stub',
+								sandbox: false,
 								amount: 1200,
 								currency: 'usd',
 								status: 'paid' as const,
@@ -610,6 +626,7 @@ describe('client', () => {
 							{
 								id: 'cus_extra',
 								provider: 'stub',
+								sandbox: false,
 								email: 'ada@example.com',
 							},
 							{ id: 'raw_cus_extra' },
@@ -902,11 +919,13 @@ describe('client', () => {
 });
 
 function createStubProvider({
+	sandbox = false,
 	onPaymentCreate,
 	onPixCreate,
 	onPixGet,
 	onCustomerUpsert,
 }: {
+	sandbox?: boolean;
 	onPaymentCreate?: <IncludeRaw extends boolean = false>(
 		data: { amount: number; currency: string },
 		options?: ProviderRequestOptions<IncludeRaw>,
@@ -929,6 +948,7 @@ function createStubProvider({
 } = {}) {
 	return defineProvider({
 		id: 'stub',
+		isSandbox: () => sandbox,
 		capabilities: {
 			checkout: true,
 			customers: true,
@@ -942,6 +962,7 @@ function createStubProvider({
 							{
 								id: 'pay_123',
 								provider: 'stub',
+								sandbox,
 								amount: 1200,
 								currency: 'usd',
 								status: 'paid' as const,
@@ -960,6 +981,7 @@ function createStubProvider({
 							{
 								id: 'pix_123',
 								provider: 'stub',
+								sandbox,
 								amount: 2200,
 								currency: 'brl',
 								status: 'pending' as const,
@@ -977,6 +999,7 @@ function createStubProvider({
 							{
 								id: 'pix_123',
 								provider: 'stub',
+								sandbox,
 								amount: 2200,
 								currency: 'brl',
 								status: 'pending' as const,
@@ -995,6 +1018,7 @@ function createStubProvider({
 					{
 						id: 'cus_123',
 						provider: 'stub',
+						sandbox,
 					},
 					{
 						id: 'raw_cus_123',
@@ -1008,6 +1032,7 @@ function createStubProvider({
 							{
 								id: 'cus_123',
 								provider: 'stub',
+								sandbox,
 							},
 							{
 								id: 'raw_cus_123',
@@ -1019,6 +1044,7 @@ function createStubProvider({
 					{
 						id: 'cus_123',
 						provider: 'stub',
+						sandbox,
 						deleted: true,
 					},
 					{
@@ -1047,6 +1073,7 @@ function createListDatabase() {
 								{
 									id: 'cus_1',
 									provider: 'stub',
+									sandbox: false,
 									email: 'ada@example.com',
 									segment: 'vip',
 								},
@@ -1057,6 +1084,7 @@ function createListDatabase() {
 								{
 									id: 'cus_2',
 									provider: 'stub',
+									sandbox: false,
 									email: 'grace@example.com',
 									segment: 'vip',
 								},

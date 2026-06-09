@@ -107,6 +107,7 @@ export interface PixCreateData {
 interface BasePaymentRecord {
 	id: string;
 	provider: string;
+	sandbox: boolean;
 
 	amount: number;
 	currency: string;
@@ -158,6 +159,7 @@ export type AnyPayment<IncludeRaw extends boolean = false> =
 export interface BaseCustomer {
 	id: string;
 	provider: string;
+	sandbox: boolean;
 	externalId?: string;
 
 	name?: string;
@@ -193,6 +195,7 @@ export interface CustomerUpsertData {
 export interface BaseCustomerDeleteResult {
 	id: string;
 	provider: string;
+	sandbox: boolean;
 	deleted: boolean;
 }
 
@@ -219,6 +222,7 @@ export interface ProviderRequestOptions<IncludeRaw extends boolean = false> {
 /** Snapshot of a provider catalog product. */
 export interface ProviderCatalogProduct {
 	id: string;
+	sandbox: boolean;
 	name?: string;
 	description?: string;
 	active?: boolean;
@@ -230,6 +234,7 @@ export interface ProviderCatalogProduct {
 /** Snapshot of a provider catalog price. */
 export interface ProviderCatalogPrice {
 	id: string;
+	sandbox: boolean;
 	productId?: string;
 	active?: boolean;
 	type?: string;
@@ -382,6 +387,8 @@ export interface BasePaymeshEvent<Data = unknown> {
 	type: PaymeshEventType;
 	/** Provider identifier. */
 	provider: string;
+	/** Whether the event came from a sandbox environment. */
+	sandbox: boolean;
 
 	/** Event payload. */
 	data: Data;
@@ -437,6 +444,8 @@ export interface ProviderWebhooks {
 export interface ProviderDefinition<Name extends string = string> {
 	/** Provider identifier. */
 	id: Name;
+	/** Returns whether the provider is currently configured for sandbox mode. */
+	isSandbox(): boolean;
 
 	/** Payment creation contract. */
 	payments: ProviderPayments;

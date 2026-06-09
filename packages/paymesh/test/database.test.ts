@@ -30,6 +30,7 @@ describe('database support', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: true,
@@ -40,6 +41,7 @@ describe('database support', () => {
 							{
 								id: 'chk_123',
 								provider: 'stub',
+								sandbox: false,
 								amount: 1500,
 								currency: 'usd',
 								status: 'pending' as const,
@@ -54,6 +56,7 @@ describe('database support', () => {
 							{
 								id: 'cus_123',
 								provider: 'stub',
+								sandbox: false,
 								email: 'ada@example.com',
 							},
 							{ id: 'raw_customer_123' },
@@ -64,6 +67,7 @@ describe('database support', () => {
 							{
 								id: 'cus_123',
 								provider: 'stub',
+								sandbox: false,
 								email: 'ada@example.com',
 							},
 							{ id: 'raw_customer_123' },
@@ -74,6 +78,7 @@ describe('database support', () => {
 							{
 								id: 'cus_123',
 								provider: 'stub',
+								sandbox: false,
 								deleted: true,
 							},
 							{ id: 'raw_customer_123' },
@@ -97,11 +102,13 @@ describe('database support', () => {
 		await database.repositories.customers.upsert(resolveDatabaseSchema(), {
 			id: 'cus_local',
 			provider: 'stub',
+			sandbox: false,
 			email: 'ada@example.com',
 		});
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: true,
@@ -121,6 +128,7 @@ describe('database support', () => {
 							{
 								id: 'cus_local',
 								provider: 'stub',
+								sandbox: false,
 								email: 'ada@example.com',
 							},
 							{ id: 'raw_customer_local' },
@@ -131,6 +139,7 @@ describe('database support', () => {
 							{
 								id: 'cus_local',
 								provider: 'stub',
+								sandbox: false,
 								deleted: true,
 							},
 							{ id: 'raw_customer_local' },
@@ -147,6 +156,7 @@ describe('database support', () => {
 		expect(customer).toMatchObject({
 			id: 'cus_local',
 			provider: 'stub',
+			sandbox: false,
 			email: 'ada@example.com',
 		});
 		expect(customer.raw).toBeNull();
@@ -159,6 +169,7 @@ describe('database support', () => {
 		database.seedCustomer({
 			id: 'cus_1',
 			provider: 'stub',
+			sandbox: false,
 			createdAt: '2024-01-01T00:00:00.000Z',
 			email: 'ada@example.com',
 			raw: { id: 'raw_cus_1' },
@@ -166,6 +177,7 @@ describe('database support', () => {
 		database.seedCustomer({
 			id: 'cus_2',
 			provider: 'stub',
+			sandbox: false,
 			createdAt: '2024-01-01T00:00:00.000Z',
 			email: 'grace@example.com',
 			raw: { id: 'raw_cus_2' },
@@ -173,6 +185,7 @@ describe('database support', () => {
 		database.seedCustomer({
 			id: 'cus_3',
 			provider: 'stub',
+			sandbox: false,
 			createdAt: '2024-01-02T00:00:00.000Z',
 			email: 'linus@example.com',
 			raw: { id: 'raw_cus_3' },
@@ -180,6 +193,7 @@ describe('database support', () => {
 		database.seedCustomer({
 			id: 'cus_4',
 			provider: 'stub',
+			sandbox: false,
 			createdAt: '2024-01-03T00:00:00.000Z',
 			email: 'rita@example.com',
 			raw: { id: 'raw_cus_4' },
@@ -187,6 +201,7 @@ describe('database support', () => {
 		database.seedCustomer({
 			id: 'cus_5',
 			provider: 'stub',
+			sandbox: false,
 			createdAt: '2024-01-04T00:00:00.000Z',
 			email: 'deleted@example.com',
 			deleted: true,
@@ -195,6 +210,7 @@ describe('database support', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: true,
@@ -257,6 +273,7 @@ describe('database support', () => {
 		const client = createClient({
 			provider: defineProvider({
 				id: 'stub',
+				isSandbox: () => false,
 				capabilities: {
 					checkout: true,
 					customers: true,
@@ -275,6 +292,7 @@ describe('database support', () => {
 							{
 								id: 'cus_extra',
 								provider: 'stub',
+								sandbox: false,
 								email: 'ada@example.com',
 							},
 							{ id: 'raw_customer_extra' },
@@ -285,6 +303,7 @@ describe('database support', () => {
 							{
 								id: 'cus_extra',
 								provider: 'stub',
+								sandbox: false,
 								deleted: true,
 							},
 							{ id: 'raw_customer_extra' },
@@ -322,6 +341,7 @@ describe('database support', () => {
 		let deliveries = 0;
 		const provider = defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -333,6 +353,7 @@ describe('database support', () => {
 						{
 							id: 'chk_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'pending' as const,
@@ -347,6 +368,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -356,6 +378,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -365,6 +388,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							deleted: true,
 						},
 						{ id: 'raw_customer' },
@@ -384,10 +408,12 @@ describe('database support', () => {
 								id: 'evt_123',
 								type: 'customer.created' as const,
 								provider: 'stub',
+								sandbox: false,
 								data: withRaw(
 									{
 										id: 'cus_123',
 										provider: 'stub',
+										sandbox: false,
 										email: payload.email as string | undefined,
 									},
 									payload,
@@ -444,6 +470,7 @@ describe('database support', () => {
 		const calls: string[] = [];
 		const provider = defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -455,6 +482,7 @@ describe('database support', () => {
 						{
 							id: 'chk_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'pending' as const,
@@ -469,6 +497,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							email: 'ada@example.com',
 						},
 						{ id: 'raw_customer' },
@@ -479,6 +508,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							email: 'ada@example.com',
 						},
 						{ id: 'raw_customer' },
@@ -489,6 +519,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							deleted: true,
 						},
 						{ id: 'raw_customer' },
@@ -508,10 +539,12 @@ describe('database support', () => {
 								id: 'evt_parallel',
 								type: 'customer.created' as const,
 								provider: 'stub',
+								sandbox: false,
 								data: withRaw(
 									{
 										id: 'cus_123',
 										provider: 'stub',
+										sandbox: false,
 										email: payload.email as string | undefined,
 									},
 									payload,
@@ -561,6 +594,7 @@ describe('database support', () => {
 		const calls: string[] = [];
 		const provider = defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -572,6 +606,7 @@ describe('database support', () => {
 						{
 							id: 'chk_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'pending' as const,
@@ -586,6 +621,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							email: 'ada@example.com',
 						},
 						{ id: 'raw_customer' },
@@ -596,6 +632,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							email: 'ada@example.com',
 						},
 						{ id: 'raw_customer' },
@@ -606,6 +643,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							deleted: true,
 						},
 						{ id: 'raw_customer' },
@@ -625,6 +663,7 @@ describe('database support', () => {
 								id: 'evt_no_specific',
 								type: 'subscription.updated' as const,
 								provider: 'stub',
+								sandbox: false,
 								data: withRaw(
 									{
 										id: 'sub_123',
@@ -670,6 +709,7 @@ describe('database support', () => {
 		const calls: string[] = [];
 		const provider = defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -681,6 +721,7 @@ describe('database support', () => {
 						{
 							id: 'chk_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'pending' as const,
@@ -695,6 +736,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -704,6 +746,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -713,6 +756,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							deleted: true,
 						},
 						{ id: 'raw_customer' },
@@ -732,6 +776,7 @@ describe('database support', () => {
 								id: 'evt_unhandled',
 								type: 'subscription.updated' as const,
 								provider: 'stub',
+								sandbox: false,
 								data: withRaw(
 									{
 										id: 'sub_123',
@@ -776,6 +821,7 @@ describe('database support', () => {
 		const database = createMockDatabase();
 		const provider = defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -787,6 +833,7 @@ describe('database support', () => {
 						{
 							id: 'chk_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'pending' as const,
@@ -801,6 +848,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -810,6 +858,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -819,6 +868,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							deleted: true,
 						},
 						{ id: 'raw_customer' },
@@ -838,10 +888,12 @@ describe('database support', () => {
 								id: 'evt_failed_global',
 								type: 'customer.created' as const,
 								provider: 'stub',
+								sandbox: false,
 								data: withRaw(
 									{
 										id: 'cus_123',
 										provider: 'stub',
+										sandbox: false,
 										email: payload.email as string | undefined,
 									},
 									payload,
@@ -884,6 +936,7 @@ describe('database support', () => {
 		let deliveries = 0;
 		const provider = defineProvider({
 			id: 'stub',
+			isSandbox: () => false,
 			capabilities: {
 				checkout: true,
 				customers: true,
@@ -895,6 +948,7 @@ describe('database support', () => {
 						{
 							id: 'chk_123',
 							provider: 'stub',
+							sandbox: false,
 							amount: 1000,
 							currency: 'usd',
 							status: 'pending' as const,
@@ -909,6 +963,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -918,6 +973,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 						},
 						{ id: 'raw_customer' },
 						options?.includeRaw,
@@ -927,6 +983,7 @@ describe('database support', () => {
 						{
 							id: 'cus_123',
 							provider: 'stub',
+							sandbox: false,
 							deleted: true,
 						},
 						{ id: 'raw_customer' },
@@ -949,10 +1006,12 @@ describe('database support', () => {
 								id: 'entity_123',
 								type: 'customer.updated' as const,
 								provider: 'stub',
+								sandbox: false,
 								data: withRaw(
 									{
 										id: 'cus_123',
 										provider: 'stub',
+										sandbox: false,
 										email: payload.email as string | undefined,
 									},
 									payload,

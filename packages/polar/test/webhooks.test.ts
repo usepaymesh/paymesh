@@ -36,8 +36,10 @@ describe('polar webhooks', () => {
 			id: 'ord_paid',
 			type: 'payment.succeeded',
 			provider: 'polar',
+			sandbox: false,
 			data: {
 				id: 'ord_paid',
+				sandbox: false,
 				status: 'paid',
 				customer: {
 					id: 'cus_123',
@@ -141,6 +143,12 @@ describe('polar webhooks', () => {
 		});
 		expect(handled?.hook).toBe('onSubscriptionCanceled');
 	});
+});
+
+test('Polar infers sandbox from the configured base URL', () => {
+	const provider = polar({ baseUrl: 'https://sandbox-api.polar.sh' });
+
+	expect(provider.isSandbox()).toBe(true);
 });
 
 function polarWebhookRequest(payload: unknown, secret: string) {

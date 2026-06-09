@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
+	DatabaseTableKey,
 	PaymeshDatabaseDriver,
 	ResolvedCustomDatabaseTable,
 	ResolvedDatabaseExtraTableField,
@@ -59,6 +60,20 @@ const PAYMESH_MIGRATIONS: readonly PaymeshMigrationDefinition[] = [
 		name: 'paymesh_indexes_and_constraints',
 		sql: createIndexesAndConstraintsSql,
 	},
+];
+
+const BUILT_IN_SANDBOX_TABLES: readonly DatabaseTableKey[] = [
+	'customers',
+	'pix',
+	'checkouts',
+	'invoices',
+	'paymentMethods',
+	'entitlements',
+	'usage',
+	'webhookEvents',
+	'subscriptions',
+	'products',
+	'prices',
 ];
 
 export function resolveMigrationsDir(cwd: string, explicitDir?: string) {
@@ -360,6 +375,9 @@ function createSchemaSyncMigrationSql(
 	previousSchema?: ResolvedDatabaseSchema,
 ) {
 	const statements = [
+		...BUILT_IN_SANDBOX_TABLES.map((key) =>
+			createBuiltInSandboxSyncSql(schema.tables[key].name),
+		),
 		...Object.entries(schema.tables).flatMap(([key, table]) =>
 			Object.values(table.fields).flatMap((field) =>
 				createManagedFieldSyncSql({
@@ -449,6 +467,11 @@ ALTER COLUMN ${quoteIdentifier(field.column)} ${field.required ? 'SET' : 'DROP'}
 	}
 
 	return statements;
+}
+
+function createBuiltInSandboxSyncSql(tableName: string) {
+	return `ALTER TABLE ${quoteIdentifier(tableName)}
+ADD COLUMN IF NOT EXISTS sandbox BOOLEAN NOT NULL DEFAULT FALSE;`;
 }
 
 function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
@@ -576,6 +599,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'customers')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	external_id TEXT,
 	name TEXT,
 	email TEXT,
@@ -598,6 +622,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'pix')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	customer_provider_id TEXT,
 	amount BIGINT,
 	currency TEXT,
@@ -625,6 +650,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'checkouts')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	customer_provider_id TEXT,
 	amount BIGINT,
 	currency TEXT,
@@ -647,6 +673,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'invoices')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	customer_provider_id TEXT,
 	checkout_provider_id TEXT,
 	subscription_provider_id TEXT,
@@ -670,6 +697,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'paymentMethods')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	customer_provider_id TEXT,
 	type TEXT,
 	brand TEXT,
@@ -692,6 +720,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'entitlements')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	subscription_provider_id TEXT,
 	key TEXT,
 	value JSONB,
@@ -711,6 +740,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'usage')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	subscription_provider_id TEXT,
 	meter TEXT,
 	quantity NUMERIC,
@@ -732,6 +762,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'webhookEvents')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	event_type TEXT NOT NULL,
 	status TEXT NOT NULL DEFAULT 'processing',
 	attempts INTEGER NOT NULL DEFAULT 1,
@@ -753,6 +784,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'subscriptions')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	customer_provider_id TEXT,
 	product_provider_id TEXT,
 	price_provider_id TEXT,
@@ -776,6 +808,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'products')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	name TEXT,
 	description TEXT,
 	active BOOLEAN,
@@ -796,6 +829,7 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'prices')} (
 	provider TEXT NOT NULL,
 	provider_id TEXT NOT NULL,
 	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
 	product_provider_id TEXT,
 	active BOOLEAN,
 	type TEXT,
