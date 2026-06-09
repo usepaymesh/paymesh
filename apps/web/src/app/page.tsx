@@ -65,12 +65,12 @@ const providerCards: ProviderCard[] = [
 	{
 		id: '03',
 		name: 'Polar',
-		status: 'coming soon',
-		headline: 'Polar on roadmap.',
+		status: 'supported',
+		headline: 'Polar is live.',
 		description:
-			'Merchant-of-record billing without forcing apps to fork payment logic.',
+			'Merchant-of-record billing through the same normalized Paymesh client.',
 		icon: 'polar',
-		tags: ['MoR', 'subscriptions', 'tax'],
+		tags: ['MoR', 'customers', 'webhooks'],
 	},
 	{
 		id: '04',
@@ -135,11 +135,11 @@ const providerCards: ProviderCard[] = [
 ];
 
 const codeSnippets = {
-	payments: `import { createClient } from "paymeshjs";
+	payments: `import { createClient } from "paymesh";
 import { stripe } from "@paymesh/stripe";
 
 const client = createClient({
-  provider: stripe({ secret: process.env.STRIPE_SECRET_KEY! }),
+  provider: stripe({ secret: "sk_test_123" }),
 });
 
 const payment = await client.payments.create({
@@ -147,38 +147,105 @@ const payment = await client.payments.create({
   currency: "USD",
   customer: { email: "alice@paymesh.dev" },
 });`,
-	customers: `import { createClient } from "paymeshjs";
-import { stripe } from "@paymesh/stripe";
+	customers: `import { createClient } from "paymesh";
+import { polar } from "@paymesh/polar";
 
 const client = createClient({
-  provider: stripe({ secret: process.env.STRIPE_SECRET_KEY! }),
+  provider: polar({
+    accessToken: "polar_access_123",
+    webhookSecret: "whsec_polar_123",
+  }),
 });
 
-const customer = await client.customers.create({
+const customer = await client.customers.upsert({
   email: "alice@paymesh.dev",
+  externalId: "user_123",
   name: "Alice",
 });
 
 const fetched = await client.customers.get(customer.id);
 
 await client.customers.delete(fetched.id);`,
-	webhooks: `import { createClient } from "paymeshjs";
-import { Webhooks } from "@paymesh/next";
+	webhooks: `import { Elysia } from "elysia";
+import { createClient } from "paymesh";
+import { Webhooks } from "@paymesh/elysia";
 import { stripe } from "@paymesh/stripe";
 
 const client = createClient({
   provider: stripe({
-    secret: process.env.STRIPE_SECRET_KEY!,
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
   }),
 });
 
-export const POST = Webhooks({
-  client,
+export const app = new Elysia().post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client,
 
-  async onPaymentSucceeded(event) {
-    console.log("payment.succeeded", event.id);
+    async onPaymentSucceeded(event) {
+      console.log("payment.succeeded", event.id);
+    },
+  }),
+);`,
+	pix: `const pix = await client.pix.create({
+  amount: 3500,
+  currency: "BRL",
+  description: "Invoice #42",
+  customer: {
+    email: "ada@example.com",
+    externalId: "user_123",
   },
+  pix: {
+    expiresAfterSeconds: 900,
+  },
+});
+
+console.log(pix.copyPasteCode, pix.instructionsUrl);`,
+	plugins: `import { Dashboard, dash } from "@paymesh/dash";
+import { auditLog } from "@paymesh/audit-logs";
+import { postgres } from "@paymesh/postgres";
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+
+const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: postgres("postgresql://localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+  plugins: [
+    dash({
+      auth({ request }) {
+        const actorId = request.headers.get("x-actor-id") ?? "usr_123";
+
+        return {
+          id: actorId,
+          email: "ops@paymesh.dev",
+          name: "Ops",
+        };
+      },
+    }),
+    auditLog({
+      events: ["checkout.*", "payment.*", "customer.*"],
+    }),
+  ],
+  hooks: {
+    async onEvent(event) {
+      console.log("audit event:", event.type);
+    },
+  },
+});
+
+const dashboard = Dashboard({ client });`,
+	postgres: `import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: postgres("postgresql://localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
 });`,
 };
 
@@ -221,23 +288,6 @@ function OpenAIIcon() {
 	);
 }
 
-function BunIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			height="14"
-			viewBox="0 0 24 24"
-			width="14"
-			xmlns="http://www.w3.org/2000/svg"
-		>
-			<path
-				d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12s12-5.37 12-12S18.63 0 12 0m1.15 5.23c2.39-.82 4.12.68 4.42 2.96c.05.36.05.74-.01 1.11c-.1.65-.29 1.29-.46 1.92c.84.17 1.54.62 1.94 1.4c.34.65.39 1.34.25 2.05c-.23 1.18-.62 2.31-1.45 3.21c-.96 1.04-2.11 1.72-3.58 1.74c-.73.01-1.47-.05-2.19-.18c-.46-.08-.87-.02-1.3.1c-.88.25-1.78.42-2.69.34c-1.67-.14-2.8-1.07-3.54-2.51c-.24-.47-.4-.99-.56-1.5c-.27-.83-.2-1.66.22-2.43c.35-.63.93-.98 1.61-1.13c-.16-.62-.34-1.21-.46-1.82c-.45-2.25 1.06-4.09 3.34-4.09c.73 0 1.43.2 2.08.54c.11.06.31.05.42-.02c.66-.35 1.35-.63 2.02-.93"
-				fill="#FBF0DF"
-			/>
-		</svg>
-	);
-}
-
 function FastifyIcon() {
 	return (
 		<Image
@@ -248,46 +298,6 @@ function FastifyIcon() {
 			unoptimized
 			width={14}
 		/>
-	);
-}
-
-function HonoIcon() {
-	return (
-		<Image
-			alt=""
-			className="h-[14px] w-[14px] object-contain"
-			height={14}
-			src="/providers/hono.svg"
-			unoptimized
-			width={14}
-		/>
-	);
-}
-
-function ElysiaIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			fill="none"
-			height="14"
-			viewBox="0 0 24 24"
-			width="14"
-			xmlns="http://www.w3.org/2000/svg"
-		>
-			<path
-				d="M6 5.5h12M6 12h8.5M6 18.5h12"
-				stroke="#F0F0F0"
-				strokeLinecap="round"
-				strokeWidth="1.8"
-			/>
-			<path
-				d="M16 8.5L18.5 5.5L16 2.5"
-				stroke="#F0F0F0"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				strokeWidth="1.8"
-			/>
-		</svg>
 	);
 }
 
@@ -433,7 +443,14 @@ function TrustedLogo({ label }: { label: string }) {
 	if (label === 'Bun') {
 		return (
 			<div className="flex items-center gap-2 px-5 text-white/40">
-				<BunIcon />
+				<Image
+					alt=""
+					className="h-[14px] w-[14px] object-contain"
+					height={14}
+					src="/providers/bun.svg"
+					unoptimized
+					width={14}
+				/>
 				<span className="whitespace-nowrap text-xs font-medium tracking-wide">
 					Bun
 				</span>
@@ -455,7 +472,14 @@ function TrustedLogo({ label }: { label: string }) {
 	if (label === 'Hono') {
 		return (
 			<div className="flex items-center gap-2 px-5 text-white/40">
-				<HonoIcon />
+				<Image
+					alt=""
+					className="h-[14px] w-[14px] object-contain"
+					height={14}
+					src="/providers/hono.svg"
+					unoptimized
+					width={14}
+				/>
 				<span className="whitespace-nowrap text-xs font-medium tracking-wide">
 					Hono
 				</span>
@@ -466,7 +490,14 @@ function TrustedLogo({ label }: { label: string }) {
 	if (label === 'Elysia') {
 		return (
 			<div className="flex items-center gap-2 px-5 text-white/40">
-				<ElysiaIcon />
+				<Image
+					alt=""
+					className="h-[14px] w-[14px] object-contain"
+					height={14}
+					src="/providers/elysia.svg"
+					unoptimized
+					width={14}
+				/>
 				<span className="whitespace-nowrap text-xs font-medium tracking-wide">
 					Elysia
 				</span>
@@ -477,21 +508,14 @@ function TrustedLogo({ label }: { label: string }) {
 	if (label === 'Express') {
 		return (
 			<div className="flex items-center gap-2 px-5 text-white/40">
-				<svg
-					aria-hidden="true"
-					fill="none"
-					height="14"
-					viewBox="0 0 24 24"
-					width="14"
-					xmlns="http://www.w3.org/2000/svg"
-				>
-					<path
-						d="M6 7.5h12M6 12h9M6 16.5h12"
-						stroke="currentColor"
-						strokeLinecap="round"
-						strokeWidth="1.8"
-					/>
-				</svg>
+				<Image
+					alt=""
+					className="h-[14px] w-[14px] object-contain"
+					height={14}
+					src="/providers/express.svg"
+					unoptimized
+					width={14}
+				/>
 				<span className="whitespace-nowrap text-xs font-medium tracking-wide">
 					Express
 				</span>
@@ -525,6 +549,15 @@ function TrustedLogo({ label }: { label: string }) {
 }
 
 export default async function Home() {
+	const tabLabels: Record<string, string> = {
+		payments: 'Payments',
+		customers: 'Customers',
+		webhooks: 'Webhooks',
+		pix: 'PIX',
+		plugins: 'Plugins',
+		postgres: 'Postgres',
+	};
+
 	const highlightedTabs = await Promise.all(
 		Object.entries(codeSnippets).map(async ([id, source]) => {
 			const highlighted = await codeToTokens(source, {
@@ -534,12 +567,7 @@ export default async function Home() {
 
 			return {
 				id,
-				label:
-					id === 'payments'
-						? 'Payments'
-						: id === 'customers'
-							? 'Customers'
-							: 'Webhooks',
+				label: tabLabels[id] ?? 'Database',
 				source,
 				fg: highlighted.fg ?? '#b392f0',
 				lines: highlighted.tokens.map((line, index) => ({

@@ -1,0 +1,75 @@
+---
+title: Postgres
+description: Use the first-party pg adapter for direct SQL-backed Paymesh persistence with transactions, raw persistence, migrations, and operational plugins.
+---
+
+## Overview
+
+`@paymesh/postgres` is the most direct first-party adapter. It uses `pg` underneath and implements the full Paymesh database driver contract without an ORM layer in between.
+
+## Installation
+
+<InstallTabs packages="@paymesh/postgres pg" />
+
+## Usage
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+});
+```
+
+## Accepted connection inputs
+
+The adapter accepts either:
+
+- a connection string
+- an existing `pg.Pool`
+
+If you pass a connection string, the adapter owns the pool and will close it from `database.close()`. If you pass an existing pool, ownership stays with your app.
+
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `persistRaw` | `false` | Stores raw provider payloads alongside normalized records. |
+
+## Transactions
+
+The adapter creates a dedicated `pg` client for `database.transaction()` and wraps the callback in `BEGIN`, `COMMIT`, and `ROLLBACK`.
+
+```ts title="src/server/transaction.ts"
+await paymesh.database?.transaction(async (tx) => {
+  await tx.repositories.customers.upsert(paymesh.schema, {
+    id: "cus_123",
+    provider: "stripe",
+    email: "team@example.com",
+  });
+});
+```
+
+## Error behavior
+
+Database query and transaction failures are wrapped into `PaymeshError` with code `database_error`.
+
+That means callers can handle persistence issues through the same error type used by the rest of Paymesh.
+
+## When to choose this adapter
+
+Use `@paymesh/postgres` when:
+
+- you want the leanest stack
+- your application is already comfortable with direct SQL or `pg`
+- you want minimal abstraction between Paymesh and PostgreSQL
+
+If your team already standardized on Drizzle or Prisma, use those adapters instead.

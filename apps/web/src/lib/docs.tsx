@@ -203,21 +203,21 @@ function getRowKey(row: ReactNode[]): string {
 	);
 }
 
-const installSnippet = `bun add paymesh @paymesh/stripe @paymesh/next
+const installSnippet = `bun add paymesh @paymesh/stripe @paymesh/polar @paymesh/postgres @paymesh/elysia pg
 
 # or
-pnpm add paymesh @paymesh/stripe @paymesh/next
+pnpm add paymesh @paymesh/stripe @paymesh/polar @paymesh/postgres @paymesh/elysia pg
 
 # or
-npm install paymesh @paymesh/stripe @paymesh/next`;
+npm install paymesh @paymesh/stripe @paymesh/polar @paymesh/postgres @paymesh/elysia pg`;
 
 const clientSnippet = `import { createClient } from "paymesh";
 import { stripe } from "@paymesh/stripe";
 
 export const client = createClient({
   provider: stripe({
-    secret: process.env.STRIPE_API_KEY!,
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
   }),
 });`;
 
@@ -226,8 +226,8 @@ import { stripe } from "@paymesh/stripe";
 
 export const client = createClient({
   provider: stripe({
-    secret: process.env.STRIPE_API_KEY!,
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
   }),
   timeout: 10_000,
   retry: {
@@ -253,8 +253,24 @@ const paymentSnippet = `const payment = await client.payments.create({
   cancelUrl: "https://app.paymesh.dev/cancel",
 });`;
 
-const customerSnippet = `const customer = await client.customers.create({
+const pixSnippet = `const pix = await client.pix.create({
+  amount: 3500,
+  currency: "BRL",
+  description: "Invoice #42",
+  customer: {
+    email: "alice@paymesh.dev",
+    externalId: "user_123",
+  },
+  pix: {
+    expiresAfterSeconds: 900,
+  },
+});
+
+console.log(pix.copyPasteCode, pix.instructionsUrl);`;
+
+const customerSnippet = `const customer = await client.customers.upsert({
   email: "alice@paymesh.dev",
+  externalId: "user_123",
   name: "Alice",
   metadata: {
     teamId: "team_123",
@@ -263,17 +279,15 @@ const customerSnippet = `const customer = await client.customers.create({
 
 const fetched = await client.customers.get(customer.id);
 
-const updated = await client.customers.update(fetched.id, {
-  name: "Alice Johnson",
-});
-
-await client.customers.delete(updated.id);`;
+await client.customers.delete(fetched.id);`;
 
 const paymentCreateShapeSnippet = `type PaymentCreateData = {
   amount: number;
   currency: string;
+  productIds?: string[];
   customer?: {
     id?: string;
+    externalId?: string;
     name?: string;
     email?: string;
     document?: string;
@@ -286,20 +300,28 @@ const paymentCreateShapeSnippet = `type PaymentCreateData = {
   returnUrl?: string;
 };`;
 
-const customerShapeSnippet = `type CustomerCreateData = {
+const customerShapeSnippet = `type CustomerUpsertData = {
+  id?: string;
+  externalId?: string;
   name?: string;
   email?: string;
   phone?: string;
   metadata?: Record<string, string | number | boolean | null>;
 };
 
-type CustomerUpdateData = CustomerCreateData;`;
+type CustomerDeleteResult = {
+  id: string;
+  provider: string;
+  deleted: boolean;
+};`;
 
 const envTypingSnippet = `declare global {
   namespace NodeJS {
     interface ProcessEnv {
       STRIPE_API_KEY: string;
+      POLAR_ACCESS_TOKEN: string;
       STRIPE_WEBHOOK_SECRET?: string;
+      POLAR_WEBHOOK_SECRET?: string;
     }
   }
 }
@@ -308,7 +330,7 @@ export {};`;
 
 const rawSnippet = `const rawClient = createClient({
   provider: stripe({
-    secret: process.env.STRIPE_API_KEY!,
+    secret: "sk_test_123",
   }),
   includeRaw: true,
 });
@@ -320,19 +342,23 @@ const payment = await rawClient.payments.create({
 
 payment.raw; // provider payload`;
 
-const nextWebhookSnippet = `import { Webhooks } from "@paymesh/next";
+const elysiaWebhookSnippet = `import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
 
-export const POST = Webhooks({
-  client,
+export const app = new Elysia().post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client,
 
-  async onPaymentSucceeded(event) {
-    console.log("payment.succeeded", event.id);
-  },
+    async onPaymentSucceeded(event) {
+      console.log("payment.succeeded", event.id);
+    },
 
-  async onCustomerUpdated(event) {
-    console.log("customer.updated", event.data.id);
-  },
-});`;
+    async onCustomerUpdated(event) {
+      console.log("customer.updated", event.data.id);
+    },
+  }),
+);`;
 
 const expressWebhookSnippet = `import express from "express";
 import { createClient } from "paymesh";
@@ -341,8 +367,8 @@ import { stripe } from "@paymesh/stripe";
 
 const client = createClient({
   provider: stripe({
-    secret: process.env.STRIPE_API_KEY!,
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
   }),
 });
 
@@ -358,6 +384,61 @@ app.post(
     },
   }),
 );`;
+
+const polarSetupSnippet = `import { createClient } from "paymesh";
+import { polar } from "@paymesh/polar";
+
+export const client = createClient({
+  provider: polar({
+    accessToken: "polar_access_123",
+    webhookSecret: "whsec_polar_123",
+  }),
+});`;
+
+const polarPaymentsSnippet = `const checkout = await client.payments.create({
+  amount: 2900,
+  currency: "USD",
+  productIds: ["prod_abc123"],
+  customer: {
+    email: "ada@example.com",
+    externalId: "user_123",
+  },
+  successUrl: "https://example.com/success",
+  returnUrl: "https://example.com/billing",
+});`;
+
+const polarCustomersSnippet = `const customer = await client.customers.upsert({
+  email: "ada@example.com",
+  externalId: "user_123",
+  name: "Ada Lovelace",
+});
+
+const fetched = await client.customers.get(customer.id);`;
+
+const polarWebhookSnippet = `import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
+
+export const app = new Elysia().post(
+  "/webhooks/polar",
+  Webhooks({
+    client,
+
+    async onCheckoutCompleted(event) {
+      console.log("checkout.completed", event.id);
+    },
+  }),
+);`;
+
+const postgresSnippet = `import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: postgres("postgresql://localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+});`;
 
 const providerSnippet = `import { defineProvider } from "paymesh";
 
@@ -381,13 +462,10 @@ export const customProvider = defineProvider({
     },
   },
   customers: {
-    async create() {
-      throw new Error("implement me");
-    },
     async get() {
       throw new Error("implement me");
     },
-    async update() {
+    async upsert() {
       throw new Error("implement me");
     },
     async delete() {
@@ -401,51 +479,211 @@ import { stripe } from "@paymesh/stripe";
 
 export const client = createClient({
   provider: stripe({
-    secret: process.env.STRIPE_API_KEY!,
-    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
   }),
 });`;
 
-const docsNavigation: DocNavGroup[] = [
-	{
-		title: 'Get Started',
-		items: [
-			{ label: 'Introduction', slug: ['introduction'] },
-			{ label: 'Installation', slug: ['installation'] },
-			{ label: 'Basic Usage', slug: ['basic-usage'] },
-			{ label: 'Comparison', slug: ['comparison'] },
-		],
-	},
-	{
-		title: 'Concepts',
-		items: [
-			{ label: 'API', slug: ['concepts', 'api'] },
-			{ label: 'Client', slug: ['concepts', 'client'] },
-			{ label: 'TypeScript', slug: ['concepts', 'typescript'] },
-			{ label: 'Hooks', slug: ['concepts', 'hooks'] },
-			{ label: 'Customers', slug: ['concepts', 'customers'] },
-			{ label: 'Payment Providers', slug: ['concepts', 'payment-providers'] },
-		],
-	},
-	{
-		title: 'Providers',
-		items: [
-			{ label: 'Stripe', slug: ['providers', 'stripe'] },
-			{ label: 'Polar', slug: ['providers', 'polar'], status: 'coming-soon' },
-			{
-				label: 'AbacatePay',
-				slug: ['providers', 'abacatepay'],
-				status: 'coming-soon',
-			},
-			{ label: 'PayPal', slug: ['providers', 'paypal'], status: 'coming-soon' },
-			{ label: 'Dodo', slug: ['providers', 'dodo'], status: 'coming-soon' },
-		],
-	},
-	{
-		title: 'Plugins',
-		items: [{ label: 'Coming Soon', slug: ['plugins'], status: 'coming-soon' }],
-	},
-];
+const nextAdapterSnippet = `import { Webhooks } from "@paymesh/next";
+import { paymesh } from "@/lib/paymesh";
+
+export const POST = Webhooks({
+  client: paymesh,
+  async onEvent(event) {
+    console.log(event.type);
+  },
+});`;
+
+const expressAdapterSnippet = `import express from "express";
+import { Webhooks } from "@paymesh/express";
+import { paymesh } from "@/lib/paymesh";
+
+const app = express();
+
+app.post(
+  "/webhooks/paymesh",
+  express.raw({ type: "application/json" }),
+  Webhooks({ client: paymesh }),
+);`;
+
+const fastifyAdapterSnippet = `import Fastify from "fastify";
+import { Webhooks } from "@paymesh/fastify";
+import { paymesh } from "@/lib/paymesh";
+
+const app = Fastify();
+
+app.post(
+  "/webhooks/paymesh",
+  {
+    config: {
+      rawBody: true,
+    },
+  },
+  Webhooks({ client: paymesh }),
+);`;
+
+const honoAdapterSnippet = `import { Hono } from "hono";
+import { Webhooks } from "@paymesh/hono";
+import { paymesh } from "@/lib/paymesh";
+
+const app = new Hono();
+
+app.post("/webhooks/paymesh", Webhooks({ client: paymesh }));`;
+
+const elysiaAdapterSnippet = `import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
+import { paymesh } from "@/lib/paymesh";
+
+export const app = new Elysia().post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client: paymesh,
+    async onPaymentSucceeded(event) {
+      console.log(event.data.id);
+    },
+  }),
+);`;
+
+const dashPluginSnippet = `import { Dashboard, dash } from "@paymesh/dash";
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: postgres("postgresql://localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+  plugins: [
+    dash({
+      path: "/admin/paymesh",
+      auth({ request }) {
+        const actorId = request.headers.get("x-actor-id") ?? "usr_123";
+
+        return {
+          id: actorId,
+          type: "user",
+          email: "ops@paymesh.dev",
+          name: "Ops",
+        };
+      },
+    }),
+  ],
+});
+
+const dashboard = Dashboard({ client });`;
+
+const auditLogPluginSnippet = `import { auditLog } from "@paymesh/audit-logs";
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: postgres("postgresql://localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+  plugins: [
+    auditLog({
+      events: ["checkout.*", "payment.*", "customer.*"],
+      exclude: ["payment.failed"],
+      mode: "async",
+      failureMode: "warn",
+      retention: "1y",
+      includeDiff: true,
+      includeProviderMetadata: true,
+      includeRequestInfo: true,
+      batch: {
+        enabled: true,
+        size: 50,
+        flushInterval: 1_000,
+      },
+      actor({ request }) {
+        return {
+          type: "user",
+          id: request.headers.get("x-user-id") ?? "usr_123",
+          email: "ops@paymesh.dev",
+        };
+      },
+    }),
+  ],
+});
+
+await client.auditLog.list({ action: "payment.succeeded", limit: 10 });`;
+
+const pluginAuthoringSnippet = `import { definePlugin, event, lazy } from "paymesh";
+
+export const examplePlugin = definePlugin({
+  id: "example",
+  name: "Example Plugin",
+  events: {
+    "example.entry.created": event<{ id: string }>({
+      description: "Emitted when an example entry is created.",
+    }),
+  },
+  setup() {
+    return {
+      metrics: lazy(() => ({ counter: 0 })),
+    };
+  },
+  hooks: {
+    onEvent(event) {
+      console.log(event.type);
+    },
+  },
+});`;
+
+const databaseSchemaSnippet = `const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: postgres("postgresql://localhost:5432/paymesh", {
+    persistRaw: true,
+  }),
+  schema: {
+    prefix: "paymesh",
+    tables: {
+      customers: {
+        name: "billing_customers",
+      },
+    },
+    customTables: {
+      billing_notes: {
+        name: "billing_notes",
+        primaryKey: { type: "text" },
+        timestamps: { createdAt: true, updatedAt: true },
+        fields: {
+          note: { type: "string", required: true },
+        },
+      },
+    },
+  },
+});`;
+
+const drizzleAdapterSnippet = `import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle as paymeshDrizzle } from "@paymesh/drizzle";
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+
+const db = drizzle(pool);
+
+const client = createClient({
+  provider: stripe({ secret: "sk_test_123" }),
+  database: paymeshDrizzle(db, { persistRaw: true }),
+});`;
+
+const prismaAdapterSnippet = `import { PrismaClient } from "@prisma/client";
+import { prisma } from "@paymesh/prisma";
+import { createClient } from "paymesh";
+import { polar } from "@paymesh/polar";
+
+const db = new PrismaClient();
+
+const client = createClient({
+  provider: polar({
+    accessToken: "polar_access_123",
+    webhookSecret: "whsec_polar_123",
+  }),
+  database: prisma(db, { persistRaw: true }),
+});`;
 
 const hookRows: ReactNode[][] = [
 	[
@@ -508,6 +746,1114 @@ const hookRows: ReactNode[][] = [
 		'checkout.completed',
 		'Completed checkout session event.',
 	],
+	[
+		<InlineCode key="hw1">onWebhookReceived</InlineCode>,
+		'webhook.received',
+		'Low-level inbound webhook hook.',
+	],
+	[
+		<InlineCode key="hw2">onWebhookVerified</InlineCode>,
+		'webhook.verified',
+		'Signature verification succeeded.',
+	],
+	[
+		<InlineCode key="hw3">onWebhookFailed</InlineCode>,
+		'webhook.failed',
+		'Signature or parse failure.',
+	],
+];
+
+const guidePages: DocPage[] = [
+	{
+		group: 'Guides',
+		slug: ['guides', 'provider-selection'],
+		title: 'Choose a Provider',
+		description:
+			'Decide whether Stripe, Polar, or a future provider belongs in your stack based on product model, market, and operational needs.',
+		sections: [
+			{
+				id: 'decision-factors',
+				title: 'Decision Factors',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>
+								Use Stripe when you want broad ecosystem coverage and the most
+								general payment surface.
+							</li>
+							<li>
+								Use Polar when your billing model is product-led and you want a
+								merchant-of-record style integration.
+							</li>
+							<li>
+								Keep Paymesh in the center so provider swaps do not leak through
+								product code.
+							</li>
+							<li>
+								Add a second provider later if regional or commercial needs
+								change.
+							</li>
+						</BulletList>
+					</div>
+				),
+			},
+			{
+				id: 'comparison',
+				title: 'Provider Comparison',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Provider', 'Best For', 'Tradeoff']}
+							rows={[
+								[
+									'Stripe',
+									'General-purpose checkout and customer billing.',
+									'You still own most of the billing and tax surface.',
+								],
+								[
+									'Polar',
+									'Product-led billing with merchant-of-record style flows.',
+									'More opinionated around the Polar model.',
+								],
+								[
+									'AbacatePay',
+									'Brazil-first local rails and PIX-centric flows.',
+									'Roadmap-only in the current repo build.',
+								],
+								[
+									'PayPal',
+									'Wallet-driven checkout and global reach.',
+									'Roadmap-only in the current repo build.',
+								],
+								[
+									'Dodo',
+									'Another billing route for teams that want optionality.',
+									'Roadmap-only in the current repo build.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'setup-path',
+				title: 'Recommended Setup Path',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Start with a shared client module, pick one provider, then layer
+							framework adapters and database persistence only where they solve
+							a concrete need.
+						</Paragraph>
+						<DocCodeBlock
+							code={stripeSetupSnippet}
+							filename="src/lib/paymesh.ts"
+						/>
+						<Paragraph>
+							If your product is merchant-of-record first, swap Stripe for Polar
+							without changing the rest of the application surface.
+						</Paragraph>
+						<DocCodeBlock
+							code={polarSetupSnippet}
+							filename="src/lib/paymesh.ts"
+						/>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Guides',
+		slug: ['guides', 'webhooks'],
+		title: 'Build Webhooks',
+		description:
+			'Set up verified webhook routes with the right adapter for your runtime and keep route code focused on normalized events.',
+		sections: [
+			{
+				id: 'adapter-choice',
+				title: 'Pick the Right Adapter',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Runtime', 'Adapter', 'Gotcha']}
+							rows={[
+								[
+									'Next.js App Router',
+									'@paymesh/next',
+									'Return a Route Handler function.',
+								],
+								[
+									'Express',
+									'@paymesh/express',
+									'Preserve the raw request body.',
+								],
+								[
+									'Fastify',
+									'@paymesh/fastify',
+									'Enable rawBody handling for the route.',
+								],
+								['Hono', '@paymesh/hono', 'Pass context.req.raw directly.'],
+								[
+									'Elysia',
+									'@paymesh/elysia',
+									'Use the raw request object from the route context.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'route-shape',
+				title: 'Route Shape',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={nextAdapterSnippet}
+							filename="app/api/webhooks/route.ts"
+						/>
+						<Paragraph>
+							All adapters normalize into the same webhook hook contract, so
+							your business logic does not change when you move between
+							frameworks.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'failure-modes',
+				title: 'Failure Modes',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Problem', 'Result']}
+							rows={[
+								['Bad signature', 'HTTP 401 and invalid_webhook_signature'],
+								['Malformed payload', 'HTTP 400 and webhook_parse_error'],
+								['Mapping error', 'HTTP 400 and webhook_mapping_error'],
+								['User hook crash', 'HTTP 500 and hook_error'],
+							]}
+						/>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Guides',
+		slug: ['guides', 'plugins'],
+		title: 'Use Plugins',
+		description:
+			'Add dashboards, audit trails, and other cross-cutting behavior without bloating the core client or provider contract.',
+		sections: [
+			{
+				id: 'what-plugins-are',
+				title: 'What Plugins Are',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Plugins extend the client. They can add routes, hooks, database
+							tables, or lazy runtime features while still keeping provider
+							behavior separate from application code.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'create-plugin',
+				title: 'Create a Plugin',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={pluginAuthoringSnippet}
+							filename="src/plugins/example.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'plugin-rules',
+				title: 'Plugin Rules',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>Keep plugin state isolated to the plugin boundary.</li>
+							<li>
+								Use hooks for event-driven behavior and setup for runtime
+								wiring.
+							</li>
+							<li>Prefer lazy runtime extensions for optional features.</li>
+							<li>Use custom tables when the plugin needs persistence.</li>
+						</BulletList>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Guides',
+		slug: ['guides', 'database'],
+		title: 'Set Up Database Persistence',
+		description:
+			'Choose the right database adapter, decide when to persist raw payloads, and model custom schema extensions without fighting the core client.',
+		sections: [
+			{
+				id: 'adapter-matrix',
+				title: 'Adapter Matrix',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Adapter', 'Use When', 'Persist Raw']}
+							rows={[
+								[
+									'@paymesh/postgres',
+									'You want direct PostgreSQL access.',
+									'Yes',
+								],
+								[
+									'@paymesh/drizzle',
+									'You already own a Drizzle session.',
+									'Yes',
+								],
+								['@paymesh/prisma', 'You already own a Prisma client.', 'Yes'],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'schema-extension',
+				title: 'Schema Extension',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={databaseSchemaSnippet}
+							filename="src/lib/paymesh.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'rules',
+				title: 'Persistence Rules',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>
+								Use `persistRaw` only when you need provider payloads later.
+							</li>
+							<li>Prefer custom tables for plugin-owned data.</li>
+							<li>
+								Keep migrations alongside the rest of your application schema.
+							</li>
+							<li>Use a single database adapter per client instance.</li>
+						</BulletList>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Guides',
+		slug: ['guides', 'testing'],
+		title: 'Test Billing Integrations',
+		description:
+			'Validate webhook routes, provider configuration, and database persistence with a testing approach that mirrors production behavior.',
+		sections: [
+			{
+				id: 'what-to-test',
+				title: 'What to Test',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>Webhook verification and normalized hook dispatch.</li>
+							<li>Payment and customer flows for the active provider.</li>
+							<li>Database persistence and raw payload behavior.</li>
+							<li>Plugin side effects like dashboards and audit logs.</li>
+						</BulletList>
+					</div>
+				),
+			},
+			{
+				id: 'fixtures',
+				title: 'Fixture Strategy',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={`const result = await client.webhooks.handle({
+  request,
+  hooks: {
+    async onPaymentSucceeded(event) {
+      expect(event.type).toBe("payment.succeeded");
+    },
+  },
+});`}
+							filename="test/webhooks.test.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'local-development',
+				title: 'Local Development',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Run webhook routes locally with a real raw request body and verify
+							the same code path you will use in production. That catches body
+							parsing and signature issues early.
+						</Paragraph>
+					</div>
+				),
+			},
+		],
+	},
+];
+
+const adapterPages: DocPage[] = [
+	{
+		group: 'Adapters',
+		slug: ['adapters', 'next'],
+		title: 'Next.js Adapter',
+		description:
+			'Mount Paymesh webhooks inside Next.js App Router routes with a route handler that returns normalized responses.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={nextAdapterSnippet}
+							filename="app/api/webhooks/route.ts"
+						/>
+						<Paragraph>
+							Use the adapter when your webhook endpoint lives in App Router and
+							you want a small route file with no manual verification logic.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'contract',
+				title: 'Contract',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="n1">client</InlineCode>,
+									'Required Paymesh client.',
+								],
+								[
+									<InlineCode key="n2">includeRaw</InlineCode>,
+									'Propagate raw payloads to hooks.',
+								],
+								[
+									<InlineCode key="n3">hooks</InlineCode>,
+									'Normalized event handlers.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'notes',
+				title: 'Notes',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Next adapters return a standard Route Handler. They fit best when
+							you already use Next for the rest of the billing surface.
+						</Paragraph>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Adapters',
+		slug: ['adapters', 'express'],
+		title: 'Express Adapter',
+		description:
+			'Handle Paymesh webhooks inside Express middleware stacks while keeping raw request handling explicit.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={expressAdapterSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'body',
+				title: 'Raw Body',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Express must preserve the raw webhook body so signature
+							verification can reconstruct the exact payload that came from the
+							provider.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'hooks',
+				title: 'Hooks',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Hook', 'Use For', 'Notes']}
+							rows={hookRows.slice(0, 4)}
+						/>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Adapters',
+		slug: ['adapters', 'fastify'],
+		title: 'Fastify Adapter',
+		description:
+			'Use Paymesh with Fastify while preserving raw payload handling and the framework’s request lifecycle.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={fastifyAdapterSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'raw',
+				title: 'Raw Payload Handling',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Enable raw body handling for webhook routes. Without it, signature
+							verification cannot validate the incoming payload reliably.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'failure',
+				title: 'Failure Cases',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Case', 'Result']}
+							rows={[
+								['Signature mismatch', '401 invalid_webhook_signature'],
+								['Invalid payload', '400 webhook_parse_error'],
+								['Hook exception', '500 hook_error'],
+							]}
+						/>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Adapters',
+		slug: ['adapters', 'hono'],
+		title: 'Hono Adapter',
+		description:
+			'Use Paymesh on Hono when you want a small edge-friendly webhook integration with no extra glue.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={honoAdapterSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'request-flow',
+				title: 'Request Flow',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Hono exposes the raw request on{' '}
+							<InlineCode>context.req.raw</InlineCode>, which maps directly into
+							Paymesh webhook handling.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'hooks',
+				title: 'Hooks',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Hook', 'Meaning', 'Available']}
+							rows={hookRows.slice(0, 5)}
+						/>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Adapters',
+		slug: ['adapters', 'elysia'],
+		title: 'Elysia Adapter',
+		description:
+			'Elysia is the Bun-first adapter for Paymesh, with a simple route signature and normalized webhook handling.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={elysiaAdapterSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'request',
+				title: 'Request Object',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Elysia passes the raw <InlineCode>request</InlineCode> into
+							Paymesh, so webhook verification and event mapping happen without
+							extra body parsing steps.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'hooks',
+				title: 'Hooks',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Hook', 'Typical Use', 'Status']}
+							rows={hookRows.slice(0, 6)}
+						/>
+					</div>
+				),
+			},
+		],
+	},
+];
+
+const databasePages: DocPage[] = [
+	{
+		group: 'Database',
+		slug: ['database', 'overview'],
+		title: 'Database Overview',
+		description:
+			'Understand how Paymesh persists normalized billing state, custom tables, and plugin-owned data across supported database adapters.',
+		sections: [
+			{
+				id: 'model',
+				title: 'Storage Model',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The database layer persists normalized customers, checkouts,
+							webhook deliveries, subscriptions, catalog data, and plugin-owned
+							records. It is optional, but it is the right home for durable
+							billing state.
+						</Paragraph>
+						<DocTable
+							headers={['Built-in Table', 'Purpose']}
+							rows={[
+								['customers', 'Persist normalized customer records.'],
+								['checkouts', 'Persist payment/checkouts.'],
+								['pix', 'Persist PIX-specific payments.'],
+								['webhookEvents', 'Persist webhook deliveries and ids.'],
+								[
+									'subscriptions',
+									'Persist subscription state where supported.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'schema',
+				title: 'Schema Customization',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={databaseSchemaSnippet}
+							filename="src/lib/paymesh.ts"
+						/>
+						<Paragraph>
+							Use custom tables when a plugin needs its own durable storage, and
+							use table overrides when you need to align Paymesh with an
+							existing database naming convention.
+						</Paragraph>
+					</div>
+				),
+			},
+			{
+				id: 'transactions',
+				title: 'Transactions',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Adapters expose transactions so you can keep provider sync and
+							local persistence atomic when your use case needs it.
+						</Paragraph>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Database',
+		slug: ['database', 'postgres'],
+		title: 'Postgres Adapter',
+		description:
+			'Use PostgreSQL directly with Paymesh when you want the shortest path to durable billing state.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={postgresSnippet}
+							filename="src/server/database.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'options',
+				title: 'Options',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="pg1">connection</InlineCode>,
+									'Connection string or pg Pool.',
+								],
+								[
+									<InlineCode key="pg2">persistRaw</InlineCode>,
+									'Persist raw provider payloads.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'when',
+				title: 'When to Use It',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>You want minimal adapter surface.</li>
+							<li>You are already standardized on Postgres.</li>
+							<li>You want a first-party adapter with predictable behavior.</li>
+						</BulletList>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Database',
+		slug: ['database', 'drizzle'],
+		title: 'Drizzle Adapter',
+		description:
+			'Use an existing Drizzle session to back Paymesh without introducing a separate persistence stack.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={drizzleAdapterSnippet}
+							filename="src/server/database.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'options',
+				title: 'Options',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="dr1">persistRaw</InlineCode>,
+									'Keep raw provider payloads in the database.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'notes',
+				title: 'Notes',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							This adapter is a fit when you already have Drizzle at the center
+							of your data layer and want Paymesh to share that same database
+							transaction model.
+						</Paragraph>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Database',
+		slug: ['database', 'prisma'],
+		title: 'Prisma Adapter',
+		description:
+			'Reuse an existing Prisma client for Paymesh persistence while keeping provider logic separate.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={prismaAdapterSnippet}
+							filename="src/server/database.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'options',
+				title: 'Options',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="pr1">persistRaw</InlineCode>,
+									'Persist raw provider payloads.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'notes',
+				title: 'Notes',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The Prisma adapter uses raw query and transaction APIs to
+							integrate with Paymesh’s repository contract. It is best when
+							Prisma is already the persistence boundary for the application.
+						</Paragraph>
+					</div>
+				),
+			},
+		],
+	},
+];
+
+const pluginPages: DocPage[] = [
+	{
+		group: 'Plugins',
+		slug: ['plugins', 'dash'],
+		title: 'Dash Plugin',
+		description:
+			'Add a Paymesh dashboard to your application and control access through a request-aware auth callback.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={dashPluginSnippet}
+							filename="src/server/plugins.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'auth',
+				title: 'Auth Callback',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The <InlineCode>auth</InlineCode> callback receives
+							<InlineCode>request</InlineCode> and{' '}
+							<InlineCode>client</InlineCode>. The request gives you headers,
+							cookies, and any app-specific identity context you need to decide
+							whether the dashboard should render.
+						</Paragraph>
+						<DocTable
+							headers={['Argument', 'Purpose']}
+							rows={[
+								[
+									<InlineCode key="dash-req">request</InlineCode>,
+									'Use request metadata for auth decisions.',
+								],
+								[
+									<InlineCode key="dash-client">client</InlineCode>,
+									'Access the Paymesh client and provider metadata.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'runtime',
+				title: 'Runtime Behavior',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>
+								Mount with <InlineCode>Dashboard(client)</InlineCode>.
+							</li>
+							<li>
+								Use a custom path when the dashboard should not live at
+								`/admin/paymesh`.
+							</li>
+							<li>Keep actor objects minimal and stable.</li>
+						</BulletList>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Plugins',
+		slug: ['plugins', 'audit-logs'],
+		title: 'Audit Logs Plugin',
+		description:
+			'Persist normalized Paymesh events as audit records with request-aware actors, filters, retention, and batching.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<DocCodeBlock
+							code={auditLogPluginSnippet}
+							filename="src/server/plugins.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'options',
+				title: 'Options',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="a1">events</InlineCode>,
+									'Include event patterns.',
+								],
+								[
+									<InlineCode key="a2">exclude</InlineCode>,
+									'Exclude event patterns.',
+								],
+								[
+									<InlineCode key="a3">mode</InlineCode>,
+									'sync or async persistence.',
+								],
+								[
+									<InlineCode key="a4">failureMode</InlineCode>,
+									'throw, warn, or ignore.',
+								],
+								[
+									<InlineCode key="a5">retention</InlineCode>,
+									'30d, 90d, 180d, 1y, or forever.',
+								],
+								[
+									<InlineCode key="a6">includeRequestInfo</InlineCode>,
+									'Capture request metadata.',
+								],
+								[
+									<InlineCode key="a7">includeDiff</InlineCode>,
+									'Capture diff information.',
+								],
+								[
+									<InlineCode key="a8">batch</InlineCode>,
+									'Batch entries before persistence.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'actor-resolver',
+				title: 'Actor Resolver',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The actor resolver can use the request, the normalized event, or
+							the input entry to decide who caused the logged action.
+						</Paragraph>
+						<DocTable
+							headers={['Field', 'Use']}
+							rows={[
+								[
+									<InlineCode key="actor-req">request</InlineCode>,
+									'Identity and session context.',
+								],
+								[
+									<InlineCode key="actor-event">event</InlineCode>,
+									'Webhook data and normalized type.',
+								],
+								[
+									<InlineCode key="actor-input">input</InlineCode>,
+									'Manual audit entry payload.',
+								],
+								[
+									<InlineCode key="actor-client">client</InlineCode>,
+									'Provider and plugin context.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'manual-entries',
+				title: 'Manual Entries',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Use manual entries for internal actions that are not coming from a
+							webhook, like invoicing, support operations, or administrative
+							side effects.
+						</Paragraph>
+						<DocCodeBlock
+							code={`await client.auditLog.create({
+  action: "invoice.sent",
+  resource: {
+    type: "invoice",
+    id: "inv_123",
+  },
+  message: "Invoice sent to customer",
+});`}
+							filename="src/server/audit-log.ts"
+						/>
+					</div>
+				),
+			},
+		],
+	},
+];
+
+const docsNavigation: DocNavGroup[] = [
+	{
+		title: 'Get Started',
+		items: [
+			{ label: 'Introduction', slug: ['introduction'] },
+			{ label: 'Installation', slug: ['installation'] },
+			{ label: 'Basic Usage', slug: ['basic-usage'] },
+			{ label: 'Comparison', slug: ['comparison'] },
+		],
+	},
+	{
+		title: 'Concepts',
+		items: [
+			{ label: 'API', slug: ['concepts', 'api'] },
+			{ label: 'Client', slug: ['concepts', 'client'] },
+			{ label: 'TypeScript', slug: ['concepts', 'typescript'] },
+			{ label: 'Hooks', slug: ['concepts', 'hooks'] },
+			{ label: 'Customers', slug: ['concepts', 'customers'] },
+			{ label: 'PIX', slug: ['concepts', 'pix'] },
+			{ label: 'Payment Providers', slug: ['concepts', 'payment-providers'] },
+		],
+	},
+	{
+		title: 'Guides',
+		items: [
+			{ label: 'Provider Selection', slug: ['guides', 'provider-selection'] },
+			{ label: 'Webhooks', slug: ['guides', 'webhooks'] },
+			{ label: 'Plugins', slug: ['guides', 'plugins'] },
+			{ label: 'Database', slug: ['guides', 'database'] },
+			{ label: 'Testing', slug: ['guides', 'testing'] },
+		],
+	},
+	{
+		title: 'Providers',
+		items: [
+			{ label: 'Stripe', slug: ['providers', 'stripe'] },
+			{ label: 'Polar', slug: ['providers', 'polar'] },
+			{
+				label: 'AbacatePay',
+				slug: ['providers', 'abacatepay'],
+				status: 'coming-soon',
+			},
+			{ label: 'PayPal', slug: ['providers', 'paypal'], status: 'coming-soon' },
+			{ label: 'Dodo', slug: ['providers', 'dodo'], status: 'coming-soon' },
+		],
+	},
+	{
+		title: 'Adapters',
+		items: [
+			{ label: 'Next', slug: ['adapters', 'next'] },
+			{ label: 'Express', slug: ['adapters', 'express'] },
+			{ label: 'Fastify', slug: ['adapters', 'fastify'] },
+			{ label: 'Hono', slug: ['adapters', 'hono'] },
+			{ label: 'Elysia', slug: ['adapters', 'elysia'] },
+		],
+	},
+	{
+		title: 'Plugins',
+		items: [
+			{ label: 'Overview', slug: ['plugins'] },
+			{ label: 'Dash', slug: ['plugins', 'dash'] },
+			{ label: 'Audit Logs', slug: ['plugins', 'audit-logs'] },
+			{ label: 'Create a Plugin', slug: ['guides', 'plugin-authoring'] },
+		],
+	},
+	{
+		title: 'Database',
+		items: [
+			{ label: 'Overview', slug: ['database', 'overview'] },
+			{ label: 'Postgres', slug: ['database', 'postgres'] },
+			{ label: 'Drizzle', slug: ['database', 'drizzle'] },
+			{ label: 'Prisma', slug: ['database', 'prisma'] },
+		],
+	},
 ];
 
 const errorRows: ReactNode[][] = [
@@ -540,7 +1886,7 @@ const capabilityRows: ReactNode[][] = [
 	],
 	[
 		<InlineCode key="cap-customers">customers</InlineCode>,
-		'Create, fetch, update, and delete customers.',
+		'Upsert, fetch, list, and delete customers.',
 	],
 	[
 		<InlineCode key="cap-webhooks">webhooks</InlineCode>,
@@ -581,7 +1927,7 @@ const stripeCapabilityRows: ReactNode[][] = [
 		<StatusPill key="s2" tone="success">
 			Available
 		</StatusPill>,
-		'Create, get, update, and delete Stripe customers.',
+		'Upsert, get, and delete Stripe customers.',
 	],
 	[
 		<InlineCode key="str-cap3">webhooks</InlineCode>,
@@ -640,6 +1986,79 @@ const stripeEventRows: ReactNode[][] = [
 	['customer.deleted', 'customer.deleted', 'onCustomerDeleted'],
 ];
 
+const polarCapabilityRows: ReactNode[][] = [
+	[
+		<InlineCode key="polar-cap1">checkout</InlineCode>,
+		<StatusPill key="polar-s1" tone="success">
+			Available
+		</StatusPill>,
+		'Creates Polar checkouts through /v1/checkouts.',
+	],
+	[
+		<InlineCode key="polar-cap2">customers</InlineCode>,
+		<StatusPill key="polar-s2" tone="success">
+			Available
+		</StatusPill>,
+		'Upserts, fetches, and deletes Polar customers.',
+	],
+	[
+		<InlineCode key="polar-cap3">webhooks</InlineCode>,
+		<StatusPill key="polar-s3" tone="success">
+			Available
+		</StatusPill>,
+		'Verifies webhook-id and webhook-signature headers before dispatching normalized hooks.',
+	],
+	[
+		<InlineCode key="polar-cap4">refunds</InlineCode>,
+		<StatusPill key="polar-s4" tone="success">
+			Advertised
+		</StatusPill>,
+		'Refund events are normalized from Polar webhook payloads.',
+	],
+	[
+		<InlineCode key="polar-cap5">subscriptions</InlineCode>,
+		<StatusPill key="polar-s5" tone="success">
+			Advertised
+		</StatusPill>,
+		'Subscription webhook events are normalized into Paymesh hooks.',
+	],
+	[
+		<InlineCode key="polar-cap6">customerPortal</InlineCode>,
+		<StatusPill key="polar-s6" tone="success">
+			Advertised
+		</StatusPill>,
+		'Polar exposes a dashboard resource link through the provider adapter.',
+	],
+	[
+		<InlineCode key="polar-cap7">coupons</InlineCode>,
+		<StatusPill key="polar-s7" tone="success">
+			Advertised
+		</StatusPill>,
+		'Capability is declared for product-led billing workflows.',
+	],
+	[
+		<InlineCode key="polar-cap8">pix</InlineCode>,
+		<StatusPill key="polar-s8" tone="default">
+			False
+		</StatusPill>,
+		'Polar does not expose PIX through this adapter.',
+	],
+];
+
+const polarEventRows: ReactNode[][] = [
+	['checkout.created', 'payment.created', 'onPaymentCreated'],
+	['checkout.updated', 'checkout.completed', 'onCheckoutCompleted'],
+	['order.created', 'payment.created', 'onPaymentCreated'],
+	['order.paid', 'payment.succeeded', 'onPaymentSucceeded'],
+	['order.refunded', 'payment.refunded', 'onPaymentRefunded'],
+	['customer.created', 'customer.created', 'onCustomerCreated'],
+	['customer.updated', 'customer.updated', 'onCustomerUpdated'],
+	['customer.deleted', 'customer.deleted', 'onCustomerDeleted'],
+	['subscription.created', 'subscription.created', 'onSubscriptionCreated'],
+	['subscription.updated', 'subscription.updated', 'onSubscriptionUpdated'],
+	['subscription.canceled', 'subscription.canceled', 'onSubscriptionCanceled'],
+];
+
 const docsPages: DocPage[] = [
 	{
 		group: 'Get Started',
@@ -656,7 +2075,7 @@ const docsPages: DocPage[] = [
 						<Paragraph>
 							Paymesh gives you a normalized client for payments, customers, and
 							webhooks so application code does not have to know whether the
-							upstream provider is Stripe today or something else tomorrow.
+							upstream provider is Stripe, Polar, or something else tomorrow.
 						</Paragraph>
 						<Paragraph>
 							The core boundary is deliberate: your product code talks to{' '}
@@ -697,9 +2116,10 @@ const docsPages: DocPage[] = [
 							</li>
 						</BulletList>
 						<Callout title="Current scope">
-							Today the repo ships the core client, Stripe provider, and webhook
-							adapters. The docs below distinguish between what already exists
-							and what is on the roadmap.
+							Today the repo ships the core client, Stripe and Polar providers,
+							webhook adapters, dashboard and audit-log plugins, and the
+							Postgres database adapter. The docs below distinguish between what
+							already exists and what is on the roadmap.
 						</Callout>
 					</div>
 				),
@@ -717,12 +2137,16 @@ const docsPages: DocPage[] = [
 									'Core client, shared request handling, provider contract, and normalized types.',
 								],
 								[
-									'@paymesh/stripe',
-									'Provider implementation for payments, customers, and webhook mapping.',
+									'@paymesh/stripe / @paymesh/polar',
+									'Provider implementations for payments, customers, catalogs, dashboards, and webhook mapping.',
 								],
 								[
 									'@paymesh/next / express / hono / fastify / elysia',
 									'Framework-specific webhook adapters that validate, parse, map, and dispatch hooks.',
+								],
+								[
+									'@paymesh/dash / @paymesh/audit-logs / @paymesh/postgres',
+									'Optional plugins and database adapters that extend the core client without changing the provider contract.',
 								],
 							]}
 						/>
@@ -751,7 +2175,9 @@ const docsPages: DocPage[] = [
 						<Paragraph>
 							Paymesh is split into a core package plus provider and framework
 							adapter packages. Most applications need exactly three pieces: the
-							core client, one provider, and one webhook adapter.
+							core client, one provider, and one webhook adapter. Add the
+							Postgres adapter when you want normalized billing state persisted
+							locally.
 						</Paragraph>
 						<DocTable
 							headers={['Package', 'Use When']}
@@ -763,6 +2189,10 @@ const docsPages: DocPage[] = [
 								[
 									<InlineCode key="pkg-stripe">@paymesh/stripe</InlineCode>,
 									'You are using Stripe as the upstream payment provider.',
+								],
+								[
+									<InlineCode key="pkg-polar">@paymesh/polar</InlineCode>,
+									'You are using Polar as the upstream merchant-of-record provider.',
 								],
 								[
 									<InlineCode key="pkg-next">@paymesh/next</InlineCode>,
@@ -784,6 +2214,22 @@ const docsPages: DocPage[] = [
 									<InlineCode key="pkg-elysia">@paymesh/elysia</InlineCode>,
 									'Your webhook endpoint runs in Elysia.',
 								],
+								[
+									<InlineCode key="pkg-dash">@paymesh/dash</InlineCode>,
+									'You want the built-in dashboard plugin for local admin workflows.',
+								],
+								[
+									<InlineCode key="pkg-audit">@paymesh/audit-logs</InlineCode>,
+									'You want structured audit logging for Paymesh events and internal actions.',
+								],
+								[
+									<InlineCode key="pkg-postgres">@paymesh/postgres</InlineCode>,
+									'You want to store Paymesh billing state in PostgreSQL through an existing pool or connection string.',
+								],
+								[
+									<InlineCode key="pkg-pg">pg</InlineCode>,
+									'You are using the Postgres adapter and need the underlying PostgreSQL client.',
+								],
 							]}
 						/>
 					</div>
@@ -800,9 +2246,11 @@ const docsPages: DocPage[] = [
 							lang="bash"
 						/>
 						<Paragraph>
-							The docs use Stripe because it is the first shipped provider in
-							this repo. Future provider pages keep the same shape so the setup
-							process remains familiar.
+							The docs use Stripe as the reference provider and Polar as the
+							merchant-of-record option that is already shipped in this repo. If
+							you want a persisted local database layer, add the Postgres
+							adapter alongside the provider package. Future provider pages keep
+							the same shape so the setup process remains familiar.
 						</Paragraph>
 					</div>
 				),
@@ -831,13 +2279,35 @@ const docsPages: DocPage[] = [
 									</StatusPill>,
 									'Used by Stripe webhook verification to validate stripe-signature.',
 								],
+								[
+									<InlineCode key="env-polar-token">
+										POLAR_ACCESS_TOKEN
+									</InlineCode>,
+									<StatusPill key="req-polar-token" tone="success">
+										Yes
+									</StatusPill>,
+									'Default bearer token used by polar() for authenticated API calls.',
+								],
+								[
+									<InlineCode key="env-polar-webhook">
+										POLAR_WEBHOOK_SECRET
+									</InlineCode>,
+									<StatusPill key="req-polar-webhook" tone="success">
+										For webhooks
+									</StatusPill>,
+									'Used by Polar webhook verification to validate webhook signatures.',
+								],
 							]}
 						/>
 						<Callout title="Accuracy matters">
 							The current Stripe provider reads{' '}
 							<InlineCode>STRIPE_API_KEY</InlineCode> by default, not{' '}
 							<InlineCode>STRIPE_SECRET_KEY</InlineCode>. The docs here follow
-							the implementation in this repo.
+							the implementation in this repo. Polar uses{' '}
+							<InlineCode>POLAR_ACCESS_TOKEN</InlineCode> and optional{' '}
+							<InlineCode>POLAR_WEBHOOK_SECRET</InlineCode>. Postgres uses a
+							connection string or pool from{' '}
+							<InlineCode>@paymesh/postgres</InlineCode>.
 						</Callout>
 					</div>
 				),
@@ -853,16 +2323,24 @@ const docsPages: DocPage[] = [
 								<InlineCode>createClient()</InlineCode> once.
 							</li>
 							<li>
-								Point it at a provider package, starting with Stripe if you are
-								following the live docs.
+								Point it at a provider package, starting with Stripe or Polar if
+								you are following the live docs.
 							</li>
 							<li>
 								Use the client in payment and customer flows instead of calling
 								provider SDKs directly.
 							</li>
 							<li>
+								Add the Postgres adapter when you want normalized billing state
+								persisted locally.
+							</li>
+							<li>
 								Add a framework webhook route using the adapter package that
 								matches your server runtime.
+							</li>
+							<li>
+								Add optional plugins and a database adapter when you need the
+								dashboard, audit trail, or persisted billing state.
 							</li>
 						</OrderedList>
 					</div>
@@ -933,18 +2411,70 @@ const docsPages: DocPage[] = [
 				),
 			},
 			{
-				id: 'webhooks',
-				title: 'Handle Webhooks in Next.js',
+				id: 'pix',
+				title: 'Work with PIX',
 				content: (
 					<div className="space-y-4">
 						<Paragraph>
-							The Next.js adapter handles signature verification, JSON parsing,
+							Use <InlineCode>client.pix.create()</InlineCode> when you need a
+							native PIX flow with QR code and copia e cola details. It sits
+							next to payments instead of replacing them.
+						</Paragraph>
+						<DocCodeBlock code={pixSnippet} filename="src/server/pix.ts" />
+					</div>
+				),
+			},
+			{
+				id: 'webhooks',
+				title: 'Handle Webhooks in Elysia',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The Elysia adapter handles signature verification, JSON parsing,
 							event normalization, and hook dispatch. Your route only defines
 							what to do with the normalized event.
 						</Paragraph>
 						<DocCodeBlock
-							code={nextWebhookSnippet}
-							filename="app/api/webhooks/stripe/route.ts"
+							code={elysiaWebhookSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'plugins',
+				title: 'Use Plugins',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The plugin layer is the right place for dashboards, audit trails,
+							and other optional integrations that should extend the client
+							instead of bloating the core surface.
+						</Paragraph>
+						<DocCodeBlock
+							code={dashPluginSnippet}
+							filename="src/server/plugins/dash.ts"
+						/>
+						<DocCodeBlock
+							code={auditLogPluginSnippet}
+							filename="src/server/plugins/audit-logs.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'postgres-database',
+				title: 'Use Postgres as Database',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							If you already use PostgreSQL for the rest of the app, the Paymesh
+							adapter can persist billing state in the same database layer with
+							an existing pool or connection string.
+						</Paragraph>
+						<DocCodeBlock
+							code={postgresSnippet}
+							filename="src/server/database.ts"
 						/>
 					</div>
 				),
@@ -1430,8 +2960,8 @@ rawPayment.raw; // provider payload`}
 							</li>
 						</OrderedList>
 						<DocCodeBlock
-							code={nextWebhookSnippet}
-							filename="app/api/webhooks/stripe/route.ts"
+							code={elysiaWebhookSnippet}
+							filename="src/server/webhooks.ts"
 						/>
 					</div>
 				),
@@ -1499,7 +3029,7 @@ rawPayment.raw; // provider payload`}
 		sections: [
 			{
 				id: 'crud',
-				title: 'CRUD Surface',
+				title: 'Upsert Surface',
 				content: (
 					<div className="space-y-4">
 						<DocCodeBlock
@@ -1507,7 +3037,7 @@ rawPayment.raw; // provider payload`}
 							filename="src/server/customers.ts"
 						/>
 						<Paragraph>
-							The client currently exposes create, get, update, and delete for
+							The client currently exposes upsert, get, list, and delete for
 							customers. Those methods map to provider operations while keeping
 							the response shape normalized.
 						</Paragraph>
@@ -1578,9 +3108,9 @@ rawPayment.raw; // provider payload`}
 				content: (
 					<div className="space-y-4">
 						<Paragraph>
-							The same includeRaw rules apply here. If you need the full Stripe
-							customer object during migration, opt in per call instead of
-							leaking that requirement everywhere.
+							The same includeRaw rules apply here. If you need the full
+							provider customer object during migration, opt in per call instead
+							of leaking that requirement everywhere.
 						</Paragraph>
 					</div>
 				),
@@ -1645,10 +3175,10 @@ rawPayment.raw; // provider payload`}
 								],
 								[
 									'Polar',
-									<StatusPill key="ps2" tone="soon">
-										Coming Soon
+									<StatusPill key="ps2" tone="success">
+										Available
 									</StatusPill>,
-									'Planned merchant-of-record style integration.',
+									'Shipped merchant-of-record provider with checkout, customers, webhooks, and dashboard sync.',
 								],
 								[
 									'AbacatePay',
@@ -1673,6 +3203,87 @@ rawPayment.raw; // provider payload`}
 								],
 							]}
 						/>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Concepts',
+		slug: ['concepts', 'pix'],
+		title: 'PIX',
+		description:
+			'PIX is a first-class payment method in Paymesh, with its own normalized payment shape, provider support, and raw payload behavior.',
+		sections: [
+			{
+				id: 'overview',
+				title: 'Overview',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							PIX lives alongside cards and checkout sessions in the Paymesh
+							client. It is a dedicated payment flow, not a provider-specific
+							afterthought.
+						</Paragraph>
+						<DocCodeBlock code={pixSnippet} filename="src/server/pix.ts" />
+					</div>
+				),
+			},
+			{
+				id: 'shape',
+				title: 'Normalized Shape',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Field', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="pix-id">id</InlineCode>,
+									'Provider payment id.',
+								],
+								[
+									<InlineCode key="pix-method">method</InlineCode>,
+									'Always pix for PIX payments.',
+								],
+								[
+									<InlineCode key="pix-copy">copyPasteCode</InlineCode>,
+									'The copia e cola string.',
+								],
+								[
+									<InlineCode key="pix-qr-png">qrCodeImageUrlPng</InlineCode>,
+									'PNG QR code URL.',
+								],
+								[
+									<InlineCode key="pix-qr-svg">qrCodeImageUrlSvg</InlineCode>,
+									'SVG QR code URL.',
+								],
+								[
+									<InlineCode key="pix-exp">expiresAt</InlineCode>,
+									'Expiration timestamp when provided.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'provider-support',
+				title: 'Provider Support',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Provider', 'Support']}
+							rows={[
+								['Stripe', 'Available'],
+								['Polar', 'Unavailable'],
+								['AbacatePay', 'Planned'],
+							]}
+						/>
+						<Callout title="Important">
+							Providers decide whether PIX is available. The client keeps the
+							same `client.pix` surface either way so your app code does not
+							need to branch around provider-specific payment method names.
+						</Callout>
 					</div>
 				),
 			},
@@ -1785,9 +3396,9 @@ rawPayment.raw; // provider payload`}
 				content: (
 					<div className="space-y-4">
 						<Paragraph>
-							The Stripe provider supports create, get, update, and delete for
-							customers through <InlineCode>/v1/customers</InlineCode> and
-							related resource endpoints.
+							The Stripe provider supports upsert, get, and delete for customers
+							through <InlineCode>/v1/customers</InlineCode> and related
+							resource endpoints.
 						</Paragraph>
 						<DocCodeBlock
 							code={customerSnippet}
@@ -1809,8 +3420,8 @@ rawPayment.raw; // provider payload`}
 							timing-safe equality.
 						</Paragraph>
 						<DocCodeBlock
-							code={nextWebhookSnippet}
-							filename="app/api/webhooks/stripe/route.ts"
+							code={elysiaWebhookSnippet}
+							filename="src/server/webhooks.ts"
 						/>
 						<DocTable
 							headers={['Stripe Event', 'Normalized Event', 'Hook']}
@@ -1834,25 +3445,183 @@ rawPayment.raw; // provider payload`}
 			},
 		],
 	},
+	{
+		group: 'Providers',
+		slug: ['providers', 'polar'],
+		title: 'Polar',
+		description:
+			'Polar is a shipped Paymesh provider for product-led billing, customer operations, and normalized webhook handling.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The Polar provider lives in{' '}
+							<InlineCode>@paymesh/polar</InlineCode> and reads{' '}
+							<InlineCode>POLAR_ACCESS_TOKEN</InlineCode> and optional{' '}
+							<InlineCode>POLAR_WEBHOOK_SECRET</InlineCode> by default.
+						</Paragraph>
+						<DocCodeBlock
+							code={polarSetupSnippet}
+							filename="src/lib/paymesh.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'options',
+				title: 'Provider Options',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="po-opt1">accessToken</InlineCode>,
+									'Overrides the default POLAR_ACCESS_TOKEN secret.',
+								],
+								[
+									<InlineCode key="po-opt2">webhookSecret</InlineCode>,
+									'Overrides POLAR_WEBHOOK_SECRET for signature verification.',
+								],
+								[
+									<InlineCode key="po-opt3">baseUrl</InlineCode>,
+									'Overrides Polar base URL, useful in tests.',
+								],
+								[
+									<InlineCode key="po-opt4">retry</InlineCode>,
+									'Retry policy passed through to shared request().',
+								],
+								[
+									<InlineCode key="po-opt5">timeout</InlineCode>,
+									'Request timeout in milliseconds.',
+								],
+								[
+									<InlineCode key="po-opt6">fetch</InlineCode>,
+									'Custom fetch implementation for server/runtime customization.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'capabilities',
+				title: 'Capabilities',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Capability', 'Status', 'Notes']}
+							rows={polarCapabilityRows}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'payments',
+				title: 'Checkout Flow',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Polar checkout creation requires at least one product id in{' '}
+							<InlineCode>productIds</InlineCode>. The adapter maps Polar
+							checkouts into normalized Paymesh payment objects with checkout
+							urls, customer context, and metadata.
+						</Paragraph>
+						<DocCodeBlock
+							code={polarPaymentsSnippet}
+							filename="src/server/payments.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'customers',
+				title: 'Customer Operations',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Polar customer management uses the same normalized
+							<InlineCode>upsert</InlineCode>, <InlineCode>get</InlineCode>, and{' '}
+							<InlineCode>delete</InlineCode> contract that the rest of Paymesh
+							expects.
+						</Paragraph>
+						<DocCodeBlock
+							code={polarCustomersSnippet}
+							filename="src/server/customers.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'dashboard',
+				title: 'Dashboard Sync',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Polar includes dashboard sync helpers so teams can link back to
+							the Polar dashboard and keep payment or subscription state in sync
+							with the local database.
+						</Paragraph>
+						<DocTable
+							headers={['Helper', 'Purpose']}
+							rows={[
+								[
+									'dashboard.getResourceUrl()',
+									'Returns the Polar dashboard URL.',
+								],
+								[
+									'dashboard.syncPayment()',
+									'Synchronizes a payment into the local database.',
+								],
+								[
+									'dashboard.syncSubscription()',
+									'Synchronizes a subscription into the local database.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'webhooks',
+				title: 'Webhook Mapping',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Polar webhooks verify the webhook-id, webhook-timestamp, and
+							webhook-signature headers before mapping checkout, order,
+							customer, and subscription events into normalized Paymesh hooks.
+						</Paragraph>
+						<DocCodeBlock
+							code={polarWebhookSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+						<DocTable
+							headers={['Polar Event', 'Normalized Event', 'Hook']}
+							rows={polarEventRows}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'raw',
+				title: 'Raw Mode',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							When <InlineCode>includeRaw</InlineCode> is enabled, Polar
+							attaches the original checkout, order, customer, or subscription
+							payload to the normalized result.
+						</Paragraph>
+					</div>
+				),
+			},
+		],
+	},
 	...[
-		{
-			slug: ['providers', 'polar'],
-			title: 'Polar',
-			packageName: '@paymesh/polar',
-			notes:
-				'Planned merchant-of-record oriented adapter with normalized payment and webhook flows.',
-			targets: [
-				'Provider package with normalized checkout and customer flows.',
-				'Webhook adapter compatibility through the same core hook surface.',
-				'Migration-friendly path for teams that want MoR without app-level rewrites.',
-			],
-			capabilities: [
-				['checkout', 'planned'],
-				['customers', 'planned'],
-				['webhooks', 'planned'],
-				['subscriptions', 'planned'],
-			] as const,
-		},
 		{
 			slug: ['providers', 'abacatepay'],
 			title: 'AbacatePay',
@@ -1991,45 +3760,52 @@ rawPayment.raw; // provider payload`}
 		group: 'Plugins',
 		slug: ['plugins'],
 		title: 'Plugins',
-		status: 'coming-soon',
+		status: 'available',
 		description:
-			'The plugin layer is planned for higher-level integrations that should build on top of the core client instead of bloating it.',
+			'The plugin layer extends the core client with dashboards, audit logs, and other optional integrations that belong outside the provider contract.',
 		sections: [
 			{
-				id: 'coming-soon',
-				title: 'Coming Soon',
+				id: 'overview',
+				title: 'Overview',
 				content: (
 					<div className="space-y-4">
-						<Callout title="Why a plugin layer" tone="soon">
-							The core client should stay small and infrastructural. Plugins are
-							the right place for optional framework glue, orchestration
-							helpers, or workflow-specific integrations that should not become
-							mandatory dependencies.
-						</Callout>
+						<Paragraph>
+							Plugins let you add cross-cutting behavior without changing the
+							core payment contract. That keeps the base client small while
+							still supporting dashboards, audit trails, and persistence
+							integrations.
+						</Paragraph>
 					</div>
 				),
 			},
 			{
-				id: 'planned-categories',
-				title: 'Planned Categories',
+				id: 'dashboard-audit',
+				title: 'Dash and Audit Log',
 				content: (
 					<div className="space-y-4">
-						<BulletList>
-							<li>Higher-level billing workflow helpers.</li>
-							<li>
-								Provider-specific optional extensions that do not belong in the
-								core surface.
-							</li>
-							<li>
-								Framework or platform integrations beyond the current webhook
-								adapters.
-							</li>
-						</BulletList>
+						<Paragraph>
+							Use <InlineCode>@paymesh/dash</InlineCode> for local dashboard
+							workflows and <InlineCode>@paymesh/audit-logs</InlineCode> for
+							structured audit trails that capture payments, customers, and
+							internal actions. Each plugin has its own dedicated page below.
+						</Paragraph>
+						<DocCodeBlock
+							code={dashPluginSnippet}
+							filename="src/server/plugins/dash.ts"
+						/>
+						<DocCodeBlock
+							code={auditLogPluginSnippet}
+							filename="src/server/plugins/audit-logs.ts"
+						/>
 					</div>
 				),
 			},
 		],
 	},
+	...guidePages,
+	...adapterPages,
+	...databasePages,
+	...pluginPages,
 ];
 
 export { docsNavigation, docsPages };

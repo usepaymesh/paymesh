@@ -1,0 +1,509 @@
+---
+title: Plugins Overview
+description: Understand how Paymesh plugins extend schema, routes, middleware, webhooks, and runtime APIs, and how the official plugins fit into that model.
+---
+
+## What a plugin is
+
+Plugins are the mechanism Paymesh uses to add operational features without bloating the core client.
+
+A plugin can:
+
+- require a database or specific provider capabilities
+- add new database tables
+- extend built-in tables with extra fields
+- register HTTP routes
+- mount middleware ahead of those routes
+- react to normalized Paymesh webhook events
+- define its own custom typed events
+- expose new methods directly on the configured client
+
+That means plugins are not just helpers. They are first-class runtime modules.
+
+## Where plugins run
+
+Plugins are registered when you call `createClient`.
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { auditLog } from "@paymesh/audit-logs";
+import { dash } from "@paymesh/dash";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+  plugins: [
+    auditLog(),
+    dash({
+      path: "/internal/paymesh",
+      auth: async ({ request }) => {
+        const session = await auth({ request });
+        return {
+          allowed: session.user.role === "admin",
+        };
+      },
+    }),
+  ],
+});
+```
+
+Once registered, they become part of the Paymesh runtime shape.
+
+## Plugin lifecycle
+
+1. `createClient` receives the plugin list.
+2. Paymesh validates plugin runtime requirements.
+3. Plugin schemas are merged into the resolved schema.
+4. Plugins run `setup`.
+5. Plugin routes and middleware are registered.
+6. Plugin client extensions are exposed on the final runtime.
+7. Built-in and plugin-specific hooks can react to subsequent events.
+
+## Official plugins
+
+### Dash
+
+Use [@paymesh/dash](/docs/plugins/dash) when you need an operator-facing surface on top of persisted Paymesh data.
+
+`@paymesh/dash` is the operational dashboard plugin. It adds:
+
+- internal routes for browsing customers, payments, PIX, subscriptions, products, prices, webhook events, and plugin metadata
+- middleware for access control
+- dashboard-specific audit rows for admin actions
+- runtime configuration exposed through a lazy extension
+
+It requires a database because the dashboard reads normalized persisted records and writes its own operational audit trail.
+
+### Audit Logs
+
+Use [@paymesh/audit-logs](/docs/plugins/audit-logs) when you need a durable normalized event trail for operations, support, and compliance workflows.
+
+`@paymesh/audit-logs` persists normalized Paymesh events into a purpose-built audit table. It supports:
+
+- event pattern inclusion and exclusion
+- request metadata capture
+- actor resolution through a callback
+- async or sync persistence mode
+- redaction
+- retention policies
+- optional batching
+
+It is the plugin to use when you want a durable operational history that is based on normalized Paymesh events rather than raw provider payloads alone.
+
+## Why plugins exist instead of more core options
+
+Core options are appropriate when a feature is universal. Plugins are appropriate when the feature is:
+
+- operational
+- optional
+- storage-heavy
+- route-heavy
+- provider-conditional
+- organization-specific
+
+That split keeps the base Paymesh client small while still allowing richer infrastructure around it.
+
+## Plugin routes
+
+Plugins can expose HTTP routes that are independent of your adapter package. You serve them through `client.routes.handle`.
+
+```ts title="src/server/plugins.ts"
+app.all("/internal/paymesh/*", async ({ request }) => {
+  return paymesh.routes.handle(request);
+});
+```
+
+This is how a plugin like Dash can stay adapter-agnostic while still shipping a real HTTP surface.
+
+## Plugin events vs built-in events
+
+Built-in events come from normalized provider webhooks:
+
+- `payment.created`
+- `payment.succeeded`
+- `payment.failed`
+- `customer.created`
+- `customer.updated`
+- `customer.deleted`
+- `checkout.completed`
+- and the other built-in webhook hook families
+
+Plugin events are custom events defined by a plugin itself. They are useful when a plugin has its own internal lifecycle and wants typed hooks for it.
+
+## Introspection
+
+The configured client exposes plugin metadata at runtime.
+
+```ts title="src/server/plugins.ts"
+const plugins = paymesh.plugins.list();
+
+for (const plugin of plugins) {
+  console.log(plugin.id, plugin.status, plugin.routes);
+}
+```
+
+This is useful for:
+
+- verifying composition in development
+- exposing plugin diagnostics in admin tooling
+- testing route registration and setup status
+
+## What plugin composition should look like
+
+Good plugin composition:
+
+- keeps plugin setup in the single shared `paymesh.ts`
+- uses plugins for reusable infrastructure, not one-off application branches
+- lets plugins own their tables and their operational routes
+
+Bad plugin composition:
+
+- dynamically builds different plugin arrays across random modules
+- duplicates the same hook logic outside the plugin and inside the plugin
+- uses plugins for tiny app-specific helpers that do not need the Paymesh runtime
+
+<h2 id="create-a-plugin">Create a plugin</h2>
+
+Paymesh plugins are authored with `definePlugin`. A plugin is the unit that lets you package extra schema, routes, hooks, events, runtime extensions, and setup logic behind one reusable contract.
+
+### Start with one responsibility
+
+The best plugins have a narrow operational purpose:
+
+- admin dashboards
+- audit persistence
+- support tooling
+- product-specific internal routes
+- extra event streams
+- schema that belongs to that feature
+
+If a feature can be explained as "this extends Paymesh so teams can do X", it is usually a good plugin candidate.
+
+If a feature is just a helper function or a thin wrapper around one app-specific query, it usually should stay in your app code instead.
+
+### Minimal plugin skeleton
+
+```ts title="src/plugins/example.ts"
+import { definePlugin } from "paymesh";
+
+export const examplePlugin = definePlugin({
+  id: "example",
+  name: "Example Plugin",
+});
+```
+
+That is enough to register a named plugin. Most real plugins add at least one of these capabilities:
+
+- `schema`
+- `events`
+- `setup`
+- `hooks`
+- `routes`
+- `middleware`
+- `extends`
+
+### A realistic starting point
+
+```ts title="src/plugins/ops.ts"
+import { definePlugin, event, lazy } from "paymesh";
+
+export const opsPlugin = definePlugin({
+  id: "ops",
+  name: "Ops Plugin",
+  events: {
+    "ops.note.created": event<{ paymentId: string; message: string }>({
+      description: "Emitted when an operator attaches a note to a payment.",
+    }),
+  },
+  schema: {
+    customTables: {
+      payment_notes: {
+        fields: {
+          payment_id: {
+            type: "string",
+            required: true,
+          },
+          message: {
+            type: "string",
+            required: true,
+          },
+          created_by: {
+            type: "string",
+            required: true,
+          },
+        },
+      },
+    },
+  },
+  hooks: {
+    async onEvent({ event, client }) {
+      if (event.type !== "payment.succeeded") return;
+
+      await client.emit("ops.note.created", {
+        created_by: "system",
+        message: "Payment moved into succeeded state.",
+        paymentId: event.data.id,
+      });
+    },
+  },
+  extends() {
+    return {
+      ops: lazy((ctx) => ({
+        async listRecentNotes(paymentId: string) {
+          return ctx.database?.query("payment_notes").where({ payment_id: paymentId });
+        },
+      })),
+    };
+  },
+});
+```
+
+## Plugin anatomy
+
+### `id`
+
+`id` is the stable identity of the plugin. It should be:
+
+- short
+- unique
+- lowercase
+- safe to use in schema prefixes, diagnostics, and route namespaces
+
+Do not change it casually after release. It becomes part of how teams reason about the plugin.
+
+### `name`
+
+`name` is presentation-oriented. It appears in diagnostics, dashboards, and logs. It can be more human-friendly than `id`.
+
+### `schema`
+
+Use `schema` when the plugin owns persistence concerns.
+
+Typical uses:
+
+- extra tables for operational metadata
+- extension fields on built-in entities
+- indexes or constraints that belong to the plugin
+
+Prefer plugin-owned tables for plugin-owned data. Do not stuff every operational concern into generic JSON columns on core tables.
+
+### `events`
+
+Use plugin events when the plugin has its own lifecycle that consumers should observe with typed contracts.
+
+Good examples:
+
+- `audit.batch.flushed`
+- `dash.session.revoked`
+- `credits.granted`
+- `ops.note.created`
+
+Bad examples:
+
+- re-emitting built-in payment events under different names for no reason
+- creating plugin events for logic that never leaves one private function
+
+### `hooks`
+
+`hooks` let the plugin react to normalized Paymesh activity.
+
+This is the right place for:
+
+- audit persistence
+- asynchronous side effects
+- derived records
+- notifications
+- event fanout
+
+This is not the right place for slow bootstrap logic or route registration.
+
+### `routes` and `middleware`
+
+Use these when the plugin needs its own HTTP surface. Dash is the obvious example, but internal webhook relays, support APIs, and admin-only utilities also fit.
+
+Keep routes narrow. A plugin route should exist because it extends Paymesh, not because it is a random place to mount unrelated app endpoints.
+
+### `extends`
+
+`extends` adds runtime methods to the configured client.
+
+That is the right tool when the plugin needs a first-class API like:
+
+- `client.auditLogs.search()`
+- `client.dash.getSettings()`
+- `client.credits.grant()`
+
+If the feature needs to be called by application code, it likely belongs in `extends`.
+
+## `lazy()` explained
+
+`lazy()` defers creating an extension until the consumer actually reads it from the client.
+
+```ts title="src/plugins/example.ts"
+extends() {
+  return {
+    reports: lazy((ctx) => ({
+      async summary() {
+        return ctx.database?.query("daily_reports").all();
+      },
+    })),
+  };
+}
+```
+
+### Why `lazy()` exists
+
+Without `lazy()`, plugin extensions would be created eagerly during client construction. That is often unnecessary and sometimes actively harmful.
+
+`lazy()` is useful when:
+
+- the extension needs database access that should only initialize on demand
+- the extension closes over heavy dependencies
+- the extension sets up helper state that many apps never call
+- the plugin wants startup to stay cheap
+
+### When to use `lazy()`
+
+Use `lazy()` for runtime APIs that:
+
+- are not needed to boot routes
+- are not required for schema resolution
+- make sense as on-demand helpers
+
+### When not to use `lazy()`
+
+Do not use `lazy()` as a blanket default for everything.
+
+Avoid it when:
+
+- the value is static and trivial
+- setup must happen during initialization
+- the plugin depends on deterministic eager registration
+
+The rule is simple: `lazy()` is for runtime access patterns, not lifecycle hooks.
+
+## Step-by-step authoring flow
+
+### 1. Decide what the plugin owns
+
+Write down:
+
+- which tables it owns
+- which routes it owns
+- which events it emits
+- which client methods it exposes
+- which built-in Paymesh events it observes
+
+If those boundaries are fuzzy, the plugin is still under-designed.
+
+### 2. Define schema first
+
+If the plugin persists anything, define the schema before writing behavior. That forces the data model to stay explicit.
+
+### 3. Add hooks for normalized events
+
+React to `payment.*`, `customer.*`, `pix.*`, and other normalized events in hooks instead of parsing raw provider payloads in the plugin directly.
+
+That keeps the plugin provider-agnostic whenever possible.
+
+### 4. Add routes only when the feature actually needs HTTP
+
+Many plugins never need routes. If all you need is persistence or runtime APIs, skip them.
+
+### 5. Add `extends()` for product-facing methods
+
+If your app code should call into the plugin directly, expose a typed runtime API through `extends()`.
+
+### 6. Document runtime requirements
+
+Be explicit if the plugin requires:
+
+- a database
+- a specific provider capability
+- specific webhook events
+- raw payload persistence
+
+That information should not be implicit.
+
+## Options design guidelines
+
+Plugin options should be:
+
+- explicit
+- typed
+- stable
+- small
+
+Good option surfaces usually have:
+
+- a few required invariants
+- optional tuning knobs
+- safe defaults
+
+Bad option surfaces usually expose internal implementation details that consumers should not need to know.
+
+### Example option shape
+
+```ts title="src/plugins/audit.ts"
+type AuditPluginOptions = {
+  include?: string[];
+  exclude?: string[];
+  retentionDays?: number;
+  redact?: string[];
+  async?: boolean;
+};
+```
+
+This is a good shape because every option corresponds to product behavior, not internal plumbing.
+
+## Setup vs hooks vs extends
+
+These three are often confused.
+
+### Use `setup()` when
+
+- the plugin needs one-time initialization
+- diagnostics or registries must be populated
+- the plugin needs to validate runtime requirements
+
+### Use `hooks` when
+
+- the plugin reacts to events over time
+- the work happens after the client is already live
+
+### Use `extends()` when
+
+- application code needs to call into the plugin directly
+
+Those boundaries keep the plugin predictable.
+
+## Testing plugins
+
+At minimum, test:
+
+- schema registration
+- route registration
+- hook execution
+- custom event emission
+- extension behavior
+- failure paths when required dependencies are missing
+
+A plugin that writes records from hooks should have at least one integration test that drives a normalized event through the client and asserts the persisted result.
+
+## Common mistakes
+
+- coupling the plugin directly to one provider's raw webhook payloads
+- putting app-specific business logic into a reusable plugin
+- exposing too many extension methods without a clear public contract
+- using `lazy()` for state that must exist during startup
+- hiding database requirements until runtime failures happen
+
+## Next steps
+
+- Read [Plugin API](/docs/reference/plugin-api) for the low-level contract.
+- Read [Dash](/docs/plugins/dash) and [Audit Logs](/docs/plugins/audit-logs) to see how official plugins use these primitives.

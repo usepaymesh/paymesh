@@ -1,0 +1,40 @@
+---
+title: Hono Adapter
+description: Run Paymesh webhooks in Hono using the native raw request object and the same normalized event hooks used by every other adapter.
+---
+
+## Installation
+
+<InstallTabs packages="@paymesh/hono hono" />
+
+## Basic usage
+
+```ts title="src/server/webhooks.ts"
+import { Hono } from "hono";
+import { Webhooks } from "@paymesh/hono";
+import { paymesh } from "./paymesh";
+
+const app = new Hono();
+
+app.post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client: paymesh,
+    async onPaymentSucceeded(event) {
+      console.log(event.data.id);
+    },
+  }),
+);
+```
+
+## Why Hono is straightforward here
+
+Hono already exposes the raw request through `context.req.raw`, so the adapter can delegate directly into the Paymesh webhook engine without the same body-parser caveats you hit in older Node stacks.
+
+## Good fit
+
+Use `@paymesh/hono` when you want:
+
+- edge-friendly routing
+- a minimal adapter surface
+- the same normalized billing hooks without framework-specific ceremony

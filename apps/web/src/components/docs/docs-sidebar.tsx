@@ -1,343 +1,230 @@
 'use client';
 
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
+import { useSearchContext } from 'fumadocs-ui/contexts/search';
+import {
+	BookOpen,
+	Braces,
+	Cable,
+	ChevronDownIcon,
+	Database,
+	Package,
+	Plug,
+} from 'lucide-react';
+import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { docsNavigation, getDocHref, getFlattenedDocs } from '../../lib/docs';
+import { useEffect, useRef, useState } from 'react';
+import { docsNavigation } from '../../lib/docs-navigation';
+import { cn } from '../../lib/utils';
+import { ThemeToggle } from '../theme-toggle';
+import { DocNavIcon } from './doc-nav-icon';
 
-function cn(...classNames: Array<string | false | null | undefined>) {
-	return classNames.filter(Boolean).join(' ');
-}
-
-function SearchIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			fill="none"
-			height="16"
-			stroke="currentColor"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="1.5"
-			viewBox="0 0 24 24"
-			width="16"
-		>
-			<circle cx="11" cy="11" r="5.5" />
-			<path d="m15 15l4 4" />
-		</svg>
-	);
-}
-
-function ChevronDownIcon({ open }: { open: boolean }) {
-	return (
-		<svg
-			aria-hidden="true"
-			className={cn('h-4 w-4 transition-transform', open && 'rotate-180')}
-			fill="none"
-			height="16"
-			stroke="currentColor"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="1.8"
-			viewBox="0 0 24 24"
-			width="16"
-		>
-			<path d="m6 9 6 6 6-6" />
-		</svg>
-	);
-}
-
-function GroupIcon({ title }: { title: string }) {
-	if (title === 'Get Started') {
-		return (
-			<svg
-				aria-hidden="true"
-				fill="currentColor"
-				height="15"
-				viewBox="0 0 24 24"
-				width="15"
-			>
-				<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2m-1 14H9V8h2zm1 0V8l5 4z" />
-			</svg>
-		);
-	}
-
-	if (title === 'Concepts') {
-		return (
-			<svg
-				aria-hidden="true"
-				fill="currentColor"
-				height="15"
-				viewBox="0 0 24 24"
-				width="15"
-			>
-				<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3zm0 0a3 3 0 0 0-3 3v13h3a3 3 0 0 1 3-3h9V7a3 3 0 0 0-3-3z" />
-			</svg>
-		);
-	}
-
-	if (title === 'Providers') {
-		return (
-			<svg
-				aria-hidden="true"
-				fill="currentColor"
-				height="15"
-				viewBox="0 0 24 24"
-				width="15"
-			>
-				<path d="M7 7h10v10H7zM4 4h4v2H6v2H4zm12 0h4v4h-2V6h-2zM4 16h2v2h2v2H4zm14 0h2v4h-4v-2h2z" />
-			</svg>
-		);
-	}
-
-	return (
-		<svg
-			aria-hidden="true"
-			fill="currentColor"
-			height="15"
-			viewBox="0 0 24 24"
-			width="15"
-		>
-			<path d="M6 4h12a2 2 0 0 1 2 2v3H4V6a2 2 0 0 1 2-2m-2 7h16v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm4 2v2h8v-2z" />
-		</svg>
-	);
-}
-
-function PageMarker() {
-	return (
-		<span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[2px] border border-white/[0.08] bg-white/[0.03]">
-			<span className="h-[7px] w-[7px] rounded-[1px] bg-white/38" />
-		</span>
-	);
-}
+const sectionIcons = {
+	'Get Started': BookOpen,
+	Concepts: Braces,
+	Guides: Cable,
+	Providers: Package,
+	Adapters: Plug,
+	Plugins: Package,
+	Database: Database,
+	Reference: Braces,
+} as const;
 
 export function DocsSidebar() {
-	const pathname = usePathname();
-	const [searchOpen, setSearchOpen] = useState(false);
-	const [query, setQuery] = useState('');
+	const pathname = usePathname() || '/docs/introduction';
+	const { setOpenSearch } = useSearchContext();
 	const [currentOpen, setCurrentOpen] = useState(0);
 	const navRef = useRef<HTMLElement>(null);
-	const searchInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
-		const currentIndex = docsNavigation.findIndex((group) =>
-			group.items.some((item) => pathname === getDocHref(item.slug)),
+		const nextIndex = docsNavigation.findIndex((group) =>
+			group.items.some((item) => item.href === pathname),
 		);
-		setCurrentOpen(currentIndex === -1 ? 0 : currentIndex);
-		setSearchOpen(false);
-		setQuery('');
+		setCurrentOpen(nextIndex === -1 ? 0 : nextIndex);
 	}, [pathname]);
 
 	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-				event.preventDefault();
-				setSearchOpen((open) => !open);
-			}
+		const timer = setTimeout(() => {
+			const nav = navRef.current;
+			if (!nav) return;
+			const activeEl = nav.querySelector<HTMLElement>("[data-active='true']");
+			activeEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		}, 380);
 
-			if (event.key === 'Escape') {
-				setSearchOpen(false);
-			}
-		};
-
-		window.addEventListener('keydown', onKeyDown);
-		return () => window.removeEventListener('keydown', onKeyDown);
+		return () => clearTimeout(timer);
 	}, []);
 
-	useEffect(() => {
-		if (!searchOpen) return;
-		searchInputRef.current?.focus();
-	}, [searchOpen]);
-
-	useEffect(() => {
-		const nav = navRef.current;
-		if (!nav || currentOpen < 0) return;
-
-		const activeItem = nav.querySelector<HTMLElement>(`a[href="${pathname}"]`);
-		if (!activeItem) return;
-
-		activeItem.scrollIntoView({
-			block: 'center',
-		});
-	}, [pathname, currentOpen]);
-
-	const results = useMemo(() => {
-		const value = query.trim().toLowerCase();
-
-		if (!value) return getFlattenedDocs();
-
-		return getFlattenedDocs().filter((item) => {
-			return (
-				item.label.toLowerCase().includes(value) ||
-				item.group.toLowerCase().includes(value)
-			);
-		});
-	}, [query]);
-
 	return (
-		<>
-			<aside className="fixed bottom-0 left-0 top-11 z-30 hidden w-[22vw] max-w-[300px] flex-col border-r border-white/[0.06] bg-[#050505] lg:flex">
-				<button
-					className="flex w-full items-center gap-2 border-b border-white/[0.06] px-4 py-[9px] text-left text-sm text-white/50 transition-colors hover:bg-white/[0.02] hover:text-white/80"
-					onClick={() => setSearchOpen(true)}
-					type="button"
+		<motion.aside
+			animate={{ opacity: 1, x: 0 }}
+			className="fixed left-0 top-(--landing-topbar-height) bottom-0 z-30 hidden w-[22vw] max-w-[300px] flex-col border-r border-foreground/5 bg-background lg:flex"
+			initial={{ opacity: 0, x: -24 }}
+			transition={{ duration: 0.28, ease: 'easeOut' }}
+		>
+			<button
+				className="group/search flex w-full items-center gap-2 border-b border-foreground/5 px-4 py-[9px] text-sm text-foreground/55 transition-colors hover:bg-foreground/3 hover:text-foreground/80"
+				onClick={() => setOpenSearch(true)}
+				type="button"
+			>
+				<svg
+					aria-hidden="true"
+					className="size-4 shrink-0 text-foreground opacity-55 transition-opacity group-hover/search:opacity-80"
+					fill="none"
+					stroke="currentColor"
+					strokeLinecap="round"
+					strokeLinejoin="round"
+					strokeWidth="1.5"
+					viewBox="0 0 24 24"
 				>
-					<SearchIcon />
-					<span className="truncate">Search docs</span>
-					<kbd className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-white/35">
-						<span className="text-[11px]">&#8984;</span>K
-					</kbd>
-				</button>
+					<circle cx="11" cy="11" r="5.5" />
+					<path d="m15 15l4 4" />
+				</svg>
+				<span className="truncate">Search</span>
+				<kbd className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md border border-foreground/10 px-1.5 py-0.5 font-mono text-[10px] text-foreground/40">
+					<span className="text-[11px]">&#8984;</span>K
+				</kbd>
+			</button>
 
-				<nav
-					className="no-scrollbar flex-1 overflow-y-auto overflow-x-hidden pb-3"
-					ref={navRef}
-					style={{
-						maskImage:
-							'linear-gradient(to bottom, transparent, white 1rem, white calc(100% - 2rem), transparent 100%)',
-					}}
+			<nav
+				className="sidebar-scroll flex-1 overflow-x-hidden overflow-y-auto pb-3"
+				ref={navRef}
+				style={{
+					maskImage:
+						'linear-gradient(to bottom, transparent, white 1rem, white calc(100% - 2rem), transparent 100%)',
+				}}
+			>
+				<MotionConfig
+					transition={{ bounce: 0, duration: 0.35, type: 'spring' }}
 				>
 					<div className="flex flex-col">
-						{docsNavigation.map((group, index) => {
-							const open = currentOpen === index;
+						{docsNavigation.map((section, index) => {
+							const Icon =
+								sectionIcons[section.title as keyof typeof sectionIcons] ??
+								BookOpen;
+
 							return (
-								<div key={group.title}>
+								<div key={section.title}>
 									<button
 										className={cn(
-											'flex w-full items-center gap-2 border-b border-white/[0.06] px-4 py-2.5 text-left text-sm font-medium tracking-wide transition-colors',
-											open
-												? 'bg-white/[0.03] text-white'
-												: 'text-white/65 hover:bg-white/[0.02] hover:text-white',
+											'flex w-full items-center gap-2 border-b border-foreground/6 px-4 py-2.5 text-left text-sm font-medium tracking-wider transition-colors',
+											currentOpen === index
+												? 'bg-foreground/3 text-foreground'
+												: 'text-foreground/70 hover:bg-foreground/3 hover:text-foreground',
 										)}
 										onClick={() =>
-											setCurrentOpen((current) =>
-												current === index ? -1 : index,
-											)
+											setCurrentOpen((prev) => (prev === index ? -1 : index))
 										}
 										type="button"
 									>
-										<GroupIcon title={group.title} />
-										<span className="grow tracking-normal">{group.title}</span>
-										<ChevronDownIcon open={open} />
+										<Icon className="size-4.5" />
+										<span className="grow tracking-normal">
+											{section.title}
+										</span>
+										<ChevronDownIcon
+											className={cn(
+												'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+												currentOpen === index && 'rotate-180',
+											)}
+										/>
 									</button>
 
-									{open ? (
-										<div className="py-1">
-											{group.items.map((item) => {
-												const active = pathname === getDocHref(item.slug);
-												const href = getDocHref(item.slug);
+									<AnimatePresence initial={false}>
+										{currentOpen === index ? (
+											<motion.div
+												animate={{ height: 'auto', opacity: 1 }}
+												className="relative overflow-hidden"
+												exit={{ height: 0, opacity: 0 }}
+												initial={{ height: 0, opacity: 0 }}
+											>
+												<div className="pb-1 pt-0 text-sm">
+													{section.items.map((item) => {
+														if (!item.href) {
+															return (
+																<div
+																	className="mx-4 my-1.5 flex items-center justify-between border border-dashed border-foreground/25 px-3 py-2 text-[12px] text-foreground/55"
+																	key={item.label}
+																>
+																	<div className="flex min-w-0 items-center gap-2">
+																		<DocNavIcon
+																			className="size-3.5"
+																			icon={item.icon}
+																		/>
+																		<span className="truncate">
+																			{item.label}
+																		</span>
+																	</div>
+																	<span className="border border-dashed border-foreground/20 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-foreground/45">
+																		Planned
+																	</span>
+																</div>
+															);
+														}
 
-												return (
-													<Link
-														className={cn(
-															'relative flex items-center gap-2.5 px-4 py-1 text-[14px] transition-colors',
-															active
-																? 'bg-white/[0.06] text-white'
-																: 'text-white/60 hover:bg-white/[0.03] hover:text-white/88',
-														)}
-														data-active={active || undefined}
-														href={href}
-														key={item.slug.join('/')}
-													>
-														<PageMarker />
-														<span className="min-w-0 grow truncate">
-															{item.label}
-														</span>
-														{item.status === 'coming-soon' ? (
-															<span className="rounded-[2px] border border-amber-500/18 bg-amber-500/[0.06] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-amber-200/75">
-																Soon
-															</span>
-														) : null}
-													</Link>
-												);
-											})}
-										</div>
-									) : null}
+														const active = pathname === item.href;
+
+														return (
+															<Link
+																className={cn(
+																	'mx-4 my-0.5 flex items-center gap-2 px-3 py-2 text-[13px] transition-colors',
+																	active
+																		? 'bg-foreground/6 text-foreground'
+																		: 'text-foreground/55 hover:bg-foreground/3 hover:text-foreground/80',
+																)}
+																data-active={active ? 'true' : 'false'}
+																href={item.href as Route}
+																key={item.href}
+															>
+																<DocNavIcon
+																	className="size-3.5 shrink-0"
+																	icon={item.icon}
+																/>
+																<span
+																	className={cn(
+																		'truncate',
+																		active
+																			? 'text-foreground'
+																			: 'text-foreground/55',
+																	)}
+																>
+																	{item.label}
+																</span>
+															</Link>
+														);
+													})}
+												</div>
+											</motion.div>
+										) : null}
+									</AnimatePresence>
 								</div>
 							);
 						})}
 					</div>
-				</nav>
+				</MotionConfig>
+			</nav>
 
-				<div className="flex items-center gap-2 border-t border-white/[0.06] p-2 text-white/35">
-					<a
-						aria-label="GitHub"
-						className="inline-flex h-8 w-8 items-center justify-center transition-colors hover:bg-white/[0.04] hover:text-white/72"
-						href="https://github.com/usepaymesh/paymesh"
-						rel="noreferrer"
-						target="_blank"
+			<div className="flex items-center gap-1 border-t border-foreground/5 p-2 text-foreground/40">
+				<a
+					aria-label="GitHub"
+					className="inline-flex size-8 items-center justify-center transition-colors hover:bg-foreground/5 hover:text-foreground/70"
+					href="https://github.com/usepaymesh/paymesh"
+					rel="noreferrer noopener"
+					target="_blank"
+				>
+					<svg
+						aria-hidden="true"
+						className="size-4"
+						fill="currentColor"
+						viewBox="0 0 24 24"
 					>
-						<span className="sr-only">GitHub</span>
-						<svg
-							aria-hidden="true"
-							className="h-4 w-4"
-							fill="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-						</svg>
-					</a>
-					<div className="ml-auto px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-white/22">
-						Paymesh Docs
-					</div>
+						<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+					</svg>
+					<span className="sr-only">GitHub</span>
+				</a>
+				<div className="ms-auto [&_button]:text-foreground/40 [&_button:hover]:text-foreground/70">
+					<ThemeToggle />
 				</div>
-			</aside>
-
-			{searchOpen ? (
-				<div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 px-4 py-16 backdrop-blur-sm">
-					<div className="w-full max-w-2xl overflow-hidden rounded-md border border-white/[0.1] bg-[#050505] shadow-2xl shadow-black/40">
-						<div className="flex items-center gap-3 border-b border-white/[0.08] px-4 py-3">
-							<SearchIcon />
-							<input
-								className="w-full bg-transparent text-[15px] text-white outline-none placeholder:text-white/28"
-								onChange={(event) => setQuery(event.target.value)}
-								placeholder="Search docs..."
-								ref={searchInputRef}
-								value={query}
-							/>
-							<button
-								className="rounded-sm border border-white/[0.08] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/35"
-								onClick={() => setSearchOpen(false)}
-								type="button"
-							>
-								Esc
-							</button>
-						</div>
-						<div className="no-scrollbar max-h-[65dvh] overflow-y-auto p-2">
-							{results.length > 0 ? (
-								results.map((item) => (
-									<Link
-										className="flex items-center gap-3 rounded-sm px-3 py-2 text-[14px] text-white/68 transition-colors hover:bg-white/[0.04] hover:text-white"
-										href={getDocHref(item.slug)}
-										key={item.slug.join('/')}
-										onClick={() => {
-											setSearchOpen(false);
-											setQuery('');
-										}}
-									>
-										<PageMarker />
-										<div className="min-w-0 flex-1">
-											<div className="truncate">{item.label}</div>
-											<div className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/28">
-												{item.group}
-											</div>
-										</div>
-										{item.status === 'coming-soon' ? (
-											<span className="rounded-[2px] border border-amber-500/18 bg-amber-500/[0.06] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-amber-200/75">
-												Soon
-											</span>
-										) : null}
-									</Link>
-								))
-							) : (
-								<div className="px-3 py-8 text-center text-[14px] text-white/45">
-									No docs matched your query.
-								</div>
-							)}
-						</div>
-					</div>
-				</div>
-			) : null}
-		</>
+			</div>
+		</motion.aside>
 	);
 }

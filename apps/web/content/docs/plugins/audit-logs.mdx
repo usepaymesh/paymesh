@@ -1,0 +1,65 @@
+---
+title: Audit Logs
+description: Persist normalized Paymesh activity as structured audit entries with filters, actor resolution, batching, and request metadata capture.
+---
+
+## What the plugin adds
+
+The audit log plugin contributes:
+
+- one custom `audit_logs` table
+- automatic persistence for matching webhook events
+- a lazy runtime client with `create`, `list`, and `prune`
+- event filtering and redaction options
+
+## Setup
+
+```ts title="src/lib/paymesh.ts"
+import { auditLog } from "@paymesh/audit-logs";
+
+auditLog({
+  events: ["payment.*", "customer.*", "checkout.*"],
+  mode: "async",
+  retention: "1y",
+  includeRequestInfo: true,
+  actor({ request }) {
+    const email = request?.headers.get("x-user-email");
+    if (!email) return null;
+
+    return {
+      type: "user",
+      id: "user_123",
+      email,
+    };
+  },
+});
+```
+
+## Important options
+
+Key options in the current codebase:
+
+- `events`
+- `exclude`
+- `mode`
+- `failureMode`
+- `retention`
+- `redact`
+- `includeDiff`
+- `includeProviderMetadata`
+- `includeRequestInfo`
+- `actor`
+- `batch`
+
+## Manual entries
+
+```ts title="src/server/manual-audit.ts"
+await paymesh.auditLog.create({
+  action: "invoice.sent",
+  resource: {
+    type: "invoice",
+    id: "inv_123",
+  },
+  message: "Invoice sent to customer",
+});
+```

@@ -1,0 +1,62 @@
+---
+title: Prisma
+description: Use the Prisma adapter when Prisma is your application database boundary and you want Paymesh to reuse the same transaction model.
+---
+
+## Overview
+
+`@paymesh/prisma` adapts a Prisma client to the Paymesh database driver contract. It executes compiled SQL through Prisma raw queries and transactions.
+
+## Installation
+
+<InstallTabs packages="@paymesh/prisma @prisma/client" />
+
+## Usage
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { prisma as paymeshPrisma } from "@paymesh/prisma";
+import { PrismaClient } from "@prisma/client";
+import { stripe } from "@paymesh/stripe";
+
+const db = new PrismaClient();
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: paymeshPrisma(db, {
+    persistRaw: true,
+  }),
+});
+```
+
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `persistRaw` | `false` | Stores raw provider payloads in persisted rows. |
+
+## Execution model
+
+The adapter uses:
+
+- `$queryRawUnsafe` for reads
+- `$executeRawUnsafe` for writes
+- `$transaction` for transactional callbacks
+
+That is why Prisma is a good fit when Prisma already owns your application database lifecycle.
+
+## Error behavior
+
+Like the other first-party adapters, Prisma query and transaction failures are wrapped into `PaymeshError` with code `database_error`.
+
+## When to choose this adapter
+
+Use `@paymesh/prisma` when:
+
+- Prisma is already your application standard
+- you want Paymesh writes and reads to stay inside Prisma’s connection management and transaction model
+
+Do not choose Prisma just to persist Paymesh if the rest of the app is already using `pg` or Drizzle directly.

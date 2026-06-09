@@ -1,0 +1,30 @@
+---
+title: Provider Selection
+description: Choose the provider that matches your product model, runtime constraints, and regional requirements without painting the rest of the codebase into a corner.
+---
+
+## Start from product shape, not brand familiarity
+
+Choose the provider based on what your billing flow actually needs.
+
+### Pick Stripe when
+
+- you want the broadest first-party payment surface in this repository
+- you need native PIX support today
+- you want the most mature checkout and customer support in the current codebase
+
+### Pick Polar when
+
+- your checkout model is product-driven
+- you are comfortable supplying product ids directly
+- you do not need native PIX from the provider
+
+## What does not change
+
+When you switch providers, your application code should still mostly talk to:
+
+- `paymesh.payments`
+- `paymesh.customers`
+- `paymesh.webhooks`
+
+The point of provider selection in Paymesh is not to eliminate every provider difference. It is to make those differences local.

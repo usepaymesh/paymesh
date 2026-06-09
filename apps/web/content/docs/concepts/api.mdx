@@ -1,0 +1,111 @@
+---
+title: API
+description: Learn the public Paymesh surface, the contracts it exposes, and the boundaries between core, providers, adapters, databases, and plugins.
+---
+
+## Surface area
+
+The public API is intentionally small.
+
+At the top level, `paymesh` exports:
+
+- `createClient`
+- `defineProvider`
+- `definePlugin`
+- `defineDatabaseAdapter`
+- `resolveDatabaseSchema`
+- `event`
+- `lazy`
+- `request`
+- `withRaw`
+- all public client, provider, database, plugin, and error types
+
+## `createClient`
+
+`createClient` is the composition point for the entire runtime.
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+  includeRaw: false,
+  plugins: [],
+});
+```
+
+It accepts:
+
+- `provider`
+- optional `database`
+- optional `schema`
+- optional `plugins`
+- optional `includeRaw`
+
+## Sub-clients
+
+The client managers exposed today are:
+
+- `payments`
+- `pix`
+- `customers`
+- `webhooks`
+- `routes`
+- `plugins`
+
+Plugins may add more client surface through `extends()`.
+
+## Capability model
+
+Providers declare capabilities instead of pretending every provider is equivalent.
+
+Known capability keys include:
+
+- `pix`
+- `coupons`
+- `checkout`
+- `subscriptions`
+- `webhooks`
+- `refunds`
+- `customerPortal`
+- `customers`
+
+That is why application code can ask what a provider supports instead of probing behavior implicitly.
+
+## Event model
+
+Webhook delivery is normalized into Paymesh event types such as:
+
+- `payment.created`
+- `payment.succeeded`
+- `payment.failed`
+- `payment.canceled`
+- `payment.refunded`
+- `customer.created`
+- `customer.updated`
+- `customer.deleted`
+- `subscription.created`
+- `subscription.updated`
+- `subscription.canceled`
+- `checkout.completed`
+
+Provider packages map their own raw event names into these normalized events.
+
+## Extension model
+
+Paymesh is not closed around its own first-party surface. Plugins can contribute:
+
+- routes
+- middleware
+- schema extensions
+- custom events
+- client extensions
+- setup logic
+
+That is why the public API includes `definePlugin`, `event`, and `lazy`.

@@ -1,0 +1,335 @@
+---
+title: Optimize Performance
+description: Tune Paymesh clients, providers, persistence, raw payload handling, webhook pipelines, and route composition for lower latency, smaller storage cost, and cleaner operational behavior.
+---
+
+This guide explains where Paymesh performance actually comes from.
+
+Most performance issues in a billing stack do not come from one thing. They come from a chain of small mistakes:
+
+- fetching more than the product flow needs
+- persisting raw payloads without a reason
+- doing heavy work inside webhook response paths
+- mounting plugins with broad route logic
+- overusing ORMs or remote requests in hot paths
+
+The goal is to make the common path cheap:
+
+- create payment
+- create PIX payment
+- upsert customer
+- handle webhook
+
+## Performance starts with client configuration
+
+`createClient` supports these options:
+
+- `provider`
+- `database?`
+- `schema?`
+- `baseUrl?`
+- `timeout?`
+- `retry?`
+- `fetch?`
+- `includeRaw?`
+- `hooks?`
+- `plugins?`
+
+Some of these have direct performance impact.
+
+## `includeRaw`
+
+`includeRaw` controls whether returned client values contain the upstream raw payload.
+
+### Keep it `false` by default
+
+That is the cheapest choice for:
+
+- smaller returned objects
+- fewer accidental payload copies
+- simpler downstream serialization
+
+### Turn it on intentionally
+
+Use `includeRaw: true` when:
+
+- debugging provider mappings
+- operator tooling needs upstream payloads
+- a plugin explicitly depends on raw payload inspection
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  includeRaw: false,
+});
+```
+
+## `timeout`
+
+`timeout` sets the default provider request timeout.
+
+Use it to avoid hanging payment flows when the upstream provider degrades.
+
+```ts title="src/lib/paymesh.ts"
+export const paymesh = createClient({
+  provider,
+  timeout: 8_000,
+});
+```
+
+### Practical guidance
+
+- too low: false positives during provider slowness
+- too high: requests linger and tie up server capacity
+
+Use stricter timeouts for synchronous checkout creation than for background sync jobs.
+
+## `retry`
+
+`retry` is useful when provider APIs fail transiently.
+
+Use it for:
+
+- short-lived network instability
+- temporary 5xx upstream failures
+
+Do not use aggressive retries blindly inside user-facing request paths. Retrying a slow request three times can be worse than failing fast and surfacing the error cleanly.
+
+## `fetch`
+
+Custom `fetch` lets you:
+
+- reuse a runtime-specific transport
+- inject tracing
+- inject metrics
+- centralize proxy or agent configuration
+
+This matters most in large systems where you want request instrumentation without wrapping every provider call manually.
+
+## Provider-side performance
+
+Provider packages should keep the hot path small.
+
+That means:
+
+- only request the fields you need from upstream
+- normalize once
+- avoid extra follow-up API calls in `payments.create`
+- respect request-level overrides without rebuilding too much state
+
+## Database-side performance
+
+Paymesh persistence performance mostly comes down to:
+
+- repository implementation quality
+- index quality
+- transaction scope
+- raw payload storage strategy
+
+## Choose the right adapter shape
+
+Use direct [Postgres](/docs/database/postgres) when:
+
+- you want the shortest path
+- you want less abstraction overhead
+- you control the connection lifecycle
+
+Use [Drizzle](/docs/database/drizzle) when:
+
+- your app already standardizes on Drizzle
+- you want to reuse existing query and migration tooling
+
+Use [Prisma](/docs/database/prisma) when:
+
+- your stack is already Prisma-centric
+- the organization values Prisma consistency more than the smallest possible overhead
+
+## `persistRaw`
+
+`persistRaw` on the database adapter controls whether raw provider payloads are stored.
+
+### Disable it unless you need it
+
+Raw persistence increases:
+
+- row size
+- write cost
+- retention cost
+- operator temptation to depend on provider-shaped data
+
+### Enable it when operations need it
+
+Use `persistRaw: true` when:
+
+- support needs exact upstream payload inspection
+- you are building audit-heavy tooling
+- you are actively stabilizing a new provider integration
+
+```ts title="src/lib/paymesh.ts"
+import { postgres } from "@paymesh/postgres";
+
+database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+  persistRaw: false,
+}),
+```
+
+## Schema discipline matters
+
+Schema bloat hurts over time.
+
+Keep extra fields focused:
+
+- do not duplicate provider data that can be recomputed
+- do not add JSON blobs for everything
+- do not create plugin tables without an actual ownership boundary
+
+The smaller and more predictable the stored model is, the cheaper your sync and dashboard queries become.
+
+## Webhook performance
+
+Webhook handling is the most sensitive path because correctness and latency are both important.
+
+### Keep verification cheap
+
+Verify signatures using the raw body and return early on invalid requests.
+
+### Do not put slow side effects in the acknowledgment path
+
+The route should:
+
+1. verify the request
+2. normalize the event
+3. run the minimum required persistence and dispatch work
+4. return the webhook response
+
+Heavy side effects should move into:
+
+- plugin hooks
+- route-internal queues
+- asynchronous workers
+
+### Make idempotency truly atomic
+
+If your database adapter lets duplicate deliveries pass `webhookEvents.acquire()`, retries and webhook storms will cost you much more than latency.
+
+## Plugin performance
+
+Plugins can quietly become the largest performance sink in the stack.
+
+### Use `config` to avoid invalid mounts
+
+If a plugin needs a database or a specific provider capability, declare it. Failing early is cheaper than runtime branching on every call.
+
+### Use `lazy()` for heavy extension APIs
+
+Use `lazy()` when:
+
+- the extension creates expensive helpers
+- only a few routes actually use it
+
+Do not use `lazy()` for every extension by default.
+
+### Keep plugin routes narrow
+
+A plugin route should do one operational thing. If it starts behaving like a mini-application with deep fan-out, that route will become your new hotspot.
+
+## Customer and payment retrieval
+
+Many teams accidentally make local persistence slower by always going remote.
+
+Prefer database-backed reads when:
+
+- the data was already normalized and synced locally
+- the route is operational rather than payment-authoritative
+
+Prefer provider reads when:
+
+- the action needs fresh provider state right now
+- the route is not on a high-traffic operational path
+
+## Concrete patterns
+
+## Keep a lean client
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+    persistRaw: false,
+  }),
+  includeRaw: false,
+  timeout: 8_000,
+});
+```
+
+## Isolate debug-only raw access
+
+```ts title="src/server/debug.ts"
+const debugClient = createClient({
+  provider,
+  database,
+  includeRaw: true,
+});
+```
+
+Use that only in debug or operator flows. Do not make it your default application client.
+
+## Keep webhook routes minimal
+
+```ts title="src/server/webhooks.ts"
+app.post(
+  "/webhooks/paymesh",
+  express.raw({ type: "*/*" }),
+  Webhooks({
+    client: paymesh,
+    async onEvent(event) {
+      console.log(event.type, event.context.deliveryId);
+    },
+  }),
+);
+```
+
+This shape is fast because:
+
+- raw body is preserved
+- webhook parsing is centralized
+- event logic stays in hooks rather than ad hoc route code
+
+## Common mistakes
+
+- enabling `includeRaw` globally and forgetting about it
+- enabling `persistRaw` without a retention reason
+- using retries aggressively in request/response payment flows
+- pushing too much work into webhook acknowledgment
+- writing plugins that behave like second applications
+
+## Performance checklist
+
+Before calling the system "slow", verify:
+
+1. `includeRaw` is off by default
+2. `persistRaw` is justified
+3. webhook idempotency is atomic
+4. provider timeouts are sane
+5. retries are bounded
+6. plugin routes are narrow
+7. dashboard and operational reads prefer local persistence where appropriate
+
+## Next steps
+
+- Read [Create a Provider](/docs/guides/create-a-provider) if upstream API calls are your bottleneck.
+- Read [Create a Database Adapter](/docs/guides/create-a-database-adapter) if persistence is the bottleneck.
+- Read [Create Your First Plugin](/docs/guides/create-your-first-plugin) if plugin overhead is the issue.

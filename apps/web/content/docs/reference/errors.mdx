@@ -1,0 +1,81 @@
+---
+title: Errors
+description: Reference the canonical PaymeshError codes used across providers, plugins, adapters, webhook handling, and CLI workflows.
+---
+
+## `PaymeshError`
+
+Paymesh exposes a single structured error type: `PaymeshError`.
+
+Each instance can include:
+
+- `code`
+- `message`
+- `provider`
+- `status`
+- `statusText`
+- `url`
+- `body`
+- `cause`
+
+```ts title="src/server/errors.ts"
+import { PaymeshError } from "paymesh";
+
+try {
+  await paymesh.payments.create({
+    amount: 4900,
+    currency: "USD",
+  });
+} catch (error) {
+  if (error instanceof PaymeshError) {
+    console.error(error.code, error.message, error.provider);
+  }
+}
+```
+
+## Canonical error codes
+
+| Code | Meaning |
+| --- | --- |
+| `provider_error` | Upstream provider failed in a provider-specific way. |
+| `plugin_error` | A plugin raised a runtime error. |
+| `plugin_configuration_error` | Plugin requirements or schema assumptions were invalid. |
+| `provider_not_found` | The requested provider-side resource was not found or did not match the expected type. |
+| `unsupported_capability` | The current provider does not implement the requested capability. |
+| `invalid_webhook_signature` | The webhook signature did not validate. |
+| `webhook_parse_error` | The webhook payload could not be parsed. |
+| `webhook_mapping_error` | The provider webhook payload could not be normalized correctly. |
+| `hook_error` | A hook callback failed. |
+| `invalid_request` | Input to Paymesh or a provider package was incomplete or invalid. |
+| `database_error` | The configured database adapter failed to query, write, or transact. |
+| `network_error` | The request layer failed before receiving a valid response. |
+| `timeout` | The request exceeded the configured timeout. |
+| `client_error` | Client composition or runtime usage was invalid. |
+| `cli_error` | A CLI command failed due to invalid arguments or command context. |
+
+## Common sources
+
+### `invalid_request`
+
+Typical causes:
+
+- calling Polar checkout creation without `productIds`
+- creating a Polar customer without `email`
+- asking for unsupported cursor or pagination shapes in adapters
+
+### `unsupported_capability`
+
+Typical causes:
+
+- calling `paymesh.pix.create()` on a provider that does not advertise `pix`
+
+### `plugin_configuration_error`
+
+Typical causes:
+
+- registering a plugin that requires a database without configuring one
+- requiring provider capabilities the current provider does not support
+
+## Error handling recommendation
+
+Catch `PaymeshError` at your service boundary and branch on `code`, not only on message text. Messages are for humans. Codes are for product logic and logging.

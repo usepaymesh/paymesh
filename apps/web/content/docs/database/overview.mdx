@@ -1,0 +1,119 @@
+---
+title: Database Overview
+description: Understand what the database layer stores, why it matters operationally, how schema resolution works, and how adapters integrate with migrations and webhook persistence.
+---
+
+## Why add a database
+
+Paymesh can operate without a database, but the database layer is what turns it from a normalized request wrapper into infrastructure.
+
+With a database configured, Paymesh can:
+
+- persist normalized customers, payments, PIX records, subscriptions, products, and prices
+- deduplicate webhook deliveries
+- track webhook processing attempts and errors
+- support local catalog sync
+- power operational plugins such as Dash and Audit Logs
+- generate and apply migrations for the resolved schema
+
+## What gets stored
+
+The core schema includes built-in tables for:
+
+- `customers`
+- `pix`
+- `checkouts`
+- `invoices`
+- `paymentMethods`
+- `entitlements`
+- `usage`
+- `webhookEvents`
+- `subscriptions`
+- `products`
+- `prices`
+- `migrations`
+
+The exact physical names come from the resolved schema prefix and table overrides.
+
+## Built-in schema vs plugin schema
+
+The resolved schema is the merge of:
+
+1. the built-in Paymesh tables
+2. your `schema` overrides passed to `createClient`
+3. plugin-provided schema extensions
+
+That means database shape is not just a static package concern. It depends on the final client composition.
+
+## Adapters
+
+First-party adapters in this repository are:
+
+- `@paymesh/postgres`
+- `@paymesh/drizzle`
+- `@paymesh/prisma`
+
+All three expose the same Paymesh database driver contract:
+
+- `query`
+- `execute`
+- `transaction`
+- `repositories`
+- optional `close`
+
+The difference is where the SQL ultimately runs.
+
+## `persistRaw`
+
+`persistRaw` belongs to the database adapter, not to the provider.
+
+When enabled, stored rows retain raw provider payloads in addition to normalized fields. This is useful for:
+
+- reconciliation
+- postmortems
+- replay analysis
+- provider-specific support debugging
+
+When disabled, persistence focuses on the normalized Paymesh model.
+
+## Webhook persistence
+
+Webhook handling uses the database to manage delivery acquisition and status transitions. That is the basis for:
+
+- deduplication
+- retry-aware processing
+- operational visibility
+- dashboard reporting
+
+Without a database, webhook normalization still works, but durable event tracking does not.
+
+## Migrations
+
+The CLI generates SQL migrations from the resolved schema, including plugin tables. A common flow is:
+
+1. define or change client composition
+2. run `paymesh generate`
+3. review generated SQL
+4. run `paymesh migrate`
+
+Because the schema is composition-driven, the client module is the source of truth for database planning.
+
+## Prefixes and table overrides
+
+Use `schema.prefix` when you want namespace isolation.
+
+Use `schema.tables` when you need:
+
+- physical table renames
+- extra fields on built-in tables
+- indexes or uniqueness flags on those extra fields
+
+Use `schema.customTables` when you need additional app- or plugin-owned tables.
+
+## Which adapter should you pick
+
+- use `@paymesh/postgres` when you want the simplest direct path with `pg`
+- use `@paymesh/drizzle` when your application already standardizes on Drizzle
+- use `@paymesh/prisma` when Prisma is your application’s database boundary
+
+The adapter choice should follow your application architecture, not personal taste.
