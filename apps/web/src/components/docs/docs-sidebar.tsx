@@ -63,29 +63,31 @@ export function DocsSidebar() {
 			initial={{ opacity: 0, x: -24 }}
 			transition={{ duration: 0.28, ease: 'easeOut' }}
 		>
-			<button
-				className="group/search flex w-full items-center gap-2 border-b border-foreground/5 px-4 py-[9px] text-sm text-foreground/55 transition-colors hover:bg-foreground/3 hover:text-foreground/80"
-				onClick={() => setOpenSearch(true)}
-				type="button"
-			>
-				<svg
-					aria-hidden="true"
-					className="size-4 shrink-0 text-foreground opacity-55 transition-opacity group-hover/search:opacity-80"
-					fill="none"
-					stroke="currentColor"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-					strokeWidth="1.5"
-					viewBox="0 0 24 24"
+			<div className="border-b border-foreground/5 px-4 py-2">
+				<button
+					className="group/search flex w-full items-center gap-2 rounded-md border border-foreground/10 bg-foreground/3 px-3 py-2 text-sm text-foreground/55 transition-colors hover:text-foreground/80"
+					onClick={() => setOpenSearch(true)}
+					type="button"
 				>
-					<circle cx="11" cy="11" r="5.5" />
-					<path d="m15 15l4 4" />
-				</svg>
-				<span className="truncate">Search</span>
-				<kbd className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md border border-foreground/10 px-1.5 py-0.5 font-mono text-[10px] text-foreground/40">
-					<span className="text-[11px]">&#8984;</span>K
-				</kbd>
-			</button>
+					<svg
+						aria-hidden="true"
+						className="size-4 shrink-0 text-foreground opacity-55 transition-opacity group-hover/search:opacity-80"
+						fill="none"
+						stroke="currentColor"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						strokeWidth="1.5"
+						viewBox="0 0 24 24"
+					>
+						<circle cx="11" cy="11" r="5.5" />
+						<path d="m15 15l4 4" />
+					</svg>
+					<span className="truncate">Search</span>
+					<kbd className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md border border-foreground/10 px-1.5 py-0.5 font-mono text-[10px] text-foreground/40">
+						<span className="text-[11px]">&#8984;</span>K
+					</kbd>
+				</button>
+			</div>
 
 			<nav
 				className="sidebar-scroll flex-1 overflow-x-hidden overflow-y-auto pb-3"
