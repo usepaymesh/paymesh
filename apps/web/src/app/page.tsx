@@ -117,12 +117,12 @@ const providerCards: ProviderCard[] = [
 	{
 		id: '04',
 		name: 'AbacatePay',
-		status: 'coming soon',
-		headline: 'Brazil-first rails.',
+		status: 'supported',
+		headline: 'AbacatePay is live.',
 		description:
-			'Local payment flows like PIX mapped into the same provider-neutral primitives.',
+			'PIX transparent charges, checkout sessions, customers, and webhooks through the same Paymesh client.',
 		icon: 'abacatepay',
-		tags: ['pix', 'BRL', 'links'],
+		tags: ['pix', 'BRL', 'webhooks'],
 	},
 	{
 		id: '05',
@@ -537,9 +537,17 @@ function TrustedLogo({ label }: { label: string }) {
 			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
-					className="h-[14px] w-[14px] object-contain"
+					className="h-[14px] w-[14px] object-contain dark:hidden"
 					height={14}
 					src="/providers/bun.svg"
+					unoptimized
+					width={14}
+				/>
+				<Image
+					alt=""
+					className="hidden h-[14px] w-[14px] object-contain dark:block"
+					height={14}
+					src="/providers/bun-dark.svg"
 					unoptimized
 					width={14}
 				/>
@@ -566,9 +574,17 @@ function TrustedLogo({ label }: { label: string }) {
 			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
-					className="h-[14px] w-[14px] object-contain"
+					className="h-[14px] w-[14px] object-contain dark:hidden"
 					height={14}
 					src="/providers/hono.svg"
+					unoptimized
+					width={14}
+				/>
+				<Image
+					alt=""
+					className="hidden h-[14px] w-[14px] object-contain dark:block"
+					height={14}
+					src="/providers/hono-dark.svg"
 					unoptimized
 					width={14}
 				/>
@@ -584,9 +600,17 @@ function TrustedLogo({ label }: { label: string }) {
 			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
-					className="h-[14px] w-[14px] object-contain"
+					className="h-[14px] w-[14px] object-contain dark:hidden"
 					height={14}
 					src="/providers/elysia.svg"
+					unoptimized
+					width={14}
+				/>
+				<Image
+					alt=""
+					className="hidden h-[14px] w-[14px] object-contain dark:block"
+					height={14}
+					src="/providers/elysia-dark.svg"
 					unoptimized
 					width={14}
 				/>
@@ -602,9 +626,17 @@ function TrustedLogo({ label }: { label: string }) {
 			<div className="flex items-center gap-2 px-5 text-[color:var(--landing-text-muted)]">
 				<Image
 					alt=""
-					className="h-[14px] w-[14px] object-contain"
+					className="h-[14px] w-[14px] object-contain dark:hidden"
 					height={14}
 					src="/providers/express.svg"
+					unoptimized
+					width={14}
+				/>
+				<Image
+					alt=""
+					className="hidden h-[14px] w-[14px] object-contain dark:block"
+					height={14}
+					src="/providers/express-dark.svg"
 					unoptimized
 					width={14}
 				/>

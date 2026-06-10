@@ -103,8 +103,7 @@ export const docsNavigation: DocNavGroup[] = [
 			{ label: 'Polar', href: '/docs/providers/polar', icon: 'polar' },
 			{
 				label: 'AbacatePay',
-				description: 'Planned provider',
-				status: 'planned',
+				href: '/docs/providers/abacatepay',
 				icon: 'abacatepay',
 			},
 			{

@@ -26,7 +26,16 @@ Providers resolve sandbox automatically based on their configuration.
 // https://api.polar.sh         → sandbox: false (default)
 ```
 
-Both providers also accept an explicit `sandbox` option that overrides auto-detection:
+**AbacatePay** inspects the API key prefix:
+
+```ts
+// @paymesh/abacatepay resolves:
+// abc_dev_... → sandbox: true
+// abc_live_... → sandbox: false
+// no key      → sandbox: false (default assumption)
+```
+
+All providers also accept an explicit `sandbox` option that overrides auto-detection:
 
 ```ts title="src/lib/paymesh.ts"
 import { stripe } from "@paymesh/stripe";

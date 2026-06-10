@@ -104,6 +104,14 @@ export const stripe = ({
 				data: PaymentCreateData,
 				options?: ProviderRequestOptions<IncludeRaw>,
 			) {
+				if (typeof data.amount !== 'number' || !data.currency)
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message:
+							'Stripe requires "amount" and "currency" when creating a payment.',
+						provider: 'stripe',
+					});
+
 				const body = new URLSearchParams({
 					mode: 'payment',
 					'line_items[0][quantity]': '1',

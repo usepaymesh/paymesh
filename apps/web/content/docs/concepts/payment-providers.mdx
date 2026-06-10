@@ -42,6 +42,18 @@ Polar currently implements:
 
 Polar does **not** expose PIX in the current repository.
 
+### AbacatePay
+
+AbacatePay currently implements:
+
+- checkout payments (catalog-driven with product IDs)
+- PIX transparent charges
+- customers
+- catalog reads
+- webhook verification and event mapping
+
+AbacatePay does **not** expose subscriptions, refunds, or customer portal in the current repository.
+
 ## Capability flags
 
 Provider differences are carried through capability flags rather than hidden.
@@ -59,6 +71,7 @@ without guessing from package name or trial-and-error.
 Some provider-specific differences still matter. For example:
 
 - Polar requires `productIds` for checkout creation
+- AbacatePay requires `productIds` for checkout creation and uses catalog-driven checkout
 - Stripe PIX supports `amountIncludesIof` and expiration settings
 - dashboard integrations vary by provider
 

@@ -97,6 +97,13 @@ export const polar = ({
 					});
 				}
 
+				if (!data.currency)
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: 'Polar requires "currency" when creating a payment.',
+						provider: 'polar',
+					});
+
 				const metadata = Object.fromEntries(
 					Object.entries(data.metadata ?? {}).filter(
 						([, value]) => value !== null,

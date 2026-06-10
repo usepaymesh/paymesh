@@ -56,11 +56,11 @@ export interface PaymentCustomer {
 
 /** Input used to create a payment checkout or invoice. */
 export interface PaymentCreateData {
-	/** Payment amount in the smallest currency unit. */
-	amount: number;
-	/** ISO currency code. */
-	currency: string;
-	/** Provider-specific product ids attached to the payment. */
+	/** Payment amount in the smallest currency unit. Required by providers that compute the amount server-side (e.g. Stripe). */
+	amount?: number;
+	/** ISO currency code. Required by providers that compute the currency server-side. */
+	currency?: string;
+	/** Provider-specific product ids attached to the payment. Required by providers that price via catalog (e.g. AbacatePay). */
 	productIds?: string[];
 
 	/** Optional customer context for the payment. */

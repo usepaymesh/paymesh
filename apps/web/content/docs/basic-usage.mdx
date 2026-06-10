@@ -17,7 +17,7 @@ Everything else exists to support those flows: webhooks normalize inbound events
 
 Hosted payments are the most provider-neutral place to start.
 
-<Tabs items={["stripe", "polar"]}>
+<Tabs items={["stripe", "polar", "abacatepay"]}>
   <Tab value="stripe">
     ```ts title="src/server/create-payment.ts"
     import { paymesh } from "@/lib/paymesh";
@@ -62,6 +62,27 @@ Hosted payments are the most provider-neutral place to start.
     console.log(payment.checkoutUrl);
     ```
   </Tab>
+
+  <Tab value="abacatepay">
+    ```ts title="src/server/create-payment.ts"
+    import { paymesh } from "@/lib/paymesh";
+
+    const payment = await paymesh.payments.create({
+      productIds: ["prod_abc123"],
+      customer: {
+        id: "cus_123",
+      },
+      metadata: {
+        externalId: "order_42",
+      },
+      successUrl: "http://localhost:3000/billing/success",
+      returnUrl: "http://localhost:3000/billing",
+    });
+
+    console.log(payment.id);
+    console.log(payment.checkoutUrl);
+    ```
+  </Tab>
 </Tabs>
 
 ## Create a PIX payment
@@ -92,30 +113,72 @@ console.log(pix.expiresAt);
 ```
 
 <Callout type="info">
-  In the current repository, native `pix` capability is implemented by `@paymesh/stripe`. The Polar provider intentionally does not advertise PIX support.
+  In the current repository, native `pix` capability is implemented by `@paymesh/stripe` and `@paymesh/abacatepay`. The Polar provider intentionally does not advertise PIX support.
 </Callout>
 
 ## Upsert and read a customer
 
 Customer operations are normalized the same way as payments.
 
-```ts title="src/server/customers.ts"
-import { paymesh } from "@/lib/paymesh";
+<Tabs items={["stripe", "polar", "abacatepay"]}>
+  <Tab value="stripe">
+    ```ts title="src/server/customers.ts"
+    import { paymesh } from "@/lib/paymesh";
 
-const customer = await paymesh.customers.upsert({
-  email: "ada@example.com",
-  externalId: "user_123",
-  name: "Ada Lovelace",
-  phone: "+55 11 99999-9999",
-  metadata: {
-    role: "owner",
-  },
-});
+    const customer = await paymesh.customers.upsert({
+      email: "ada@example.com",
+      externalId: "user_123",
+      name: "Ada Lovelace",
+      phone: "+55 11 99999-9999",
+      metadata: {
+        role: "owner",
+      },
+    });
 
-const stored = await paymesh.customers.get(customer.id);
+    const stored = await paymesh.customers.get(customer.id);
 
-console.log(stored.id, stored.email);
-```
+    console.log(stored.id, stored.email);
+    ```
+  </Tab>
+
+  <Tab value="polar">
+    ```ts title="src/server/customers.ts"
+    import { paymesh } from "@/lib/paymesh";
+
+    const customer = await paymesh.customers.upsert({
+      email: "ada@example.com",
+      externalId: "user_123",
+      name: "Ada Lovelace",
+      metadata: {
+        role: "owner",
+      },
+    });
+
+    const stored = await paymesh.customers.get(customer.id);
+
+    console.log(stored.id, stored.email);
+    ```
+  </Tab>
+
+  <Tab value="abacatepay">
+    ```ts title="src/server/customers.ts"
+    import { paymesh } from "@/lib/paymesh";
+
+    const customer = await paymesh.customers.upsert({
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+      phone: "+5511999999999",
+      metadata: {
+        role: "owner",
+      },
+    });
+
+    const stored = await paymesh.customers.get(customer.id);
+
+    console.log(stored.id, stored.email);
+    ```
+  </Tab>
+</Tabs>
 
 ## Handle webhooks with normalized hooks
 

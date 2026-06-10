@@ -1,0 +1,223 @@
+---
+title: AbacatePay
+description: "Detailed guide to the AbacatePay provider: setup options, capabilities, checkout sessions, PIX transparent charges, customers, catalog, and webhook normalization."
+---
+
+## Overview
+
+`@paymesh/abacatepay` is the first-party Paymesh provider for AbacatePay, a Brazil-focused payment gateway. It is the right choice when you need:
+
+- PIX transparent charges with copy-paste payloads and QR codes
+- AbacatePay checkout sessions with product catalog integration
+- normalized customer lifecycle methods
+- catalog sync from AbacatePay product listings
+- webhook verification with HMAC-SHA256 signature validation
+
+## Installation
+
+<InstallTabs packages="paymesh @paymesh/abacatepay" />
+
+## Provider options
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `apiKey` | yes in practice | AbacatePay API key used for authenticated requests. Defaults to `process.env.ABACATEPAY_API_KEY`. |
+| `webhookSecret` | recommended | Secret used for URL-based webhook verification. Defaults to `process.env.ABACATEPAY_WEBHOOK_SECRET`. |
+| `sandbox` | no | Forces sandbox mode. Auto-detected from key prefix (`abc_dev_`) when omitted. |
+| `baseUrl` | no | Overrides the AbacatePay API base URL. Defaults to `https://api.abacatepay.com`. |
+| `retry` | no | Request retry policy forwarded to the shared request layer. |
+| `timeout` | no | Per-request timeout in milliseconds. |
+| `fetch` | no | Custom fetch implementation. Useful for tests or edge-specific wiring. |
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { abacatepay } from "@paymesh/abacatepay";
+
+export const paymesh = createClient({
+  provider: abacatepay({
+    apiKey: process.env.ABACATEPAY_API_KEY!,
+    webhookSecret: process.env.ABACATEPAY_WEBHOOK_SECRET,
+  }),
+});
+```
+
+## Capability profile
+
+| Capability | Supported |
+| --- | --- |
+| `checkout` | yes |
+| `pix` | yes |
+| `customers` | yes |
+| `webhooks` | yes |
+| `subscriptions` | no |
+| `refunds` | no |
+| `customerPortal` | no |
+| `coupons` | no |
+
+## Checkout payments
+
+`paymesh.payments.create()` maps to AbacatePay checkout sessions. AbacatePay requires `productIds` because its checkout is catalog-driven.
+
+```ts title="src/server/payments.ts"
+const payment = await paymesh.payments.create({
+  productIds: ["prod_abc123"],
+  customer: {
+    id: "cus_123",
+  },
+  metadata: {
+    externalId: "order_42",
+  },
+  successUrl: "http://localhost:3000/success",
+  returnUrl: "http://localhost:3000/cancel",
+});
+```
+
+### Important constraint
+
+If `productIds` is omitted or empty, the provider throws `invalid_request`.
+
+AbacatePay checkout creation inside Paymesh preserves AbacatePay's catalog-first model. You pass product IDs and the provider maps them into the checkout items array.
+
+### Request mapping details
+
+- `productIds` maps to `items` (each with `quantity: 1`)
+- `customer.id` maps to `customerId`
+- `metadata.externalId` maps to `externalId`
+- `successUrl` maps to `completionUrl`
+- `returnUrl` maps to `returnUrl`
+- `methods` is always set to `['PIX', 'CARD']`
+
+## PIX payments
+
+AbacatePay PIX uses transparent charges through `/v2/transparents/create`. This gives you a native PIX payment with copy-paste payloads and QR codes.
+
+```ts title="src/server/pix.ts"
+const pix = await paymesh.pix.create({
+  amount: 5000,
+  currency: "BRL",
+  description: "Invoice #42",
+  customer: {
+    id: "cus_123",
+  },
+  metadata: {
+    externalId: "invoice_42",
+  },
+  pix: {
+    expiresAfterSeconds: 3600,
+  },
+});
+```
+
+### PIX-specific options
+
+| Option | Description |
+| --- | --- |
+| `pix.expiresAfterSeconds` | Sets PIX expiration in seconds from now. |
+
+### Fetching a PIX payment
+
+```ts title="src/server/pix-get.ts"
+const pix = await paymesh.pix.get("charge_123");
+```
+
+### PIX response shape
+
+The normalized PIX object includes:
+
+- `copyPasteCode` — the PIX payload string for copy-paste
+- `qrCodeImageUrlPng` — the QR code as a base64 PNG image
+- `expiresAt` — the expiration timestamp (if set)
+
+## Customer operations
+
+AbacatePay customer methods are normalized through `paymesh.customers`.
+
+```ts title="src/server/customers.ts"
+const customer = await paymesh.customers.upsert({
+  email: "billing@acme.dev",
+  name: "ACME Corp",
+  phone: "+5511999999999",
+  metadata: {
+    plan: "enterprise",
+  },
+});
+```
+
+### Customer mapping notes
+
+- `phone` maps to `cellphone` in the AbacatePay API
+- `metadata` is passed through directly
+- delete returns a normalized `{ id, provider, deleted }` shape
+
+## Catalog sync
+
+AbacatePay ships `provider.catalog.list()`, which reads products from `/v2/products`.
+
+```ts title="src/server/catalog.ts"
+const catalog = await paymesh.provider.catalog?.list();
+
+console.log(catalog?.products.length, catalog?.prices.length);
+```
+
+Products without a numeric `price` are filtered out of the prices list. Each product maps to one price entry with a synthetic id (`${product.id}_price`).
+
+## Webhook verification
+
+The provider verifies webhooks using two layers:
+
+1. The `webhookSecret` URL query parameter must match the configured secret
+2. The `x-webhook-signature` header must match the HMAC-SHA256 of the request body
+
+```ts title="src/server/webhooks.ts"
+import { Webhooks } from "@paymesh/elysia";
+import { paymesh } from "@/lib/paymesh";
+
+export const app = new Elysia().post(
+  "/webhooks/paymesh",
+  Webhooks({
+    client: paymesh,
+    async onPaymentSucceeded(event) {
+      console.log("payment.succeeded", event.data.id);
+    },
+  }),
+);
+```
+
+If `webhookSecret` is missing, verification returns `false`.
+
+## Webhook event mapping
+
+The provider maps AbacatePay events into Paymesh event names:
+
+| AbacatePay event | Paymesh event |
+| --- | --- |
+| `checkout.completed` | `payment.succeeded` |
+| `checkout.refunded` | `payment.refunded` |
+| `checkout.disputed` | `payment.failed` |
+| `checkout.lost` | `payment.failed` |
+| `transparent.completed` | `payment.succeeded` |
+| `transparent.refunded` | `payment.refunded` |
+| `transparent.disputed` | `payment.failed` |
+| `transparent.lost` | `payment.failed` |
+| `customer.created` | `customer.created` |
+| `customer.updated` | `customer.updated` |
+| `customer.deleted` | `customer.deleted` |
+| `subscription.completed` | `subscription.created` |
+| `subscription.cancelled` | `subscription.canceled` |
+| `subscription.renewed` | `subscription.updated` |
+| `subscription.trial_started` | `subscription.created` |
+
+### Sandbox detection from webhooks
+
+AbacatePay webhook events include a `devMode` boolean field. The provider uses this per-event to determine sandbox mode, falling back to the provider-level `sandbox` setting when `devMode` is not present.
+
+## Choosing AbacatePay
+
+Use AbacatePay when:
+
+- your product needs native PIX transparent charges in Brazil
+- you work with BRL as the primary currency
+- you need a catalog-driven checkout model
+- you want webhook-driven payment status updates
+
+Do not choose AbacatePay if you need subscriptions, refunds, or customer portal features — those are not yet supported by the provider.
