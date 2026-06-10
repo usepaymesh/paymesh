@@ -250,7 +250,7 @@ describe('cli helpers', () => {
 			),
 		).rejects.toMatchObject({
 			code: 'client_error',
-			message: 'Built-in events require --data to be a JSON object',
+			message: 'Built-in events require a JSON object from data',
 		});
 	});
 
@@ -295,7 +295,7 @@ describe('cli helpers', () => {
 		).rejects.toMatchObject({
 			code: 'client_error',
 			message:
-				'Plugin event "onCouponRedeemed" requires --data with a JSON payload',
+				'Plugin event "onCouponRedeemed" requires --data or stdin with a JSON payload',
 		});
 	});
 
@@ -1197,7 +1197,10 @@ async function createTempProject() {
 
 async function writeCliClient(directory: string) {
 	const paymeshModuleUrl = pathToFileURL(
-		path.resolve(process.cwd(), 'packages/paymesh/src/index.ts'),
+		path.resolve(
+			path.dirname(new URL(import.meta.url).pathname),
+			'../../paymesh/src/index.ts',
+		),
 	).href;
 	const logFile = path.join(directory, 'trigger-log.json');
 

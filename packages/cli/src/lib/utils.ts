@@ -22,18 +22,18 @@ export function parseJson(input: string, param = 'data') {
 
 		throw new PaymeshError({
 			code: 'client_error',
-			message: `Invalid JSON passed to --${param}: ${error instanceof Error ? error.message : String(error)}`,
+			message: `Invalid JSON from ${param}: ${error instanceof Error ? error.message : String(error)}`,
 		});
 	}
 }
 
 export function parseObjectJson(input: string, param = 'data') {
-	const data = parseJson(input);
+	const data = parseJson(input, param);
 
 	if (typeof data !== 'object' || data === null || Array.isArray(data))
 		throw new PaymeshError({
 			code: 'client_error',
-			message: `Built-in events require --${param} to be a JSON object`,
+			message: `Built-in events require a JSON object from ${param}`,
 		});
 
 	return data;
