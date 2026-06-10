@@ -34,6 +34,8 @@ import packageJson from 'package.json';
 
 export { type CliStatus, getPaymeshStatus } from './lib/status';
 
+export const version = packageJson.version;
+
 export function createProgram() {
 	const program = new Command();
 

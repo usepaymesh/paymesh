@@ -1,5 +1,7 @@
 import type { Command } from 'commander';
 import { PaymeshError } from 'paymesh';
+import { version } from 'src';
+import { printWelcome } from 'src/lib/style';
 import { loadClient } from '../lib/client';
 import { startWebhookServer } from '../lib/listen';
 import { formatPath, logInfo, logSuccess } from '../lib/output';
@@ -26,7 +28,12 @@ export function registerListenCommand(program: Command) {
 				cwd: process.cwd(),
 				explicitPath: options.client,
 			});
+
 			const server = await startWebhookServer({ client, port });
+
+			printWelcome({
+				version,
+			});
 
 			logSuccess(
 				`Listening for ${client.provider.id} webhooks on ${formatPath(`http://127.0.0.1:${server.port}`)}`,
