@@ -4,13 +4,23 @@ import {
 	type PaymeshDatabaseDriver,
 	PaymeshError,
 } from 'paymesh';
-import { Pool, type PoolClient, type QueryResultRow } from 'pg';
+import {
+	Pool,
+	type PoolClient,
+	type PoolConfig,
+	type QueryResultRow,
+} from 'pg';
 import { createRepositories } from './repositories';
 
 /**
  * Options for the Postgres adapter.
+ *
+ * In addition to `persistRaw`, you may pass any `PoolConfig` option
+ * (e.g. `max`, `idleTimeoutMillis`, `connectionTimeoutMillis`).
+ * These are forwarded to the internal `Pool` when a connection string is given,
+ * and ignored when an existing `Pool` instance is passed.
  */
-export interface PostgresDatabaseOptions {
+export interface PostgresDatabaseOptions extends Partial<PoolConfig> {
 	/** Keeps raw provider payloads attached to stored rows when enabled. Defaults to `false`. */
 	persistRaw?: boolean;
 }
@@ -24,18 +34,33 @@ export interface PostgresDatabaseOptions {
  *   persistRaw: true,
  * });
  * ```
+ *
+ * @example
+ * ```ts
+ * export const database = postgres(process.env.DATABASE_URL, {
+ *   max: 10,
+ *   idleTimeoutMillis: 30000,
+ * });
+ * ```
+ *
+ * @example
+ * ```ts
+ * const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+ * export const database = postgres(pool, { persistRaw: true });
+ * ```
  */
 export function postgres(
 	connection: string | Pool,
 	options?: PostgresDatabaseOptions,
 ) {
+	const { persistRaw: raw, ...poolOptions } = options ?? {};
+	const persistRaw = raw ?? false;
+
 	const pool =
 		typeof connection === 'string'
-			? new Pool({ connectionString: connection })
+			? new Pool({ connectionString: connection, ...poolOptions })
 			: connection;
 	const ownsPool = typeof connection === 'string';
-
-	const persistRaw = options?.persistRaw ?? false;
 	const query = <Row = unknown>(compiledQuery: CompiledQuery) =>
 		executeQuery<Row>(pool, compiledQuery.sql, compiledQuery.params);
 	const execute = (compiledQuery: CompiledQuery) =>

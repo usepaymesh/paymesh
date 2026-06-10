@@ -31,18 +31,53 @@ export const paymesh = createClient({
 
 ## Accepted connection inputs
 
-The adapter accepts either:
+The first argument accepts either:
 
-- a connection string
-- an existing `pg.Pool`
+- a **connection string** — the adapter creates and owns the internal `pg.Pool`, closing it on `database.close()`
+- an existing **`pg.Pool`** instance — ownership stays with your app; `database.close()` is a no-op
 
-If you pass a connection string, the adapter owns the pool and will close it from `database.close()`. If you pass an existing pool, ownership stays with your app.
+### Passing a connection string
+
+```ts
+postgres("postgres://postgres:postgres@localhost:5432/paymesh")
+```
+
+### Passing an existing Pool
+
+```ts
+import { Pool } from "pg";
+
+const pool = new Pool({
+  connectionString: "postgres://...",
+  max: 20,
+});
+
+postgres(pool)
+```
 
 ## Options
+
+The second argument accepts `persistRaw` plus any option that `pg.Pool` accepts (`max`, `idleTimeoutMillis`, `connectionTimeoutMillis`, `ssl`, etc.).
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `persistRaw` | `false` | Stores raw provider payloads alongside normalized records. |
+| `max` | `10` | Maximum number of clients in the pool. |
+| `idleTimeoutMillis` | `10000` | Close idle clients after this many milliseconds. |
+| `connectionTimeoutMillis` | `10000` | Timeout for acquiring a new connection. |
+| `ssl` | `undefined` | `boolean` or TLS configuration object. |
+| _any `PoolConfig` key_ | — | Forwarded directly to the internal `Pool`. |
+
+Pool-scoped options are forwarded to the internal `Pool` when a connection string is given, and silently ignored when an existing `Pool` instance is passed.
+
+```ts
+postgres("postgres://postgres:postgres@localhost:5432/paymesh", {
+  persistRaw: true,
+  max: 15,
+  idleTimeoutMillis: 30000,
+  ssl: { rejectUnauthorized: false },
+})
+```
 
 ## Transactions
 
