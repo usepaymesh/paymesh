@@ -10,7 +10,7 @@ export function registerListenCommand(program: Command) {
 	program
 		.command('listen')
 		.description('Listen for provider webhooks and print normalized events')
-		.argument('<port>', 'Port to bind the local webhook listener')
+		.argument('[port]', 'Port to bind the local webhook listener', '3000')
 		.option(
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
