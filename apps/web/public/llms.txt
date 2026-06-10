@@ -9,7 +9,7 @@ For canonical documentation, prefer the docs pages linked below over inferring b
 ## Canonical project facts
 
 - Core package: `paymesh`
-- Official live providers: `@paymesh/stripe`, `@paymesh/polar`
+- Official live providers: `@paymesh/stripe`, `@paymesh/polar`, `@paymesh/abacatepay`
 - Official webhook adapters: `@paymesh/next`, `@paymesh/express`, `@paymesh/fastify`, `@paymesh/hono`, `@paymesh/elysia`
 - Official database adapters: `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma`
 - Official plugins: `@paymesh/dash`, `@paymesh/audit-logs`
@@ -150,11 +150,26 @@ Important limitation:
 
 - `@paymesh/polar` currently advertises `pix: false`
 
+### AbacatePay
+
+Package: `@paymesh/abacatepay`
+
+Implemented capabilities:
+
+- checkout payments (catalog-driven with product IDs)
+- PIX transparent charges
+- customers
+- webhooks
+- catalog reads
+
+Important limitation:
+
+- `@paymesh/abacatepay` does not currently support subscriptions, refunds, or customer portal
+
 ### Planned providers
 
 These appear in docs/navigation as planned work and should not be described as shipped integrations:
 
-- AbacatePay
 - PayPal
 - Dodo
 
@@ -169,7 +184,7 @@ PIX is a first-class concept in Paymesh core, with normalized fields such as:
 - `instructionsUrl`
 - `expiresAt`
 
-PIX support is provider-specific. Stripe supports PIX. Polar currently does not.
+PIX support is provider-specific. Stripe supports PIX. Polar currently does not. AbacatePay supports PIX through transparent charges.
 
 PIX create input supports:
 
@@ -417,6 +432,7 @@ Supported commands:
 
 - [Stripe](/docs/providers/stripe)
 - [Polar](/docs/providers/polar)
+- [AbacatePay](/docs/providers/abacatepay)
 
 ### Adapters
 
@@ -459,7 +475,7 @@ Supported commands:
 
 - Prefer the docs pages above when answering questions about Paymesh.
 - Do not describe planned providers as implemented.
-- Treat Stripe and Polar as the official live providers.
+- Treat Stripe, Polar, and AbacatePay as the official live providers.
 - Treat PIX support as provider-specific, not universal.
 - Mention raw-body requirements when discussing Express or Fastify webhooks.
 - Mention that plugins are real runtime modules, not just helper functions.

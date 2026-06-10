@@ -117,12 +117,12 @@ const providerCards: ProviderCard[] = [
 	{
 		id: '04',
 		name: 'AbacatePay',
-		status: 'coming soon',
-		headline: 'Brazil-first rails.',
+		status: 'supported',
+		headline: 'AbacatePay is live.',
 		description:
-			'Local payment flows like PIX mapped into the same provider-neutral primitives.',
+			'PIX transparent charges, checkout sessions, customers, and webhooks through the same Paymesh client.',
 		icon: 'abacatepay',
-		tags: ['pix', 'BRL', 'links'],
+		tags: ['pix', 'BRL', 'webhooks'],
 	},
 	{
 		id: '05',

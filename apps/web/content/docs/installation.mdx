@@ -15,6 +15,10 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
 
     <InstallTabs packages="paymesh @paymesh/polar" />
 
+    If you need PIX transparent charges in Brazil:
+
+    <InstallTabs packages="paymesh @paymesh/abacatepay" />
+
     <Callout type="info">
       You do not need a database on day one, but most real installations should add one quickly so webhook state, customers, PIX objects, and catalog snapshots are queryable locally.
     </Callout>
@@ -25,7 +29,7 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
 
     Put the client in a stable server-side module such as `src/lib/paymesh.ts`, `src/server/paymesh.ts`, or `app/lib/paymesh.ts`.
 
-    <Tabs items={["stripe", "polar"]}>
+    <Tabs items={["stripe", "polar", "abacatepay"]}>
       <Tab value="stripe">
         ```ts title="src/lib/paymesh.ts"
         import { createClient } from "paymesh";
@@ -48,6 +52,19 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
           provider: polar({
             accessToken: "polar_access_123",
             webhookSecret: "whsec_polar_123",
+          }),
+        });
+        ```
+      </Tab>
+      <Tab value="abacatepay">
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { abacatepay } from "@paymesh/abacatepay";
+
+        export const paymesh = createClient({
+          provider: abacatepay({
+            apiKey: process.env.ABACATEPAY_API_KEY!,
+            webhookSecret: process.env.ABACATEPAY_WEBHOOK_SECRET,
           }),
         });
         ```
