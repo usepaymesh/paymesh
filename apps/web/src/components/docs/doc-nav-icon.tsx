@@ -217,7 +217,7 @@ export function DocNavIcon({
 		case 'next':
 			return (
 				<SimpleIcon
-					className={className}
+					className={`${className} dark:invert`}
 					hex={siNextdotjs.hex}
 					path={siNextdotjs.path}
 					title={siNextdotjs.title}
@@ -226,7 +226,7 @@ export function DocNavIcon({
 		case 'express':
 			return (
 				<SimpleIcon
-					className={className}
+					className={`${className} dark:invert`}
 					hex={siExpress.hex}
 					path={siExpress.path}
 					title={siExpress.title}
@@ -235,7 +235,7 @@ export function DocNavIcon({
 		case 'fastify':
 			return (
 				<SimpleIcon
-					className={className}
+					className={`${className} dark:invert`}
 					hex={siFastify.hex}
 					path={siFastify.path}
 					title={siFastify.title}
