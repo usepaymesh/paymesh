@@ -1,12 +1,13 @@
 ---
 title: CLI
-description: Use the Paymesh CLI for migrations, webhook listening, provider catalog sync, plugin inspection, status reporting, and event triggering.
+description: Use the Paymesh CLI for project initialization, migrations, webhook listening, provider catalog sync, plugin inspection, status reporting, and event triggering.
 ---
 
 ## Overview
 
 The CLI package is built for operations around a configured Paymesh client. Its responsibilities are:
 
+- initialize a project with an interactive setup wizard
 - generate migrations from the resolved schema
 - apply migrations
 - inspect runtime status
@@ -17,6 +18,33 @@ The CLI package is built for operations around a configured Paymesh client. Its 
 
 ## Commands
 
+### `paymesh init`
+
+Runs an interactive setup wizard that guides you through initializing Paymesh in your project.
+
+```bash
+bunx paymesh init
+```
+
+The wizard walks through:
+
+- **Install** — optionally install the `paymesh` package
+- **Environment variables** — set the `PAYMESH_NAME` display name
+- **Client file** — create or locate the Paymesh client instance file
+- **Database** — optionally configure a database adapter (Postgres, Prisma, or Drizzle)
+- **Payment provider** — select Stripe, Polar, or Custom; optionally set API key and webhook secret env vars
+- **Webhook handler** — auto-detect framework (Next.js, Hono, Express, Fastify, Elysia) and generate a webhook endpoint
+- **File generation** — write the client file and webhook handler
+- **Dependencies** — install all required packages automatically
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--cwd <path>` | Working directory (defaults to current dir) |
+| `--package-manager <name>` | Package manager to use (auto-detected) |
+| `--skip-install` | Skip automatic dependency installation |
+
 ### `paymesh generate`
 
 Generates SQL migrations from the configured client schema.
@@ -25,11 +53,27 @@ Generates SQL migrations from the configured client schema.
 bunx paymesh generate --client ./src/lib/paymesh.ts
 ```
 
+On first run, the command prompts for the migrations directory location (defaults to `paymesh/migrations`). On subsequent runs it shows a confirmation prompt listing the number of migration files to create and prints the file names before writing them.
+
+Use `--yes` to skip all prompts and accept defaults:
+
+```bash
+bunx paymesh generate --client ./src/lib/paymesh.ts --yes
+```
+
 Use it after:
 
 - changing `schema`
 - adding or removing plugins with tables
 - changing table prefixes or extra fields
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--client <path>` | Path to the Paymesh client module |
+| `--dir <path>` | Migrations directory |
+| `--yes` | Skip prompts and accept defaults |
 
 ### `paymesh migrate`
 
@@ -81,6 +125,12 @@ bunx paymesh plugins --client ./src/lib/paymesh.ts
 Starts a local webhook listener that prints normalized events.
 
 ```bash
+bunx paymesh listen --client ./src/lib/paymesh.ts
+```
+
+The port is optional and defaults to `3000`:
+
+```bash
 bunx paymesh listen 4321 --client ./src/lib/paymesh.ts
 ```
 
@@ -94,13 +144,30 @@ Triggers a built-in webhook event or a registered plugin event.
 bunx paymesh trigger payment.failed --client ./src/lib/paymesh.ts
 ```
 
-You can also pass custom data:
+You can pass custom data with `--data`:
 
 ```bash
 bunx paymesh trigger payment.failed \
   --client ./src/lib/paymesh.ts \
   --data '{"id":"pi_123","amount":4900}'
 ```
+
+You can also pipe JSON data via stdin:
+
+```bash
+echo '{"id":"pi_123","amount":4900}' | bunx paymesh trigger payment.failed \
+  --client ./src/lib/paymesh.ts
+```
+
+Plugin events support both `--data` and stdin. Built-in events use generated fake data by default, with custom data merged on top when provided.
+
+Options:
+
+| Flag | Description |
+|------|-------------|
+| `--client <path>` | Path to the Paymesh client module |
+| `--data <json>` | JSON payload data for the triggered event |
+| `--listen <url>` | Send the built-in event to a `paymesh listen` URL |
 
 ## `--client`
 
@@ -115,10 +182,11 @@ The CLI loads that client and treats it as the source of truth for:
 
 ## Recommended workflow
 
-1. Configure `src/lib/paymesh.ts`
-2. Run `paymesh generate`
-3. Run `paymesh migrate`
-4. Run `paymesh status`
-5. Run `paymesh push` if your provider catalog should be persisted
+1. Run `paymesh init` to bootstrap your project
+2. Configure `src/lib/paymesh.ts` if not using the generated file
+3. Run `paymesh generate`
+4. Run `paymesh migrate`
+5. Run `paymesh status`
+6. Run `paymesh push` if your provider catalog should be persisted
 
 That sequence keeps schema, storage, and provider data aligned.

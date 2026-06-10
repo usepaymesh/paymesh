@@ -1,4 +1,6 @@
 import type { Command } from 'commander';
+import { version } from 'src';
+import { printWelcome } from 'src/lib/style';
 import { loadClient } from '../lib/client';
 import {
 	getAppliedPaymeshMigrations,
@@ -43,7 +45,12 @@ export function registerStatusCommand(program: Command) {
 					history,
 				);
 
+				printWelcome({
+					version,
+				});
+
 				logTitle('Paymesh status', `provider ${status.provider.id}`);
+
 				console.log(`  Provider    ${formatValue(status.provider.id)}`);
 				console.log(
 					`  Database    ${status.database.configured ? formatState(status.database.connected ? 'connected' : 'configured') : formatState('not configured', 'warn')}`,

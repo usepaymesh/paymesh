@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { registerGenerateCommand } from './commands/generate';
+import { registerInitCommand } from './commands/init';
 import { registerListenCommand } from './commands/listen';
 import { registerMigrateCommand } from './commands/migrate';
 import { registerPluginsCommand } from './commands/plugins';
@@ -34,6 +35,8 @@ import packageJson from 'package.json';
 
 export { type CliStatus, getPaymeshStatus } from './lib/status';
 
+export const version = packageJson.version;
+
 export function createProgram() {
 	const program = new Command();
 
@@ -46,6 +49,7 @@ export function createProgram() {
 		.showHelpAfterError();
 
 	registerGenerateCommand(program);
+	registerInitCommand(program);
 	registerListenCommand(program);
 	registerMigrateCommand(program);
 	registerPushCommand(program);

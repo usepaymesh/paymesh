@@ -8,6 +8,7 @@ import {
 } from 'paymesh';
 import { createFakeData } from 'src/lib/faker';
 import { parseJson, parseObjectJson } from 'src/lib/utils';
+import { readStdin } from 'src/shared/stdin';
 import { loadClient } from '../lib/client';
 import {
 	formatBadge,
@@ -56,9 +57,14 @@ export function registerTriggerCommand(program: Command) {
 					explicitPath: options.client,
 				});
 
+				const fromStdin = options.data == null;
+				const rawData = options.data ?? (await readStdin());
+
 				try {
+					const source = fromStdin ? 'stdin' : 'data';
+
 					if (eventName in BUILT_IN_HOOKS) {
-						const data = options.data ? parseObjectJson(options.data) : {};
+						const data = rawData ? parseObjectJson(rawData, source) : {};
 						const hook = BUILT_IN_HOOKS[eventName as PaymeshEventType];
 
 						const event = {
@@ -124,17 +130,16 @@ export function registerTriggerCommand(program: Command) {
 							});
 						}
 
-						if (options.data == null) {
+						if (rawData == null)
 							throw new PaymeshError({
 								code: 'client_error',
-								message: `Plugin event "${eventName}" requires --data with a JSON payload`,
+								message: `Plugin event "${eventName}" requires --data or stdin with a JSON payload`,
 							});
-						}
 
 						const called = await callClientHook(client, eventName, {
 							pluginId: plugin.id,
 							type: eventName,
-							data: parseJson(options.data),
+							data: parseJson(rawData, source),
 							createdAt: new Date().toISOString(),
 						} satisfies PluginHookEvent<string, unknown>);
 
