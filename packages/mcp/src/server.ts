@@ -13,8 +13,12 @@ export function createMcpServer({
 	assertServerCanStart(client, config);
 
 	const server = new McpServer({
-		name: '@paymesh/mcp',
+		name: 'paymesh',
+		title: 'Paymesh Billing MCP',
 		version: packageJson.version,
+		websiteUrl: 'https://paymesh-six.vercel.app/',
+		description:
+			'Local MCP server for inspecting billing data from the current Paymesh project',
 	});
 
 	for (const tool of getTools({ client, config })) {
