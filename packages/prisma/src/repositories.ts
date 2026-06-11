@@ -74,6 +74,72 @@ export function createRepositories(
 					options?.includeRaw,
 				) as never;
 			},
+			async findByEmail(schema, provider, sandbox, email, options) {
+				const fields = Object.values(schema.tables.customers.fields);
+				const [row] = await executor.query<
+					{
+						provider: string;
+						provider_id: string;
+						sandbox: boolean | null;
+						data: Record<string, unknown> | null;
+						raw: unknown;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, sandbox, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'customers')}
+						WHERE provider = $1 AND sandbox = $2 AND email = $3 AND deleted_at IS NULL
+						LIMIT 1`,
+					params: [provider, sandbox, email],
+				});
+
+				if (!row) return null;
+
+				const data = hydrateStoredData(row.data, fields, row);
+
+				return withRaw(
+					{
+						...data,
+						id: row.provider_id,
+						provider: row.provider,
+						sandbox: row.sandbox ?? false,
+					},
+					row.raw,
+					options?.includeRaw,
+				) as never;
+			},
+			async findByExternalId(schema, provider, sandbox, externalId, options) {
+				const fields = Object.values(schema.tables.customers.fields);
+				const [row] = await executor.query<
+					{
+						provider: string;
+						provider_id: string;
+						sandbox: boolean | null;
+						data: Record<string, unknown> | null;
+						raw: unknown;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, sandbox, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'customers')}
+						WHERE provider = $1 AND sandbox = $2 AND external_id = $3 AND deleted_at IS NULL
+						LIMIT 1`,
+					params: [provider, sandbox, externalId],
+				});
+
+				if (!row) return null;
+
+				const data = hydrateStoredData(row.data, fields, row);
+
+				return withRaw(
+					{
+						...data,
+						id: row.provider_id,
+						provider: row.provider,
+						sandbox: row.sandbox ?? false,
+					},
+					row.raw,
+					options?.includeRaw,
+				) as never;
+			},
 			async list(schema, provider, sandbox, options) {
 				const fields = Object.values(schema.tables.customers.fields);
 				const limit = options?.limit ?? 20;
