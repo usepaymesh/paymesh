@@ -1,0 +1,129 @@
+---
+title: MCP
+description: Turn any Paymesh client into an MCP server with the same runtime config your app already uses.
+---
+
+## Paymesh, as a local AI server
+
+`@paymesh/mcp` exposes your real Paymesh client as an MCP server over stdio.
+
+That means you can ask an AI tool to work against the same billing layer your app already uses, without duplicating provider credentials, schemas, or operational rules.
+
+## Install
+
+```bash
+npm install paymesh @paymesh/mcp
+```
+
+If you already have a local Paymesh client file, the MCP package can import it directly.
+
+## Start it
+
+```bash
+npx @paymesh/mcp \
+  --client ./client.ts \
+  --export paymesh \
+  --readonly
+```
+
+If your client uses a live provider by default, add `--allow-live-mode` or configure sandbox mode in the client itself.
+
+```bash
+npx @paymesh/mcp \
+  --client ./client.ts \
+  --export paymesh \
+  --readonly \
+  --allow-live-mode
+```
+
+## Use it with Codex
+
+```bash
+codex mcp add paymesh -- \
+  npx -y @paymesh/mcp \
+  --client ./client.ts \
+  --export paymesh \
+  --readonly \
+  --max-list-limit 50
+```
+
+That keeps the MCP server pointed at the same client module your app already imports.
+
+## CLI options
+
+The CLI is intentionally small and maps directly to the client metadata plus a few overrides.
+
+| Option | Meaning |
+| --- | --- |
+| `--client <path>` | Path to the Paymesh client module. |
+| `--export <name>` | Named export to load from the module. |
+| `--enabled` / `--no-enabled` | Turn the MCP server on or off. |
+| `--readonly` / `--no-readonly` | Expose only read-only tools or allow writes. |
+| `--include-raw` / `--no-include-raw` | Include raw provider payloads in tool output. |
+| `--allow-live-mode` / `--no-allow-live-mode` | Permit live-mode provider usage. |
+| `--max-list-limit <n>` | Limit list tools to a maximum page size. |
+| `--max-list-lines <n>` | Alias for `--max-list-limit`. |
+| `--customers` / `--no-customers` | Enable or disable customer tools. |
+| `--payments` / `--no-payments` | Enable or disable payment tools. |
+| `--pix` / `--no-pix` | Enable or disable PIX tools. |
+| `--plugins` / `--no-plugins` | Enable or disable plugin introspection tools. |
+
+## Tools
+
+The server currently exposes these tools:
+
+| Tool | What it does |
+| --- | --- |
+| `capabilities_list` | Lists the enabled capabilities on the active Paymesh client. |
+| `provider_info` | Shows the active provider, sandbox/live mode, and provider capabilities. |
+| `customers_list` | Lists customers from the configured database. |
+| `customers_get` | Loads a customer by provider id. |
+| `customers_get_by_email` | Loads a customer by email from the configured database. |
+| `customers_get_by_external_id` | Loads a customer by external id from the configured database. |
+| `customers_upsert` | Creates or updates a customer. |
+| `customers_delete` | Deletes a customer by id. |
+| `payments_create` | Creates a payment. |
+| `pix_create` | Creates a PIX payment. |
+| `pix_get` | Loads a PIX payment by id. |
+| `plugins_list` | Lists registered Paymesh plugins. |
+
+## Configuration precedence
+
+The final MCP config is resolved in this order:
+
+1. Built-in defaults.
+2. `client.$mcp` from your Paymesh client.
+3. Flags passed to the MCP CLI.
+
+That keeps the MCP server aligned with the same runtime client your app already trusts.
+
+## Example client
+
+```ts title="client.ts"
+import { createClient } from './packages/paymesh/src';
+import { abacatepay } from './packages/abacatepay/src';
+
+export const paymesh = createClient({
+  provider: abacatepay({
+    sandbox: true,
+  }),
+  mcp: {
+    readonly: true,
+    maxListLimit: 50,
+    tools: {
+      payments: false,
+    },
+  },
+});
+```
+
+## What to expect
+
+The MCP server is designed to stay thin:
+
+- it imports your real Paymesh client
+- it exposes a small set of tools that mirror client behavior
+- it returns structured JSON instead of JSON-as-text
+- it keeps provider-specific details inside the client layer
+
+That makes it useful for support, finance, and operator workflows without adding a second billing model.

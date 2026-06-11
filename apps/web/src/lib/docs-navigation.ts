@@ -196,7 +196,7 @@ export const docsNavigation: DocNavGroup[] = [
 			{
 				label: 'MCP',
 				icon: 'braces',
-				status: 'planned',
+				href: '/docs/mcp',
 			},
 			{
 				label: 'Skills',
