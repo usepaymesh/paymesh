@@ -14,7 +14,7 @@
 		"check": "biome check .",
 		"check:write": "biome check --write .",
 		"typecheck": "bun run typecheck:packages",
-		"typecheck:packages": "bun run --filter './packages/{paymesh,audit-logs,postgres,drizzle,prisma,stripe,polar,abacatepay,express,fastify,hono,elysia,next,cli}' typecheck",
+		"typecheck:packages": "bun run --filter './packages/{paymesh,audit-logs,postgres,drizzle,prisma,stripe,polar,abacatepay,express,fastify,hono,elysia,next,cli,mcp}' typecheck",
 		"typecheck:apps": "bun run --filter './apps/*' typecheck",
 		"types": "bun run typecheck",
 		"test": "bun test --pass-with-no-tests",

@@ -135,7 +135,7 @@ export function createClientManagers<
 				pix: mcp?.tools?.pix ?? true,
 				payments: mcp?.tools?.payments ?? true,
 				customers: mcp?.tools?.customers ?? true,
-				subscriptions: mcp?.tools?.subscriptions ?? true,
+				plugins: mcp?.tools?.plugins ?? true,
 			},
 			enabled: mcp?.enabled ?? true,
 			readonly: mcp?.readonly ?? false,

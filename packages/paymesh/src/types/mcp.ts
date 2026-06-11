@@ -2,7 +2,7 @@ export interface PaymeshMCPToolsOptions {
 	pix?: boolean;
 	customers?: boolean;
 	payments?: boolean;
-	subscriptions?: boolean;
+	plugins?: boolean;
 }
 
 export interface PaymeshMCPOptions {
