@@ -1,5 +1,12 @@
 export const DATABASE_ADAPTERS = [
 	{
+		value: 'memory',
+		label: 'Memory adapter with @paymesh/memory',
+		package: '@paymesh/memory',
+		deps: [],
+		devDeps: [],
+	},
+	{
 		value: 'postgres',
 		label: 'Postgres (raw SQL with @paymesh/postgres)',
 		package: '@paymesh/postgres',

@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { PaymeshError } from 'paymesh';
 import { loadClient } from '../lib/client';
+import { isMemoryDatabase } from '../lib/database';
 import {
 	getAppliedPaymeshMigrations,
 	getExpectedMigrations,
@@ -30,6 +31,14 @@ export function registerMigrateCommand(program: Command) {
 					code: 'client_error',
 					message: 'The configured client does not define a database',
 				});
+
+			if (isMemoryDatabase(client.database)) {
+				logInfo(
+					'Configured client uses @paymesh/memory. SQL migrations do not apply.',
+				);
+
+				return;
+			}
 
 			try {
 				const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);

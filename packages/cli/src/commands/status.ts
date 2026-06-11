@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { version } from 'src';
 import { printWelcome } from 'src/lib/style';
 import { loadClient } from '../lib/client';
+import { isMemoryDatabase } from '../lib/database';
 import {
 	getAppliedPaymeshMigrations,
 	getMigrationHistoryStatus,
@@ -31,11 +32,26 @@ export function registerStatusCommand(program: Command) {
 			try {
 				const migrationsDir = resolveMigrationsDir(process.cwd(), options.dir);
 				const historyPath = resolveHistoryPath(process.cwd());
+				const memoryDatabase = isMemoryDatabase(client.database);
 				const [history, applied] = await Promise.all([
-					getMigrationHistoryStatus(migrationsDir, historyPath, client.schema),
+					memoryDatabase
+						? Promise.resolve({
+								exists: false,
+								valid: true,
+								missingFiles: [],
+								checksumMismatches: [],
+								migrations: [],
+							})
+						: getMigrationHistoryStatus(
+								migrationsDir,
+								historyPath,
+								client.schema,
+							),
 					client.database == null
 						? Promise.resolve<string[]>([])
-						: getAppliedPaymeshMigrations(client.database, client.schema),
+						: memoryDatabase
+							? Promise.resolve<string[]>([])
+							: getAppliedPaymeshMigrations(client.database, client.schema),
 				]);
 				const expected = history.migrations;
 				const status = await getPaymeshStatus(
@@ -54,6 +70,9 @@ export function registerStatusCommand(program: Command) {
 				console.log(`  Provider    ${formatValue(status.provider.id)}`);
 				console.log(
 					`  Database    ${status.database.configured ? formatState(status.database.connected ? 'connected' : 'configured') : formatState('not configured', 'warn')}`,
+				);
+				console.log(
+					`  Adapter     ${formatValue(status.database.adapter ?? 'none')}`,
 				);
 				console.log(
 					`  History     ${status.history.exists ? (status.history.valid ? formatState('valid') : formatState('invalid', 'bad')) : formatState('missing', 'warn')}`,

@@ -1,4 +1,5 @@
 import type { PaymeshClient } from 'paymesh';
+import { isMemoryDatabase } from './database';
 import type { PaymeshMigrationHistoryStatus } from './migrations';
 import { compileQuery, tableName } from './sql';
 
@@ -11,6 +12,8 @@ export interface CliStatus {
 	database: {
 		configured: boolean;
 		connected: boolean;
+		adapter: string | null;
+		ephemeral: boolean;
 		persistRaw: boolean;
 	};
 	migrations: {
@@ -59,6 +62,8 @@ export async function getPaymeshStatus(
 		database: {
 			configured: Boolean(client.database),
 			connected: false,
+			adapter: client.database?.id ?? null,
+			ephemeral: isMemoryDatabase(client.database),
 			persistRaw: client.database?.persistRaw ?? false,
 		},
 		migrations: {
@@ -84,6 +89,12 @@ export async function getPaymeshStatus(
 	};
 
 	if (!client.database) return status;
+
+	if (isMemoryDatabase(client.database)) {
+		status.database.connected = true;
+
+		return status;
+	}
 
 	const [counts] = await client.database.query<{
 		pix_count: string;

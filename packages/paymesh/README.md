@@ -25,6 +25,10 @@
 npm install paymesh @paymesh/stripe @paymesh/postgres
 ```
 
+<p align="center">
+  For tests, CI, and local examples, use <code>@paymesh/memory</code> instead of a production database adapter.
+</p>
+
 <h2 align="center">Quickstart</h2>
 
 <p align="center">
@@ -89,6 +93,10 @@ const pix = await paymesh.pix.create({
 
 console.log(pix.copyPasteCode, pix.instructionsUrl);
 ```
+
+<p align="center">
+  For lightweight test setups, the same client can run with <code>database: memory()</code> from <code>@paymesh/memory</code>.
+</p>
 
 <h2 align="center">Built-in Hooks</h2>
 

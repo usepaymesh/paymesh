@@ -22,6 +22,7 @@ export function generateClientCode(
 	lines.push(`import { ${provider} } from '@paymesh/${provider}';`);
 
 	const dbImports: Record<string, string> = {
+		memory: "import { memory } from '@paymesh/memory';",
 		postgres: "import { postgres } from '@paymesh/postgres';",
 		prisma: "import { prisma } from '@paymesh/prisma';",
 		drizzle: "import { drizzle } from '@paymesh/drizzle';",
@@ -44,6 +45,7 @@ export function generateClientCode(
 	lines.push(`  }),`);
 
 	const dbInits: Record<string, string> = {
+		memory: 'memory()',
 		postgres: 'postgres(process.env.PAYMESH_DATABASE_URL!)',
 		prisma: 'prisma(prismaClient)',
 		drizzle: 'drizzle(db)',

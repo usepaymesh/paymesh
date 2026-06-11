@@ -11,6 +11,7 @@ import {
 	resolveDatabaseSchema,
 	withRaw,
 } from 'paymesh';
+import { memory } from '../../memory/src/index';
 import {
 	createMigrationHistory,
 	createProgram,
@@ -1140,6 +1141,51 @@ describe('cli helpers', () => {
 			q.sql.includes('pix_count'),
 		);
 		expect(statusQuery?.params).toContain(true);
+	});
+
+	test('getPaymeshStatus skips SQL aggregation for memory adapter', async () => {
+		const database = memory();
+		const client = {
+			provider: defineProvider({
+				id: 'stub',
+				isSandbox: () => false,
+				capabilities: {
+					checkout: true,
+				},
+				payments: {
+					create: async () => {
+						throw new Error('not used');
+					},
+				},
+				customers: {
+					get: async () => {
+						throw new Error('not used');
+					},
+					upsert: async () => {
+						throw new Error('not used');
+					},
+					delete: async () => {
+						throw new Error('not used');
+					},
+				},
+			}),
+			schema: resolveDatabaseSchema(),
+			database,
+			isSandbox: () => false,
+		};
+
+		const status = await getPaymeshStatus(client, [], [], {
+			exists: false,
+			valid: true,
+			missingFiles: [],
+			checksumMismatches: [],
+			migrations: [],
+		});
+
+		expect(status.database.connected).toBe(true);
+		expect(status.database.adapter).toBe('memory');
+		expect(status.database.ephemeral).toBe(true);
+		expect(status.catalog.productCount).toBeUndefined();
 	});
 
 	test('pushes catalog through cli helper', async () => {
