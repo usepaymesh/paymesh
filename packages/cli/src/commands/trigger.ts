@@ -45,16 +45,23 @@ export function registerTriggerCommand(program: Command) {
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
 		)
+		.option('--export <name>', 'Named export to load from the client module')
 		.option('--listen <url>', 'Send the built-in event to a paymesh listen URL')
 		.option('--data <json>', 'JSON payload data for the triggered event')
 		.action(
 			async (
 				eventName: string,
-				options: { client?: string; data?: string; listen?: string },
+				options: {
+					client?: string;
+					data?: string;
+					export?: string;
+					listen?: string;
+				},
 			) => {
 				const client = await loadClient({
 					cwd: process.cwd(),
 					explicitPath: options.client,
+					exportName: options.export,
 				});
 
 				const fromStdin = options.data == null;

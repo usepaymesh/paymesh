@@ -6,24 +6,30 @@ import { type PaymeshClient, PaymeshError } from 'paymesh';
 export async function loadClient({
 	cwd,
 	explicitPath,
+	exportName,
 }: {
 	cwd: string;
 	explicitPath?: string;
+	exportName?: string;
 }) {
 	const clientPath = await resolveClientPath(cwd, explicitPath);
 	const moduleUrl = pathToFileURL(clientPath).href;
 	const loaded = (await import(moduleUrl)) as {
 		default?: unknown;
 		paymesh?: unknown;
+		[key: string]: unknown;
 	};
-	const client = loaded.default ?? loaded.paymesh;
+	const client = exportName
+		? loaded[exportName]
+		: (loaded.default ?? loaded.paymesh);
 
-	if (!isPaymeshClient(client)) {
+	if (!isPaymeshClient(client))
 		throw new PaymeshError({
 			code: 'client_error',
-			message: `The client module "${clientPath}" must export the Paymesh client as default or named export "paymesh"`,
+			message: exportName
+				? `The client module "${clientPath}" must export the Paymesh client as named export "${exportName}"`
+				: `The client module "${clientPath}" must export the Paymesh client as default or named export "paymesh"`,
 		});
-	}
 
 	return client;
 }

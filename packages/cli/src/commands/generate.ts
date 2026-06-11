@@ -23,13 +23,20 @@ export function registerGenerateCommand(program: Command) {
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
 		)
+		.option('--export <name>', 'Named export to load from the client module')
 		.option('--dir <path>', 'Migrations directory')
 		.option('--yes', 'Skip prompts and accept defaults', false)
 		.action(
-			async (options: { client?: string; dir?: string; yes?: boolean }) => {
+			async (options: {
+				client?: string;
+				dir?: string;
+				export?: string;
+				yes?: boolean;
+			}) => {
 				const client = await loadClient({
 					cwd: process.cwd(),
 					explicitPath: options.client,
+					exportName: options.export,
 				});
 
 				if (isMemoryDatabase(client.database)) {

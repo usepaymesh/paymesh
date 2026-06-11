@@ -15,37 +15,44 @@ export function registerListenCommand(program: Command) {
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
 		)
-		.action(async (portInput: string, options: { client?: string }) => {
-			const port = Number.parseInt(portInput, 10);
+		.option('--export <name>', 'Named export to load from the client module')
+		.action(
+			async (
+				portInput: string,
+				options: { client?: string; export?: string },
+			) => {
+				const port = Number.parseInt(portInput, 10);
 
-			if (!Number.isInteger(port) || port < 0 || port > 65_535)
-				throw new PaymeshError({
-					code: 'cli_error',
-					message: `Invalid port "${portInput}". Expected 0-65535.`,
+				if (!Number.isInteger(port) || port < 0 || port > 65_535)
+					throw new PaymeshError({
+						code: 'cli_error',
+						message: `Invalid port "${portInput}". Expected 0-65535.`,
+					});
+
+				const client = await loadClient({
+					cwd: process.cwd(),
+					explicitPath: options.client,
+					exportName: options.export,
 				});
 
-			const client = await loadClient({
-				cwd: process.cwd(),
-				explicitPath: options.client,
-			});
+				const server = await startWebhookServer({ client, port });
 
-			const server = await startWebhookServer({ client, port });
+				printWelcome({
+					version,
+				});
 
-			printWelcome({
-				version,
-			});
+				logSuccess(
+					`Listening for ${client.provider.id} webhooks on ${formatPath(`http://127.0.0.1:${server.port}`)}`,
+				);
 
-			logSuccess(
-				`Listening for ${client.provider.id} webhooks on ${formatPath(`http://127.0.0.1:${server.port}`)}`,
-			);
+				await waitForShutdown(async () => {
+					await server.close();
+					await client.database?.close?.();
 
-			await waitForShutdown(async () => {
-				await server.close();
-				await client.database?.close?.();
-
-				logInfo('Webhook listener stopped');
-			});
-		});
+					logInfo('Webhook listener stopped');
+				});
+			},
+		);
 }
 
 async function waitForShutdown(close: () => Promise<void>) {

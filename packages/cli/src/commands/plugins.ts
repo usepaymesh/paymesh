@@ -16,10 +16,12 @@ export function registerPluginsCommand(program: Command) {
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
 		)
+		.option('--export <name>', 'Named export to load from the client module')
 		.action(async (options) => {
 			const client = await loadClient({
 				cwd: process.cwd(),
 				explicitPath: options.client,
+				exportName: options.export,
 			});
 
 			const plugins = client.plugins.list();

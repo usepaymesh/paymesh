@@ -28,7 +28,7 @@ npm install @paymesh/cli
 <h2 align="center">Client Discovery</h2>
 
 <p align="center">
-  The CLI resolves your Paymesh client in three ways: an explicit <code>--client</code> flag, the <code>PAYMESH_PATH</code> environment variable, or <code>package.json.paymesh.path</code>. The client module must export the Paymesh client as the default export or as a named export called <code>paymesh</code>.
+  The CLI resolves your Paymesh client in three ways: an explicit <code>--client</code> flag, the <code>PAYMESH_PATH</code> environment variable, or <code>package.json.paymesh.path</code>. The client module must export the Paymesh client as the default export or as a named export called <code>paymesh</code>. Use <code>--export &lt;name&gt;</code> when the client lives under a different named export.
 </p>
 
 ```json
@@ -41,6 +41,7 @@ npm install @paymesh/cli
 
 ```bash
 paymesh status --client ./src/lib/paymesh.ts
+paymesh status --client ./src/lib/billing.ts --export billing
 PAYMESH_PATH=./src/lib/paymesh.ts paymesh generate
 paymesh migrate
 ```

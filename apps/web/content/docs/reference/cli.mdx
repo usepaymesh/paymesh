@@ -72,6 +72,7 @@ Options:
 | Flag | Description |
 |------|-------------|
 | `--client <path>` | Path to the Paymesh client module |
+| `--export <name>` | Named export to load from the client module |
 | `--dir <path>` | Migrations directory |
 | `--yes` | Skip prompts and accept defaults |
 
@@ -166,6 +167,7 @@ Options:
 | Flag | Description |
 |------|-------------|
 | `--client <path>` | Path to the Paymesh client module |
+| `--export <name>` | Named export to load from the client module |
 | `--data <json>` | JSON payload data for the triggered event |
 | `--listen <url>` | Send the built-in event to a `paymesh listen` URL |
 
@@ -179,6 +181,16 @@ The CLI loads that client and treats it as the source of truth for:
 - database adapter
 - resolved schema
 - plugin registration
+
+## `--export`
+
+Use `--export <name>` when your client module does not use the default export or the named export `paymesh`.
+
+```bash
+bunx paymesh status --client ./src/lib/billing.ts --export billing
+```
+
+If `--export` is omitted, the CLI keeps the current fallback behavior and loads the default export first, then the named export `paymesh`.
 
 ## Recommended workflow
 

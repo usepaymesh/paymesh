@@ -14,10 +14,12 @@ export function registerPushCommand(program: Command) {
 			'--client <path>',
 			'Path to the module exporting the Paymesh client',
 		)
-		.action(async (options: { client?: string }) => {
+		.option('--export <name>', 'Named export to load from the client module')
+		.action(async (options: { client?: string; export?: string }) => {
 			const client = await loadClient({
 				cwd: process.cwd(),
 				explicitPath: options.client,
+				exportName: options.export,
 			});
 
 			if (!client.database)

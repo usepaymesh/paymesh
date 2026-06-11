@@ -85,6 +85,41 @@ describe('cli helpers', () => {
 		expect(namedClient.provider.id).toBe('stub');
 	});
 
+	test('loads a custom named client export when --export is provided', async () => {
+		const directory = await createTempProject();
+		await fs.writeFile(
+			path.join(directory, 'custom-client.mjs'),
+			'export const billing = { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+		);
+
+		const client = await loadClient({
+			cwd: directory,
+			explicitPath: './custom-client.mjs',
+			exportName: 'billing',
+		});
+
+		expect(client.provider.id).toBe('stub');
+	});
+
+	test('fails when the requested named export does not exist', async () => {
+		const directory = await createTempProject();
+		await fs.writeFile(
+			path.join(directory, 'custom-client.mjs'),
+			'export const billing = { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+		);
+
+		await expect(
+			loadClient({
+				cwd: directory,
+				explicitPath: './custom-client.mjs',
+				exportName: 'paymesh',
+			}),
+		).rejects.toMatchObject({
+			code: 'client_error',
+			message: `The client module "${path.join(directory, 'custom-client.mjs')}" must export the Paymesh client as named export "paymesh"`,
+		});
+	});
+
 	test('triggers a built-in event from the CLI', async () => {
 		const directory = await createTempProject();
 		await writeCliClient(directory);
@@ -107,6 +142,29 @@ describe('cli helpers', () => {
 		expect(
 			await fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
 		).toContain('"hook":"onCustomerCreated"');
+	});
+
+	test('uses --export to load a custom named client export from the CLI', async () => {
+		const directory = await createTempProject();
+		await writeCliClient(directory, {
+			exportName: 'billing',
+		});
+		const logs = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'plugins',
+					'--client',
+					'./paymesh-client.ts',
+					'--export',
+					'billing',
+				]);
+			}),
+		);
+
+		expect(logs).toContain('Registered plugins');
+		expect(logs).toContain('coupons');
 	});
 
 	test('sends a built-in event to paymesh listen', async () => {
@@ -1330,7 +1388,10 @@ async function createTempProject() {
 	return directory;
 }
 
-async function writeCliClient(directory: string) {
+async function writeCliClient(
+	directory: string,
+	options?: { exportName?: string },
+) {
 	const paymeshModuleUrl = pathToFileURL(
 		path.resolve(
 			path.dirname(new URL(import.meta.url).pathname),
@@ -1338,6 +1399,9 @@ async function writeCliClient(directory: string) {
 		),
 	).href;
 	const logFile = path.join(directory, 'trigger-log.json');
+	const exportStatement = options?.exportName
+		? `export const ${options.exportName} = createClient({`
+		: 'export default createClient({';
 
 	await fs.writeFile(
 		path.join(directory, 'paymesh-client.ts'),
@@ -1354,7 +1418,7 @@ const coupons = definePlugin({
 	},
 });
 
-export default createClient({
+${exportStatement}
 	provider: defineProvider({
 		id: 'stub',
 		isSandbox: () => false,
