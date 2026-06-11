@@ -13,6 +13,7 @@
 <p align="center">
   <a href="#installation">Installation</a> ·
   <a href="#usage">Usage</a> ·
+  <a href="#configure-from-the-cli">Configure from the CLI</a> ·
   <a href="#available-tools">Available tools</a> ·
   <a href="#why-use-it">Why use it</a>
 </p>
@@ -57,22 +58,35 @@ npx @paymesh/mcp \
   --max-list-limit 50
 ```
 
+<p align="center">
+  The final MCP config is resolved from Paymesh defaults, then <code>client.$mcp</code>, then CLI flags. That keeps the MCP server aligned with the same client module your application imports.
+</p>
+
+<h2 align="center">Configure from the CLI</h2>
+
+<p align="center">
+  The <code>paymesh mcp</code> command configures supported MCP clients for you.
+</p>
+
 ```bash
-codex mcp add paymesh -- npx -y @paymesh/mcp \
+paymesh mcp \
   --client ./src/lib/paymesh.ts \
   --export billing \
-  --readonly \
-  --max-list-limit 50
+  --codex
 ```
 
 <p align="center">
-  The final MCP config is resolved from Paymesh defaults, then <code>client.$mcp</code>, then CLI flags. That keeps the MCP server aligned with the same client module your application imports.
+  You can also use <code>--cursor</code>, <code>--claude-code</code>, <code>--open-code</code>, or <code>--manual</code>. When no target flag is passed, the CLI opens an interactive picker.
 </p>
 
 <h2 align="center">Available Tools</h2>
 
 <p align="center">
   <code>@paymesh/mcp</code> exposes <code>customers_list</code>, <code>customers_get</code>, <code>customers_upsert</code>, <code>customers_delete</code>, <code>payments_create</code>, <code>pix_create</code>, <code>pix_get</code>, and <code>plugins_list</code>.
+</p>
+
+<p align="center">
+  It also exposes <code>capabilities_list</code>, <code>provider_info</code>, <code>customers_get_by_email</code>, and <code>customers_get_by_external_id</code>.
 </p>
 
 <p align="center">

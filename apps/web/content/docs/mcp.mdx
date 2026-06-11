@@ -36,18 +36,27 @@ npx @paymesh/mcp \
   --allow-live-mode
 ```
 
+## Configure it from the CLI
+
+```bash
+paymesh mcp \
+  --client ./client.ts \
+  --export paymesh \
+  --codex
+```
+
+The `paymesh mcp` command can also configure Cursor, Claude Code, and Open Code. When you run it without a target flag, it opens an interactive prompt and asks which client you want to configure.
+
 ## Use it with Codex
 
 ```bash
-codex mcp add paymesh -- \
-  npx -y @paymesh/mcp \
-  --client ./client.ts \
-  --export paymesh \
-  --readonly \
-  --max-list-limit 50
+paymesh mcp \
+  --client ./src/lib/paymesh.ts \
+  --export billing \
+  --codex
 ```
 
-That keeps the MCP server pointed at the same client module your app already imports.
+Codex stores MCP settings in `~/.codex/config.toml` by default, or `.codex/config.toml` in trusted projects. `paymesh mcp --codex` configures the Paymesh MCP server using the same `npx @paymesh/mcp ...` command that the Codex CLI expects.
 
 ## CLI options
 
@@ -57,6 +66,11 @@ The CLI is intentionally small and maps directly to the client metadata plus a f
 | --- | --- |
 | `--client <path>` | Path to the Paymesh client module. |
 | `--export <name>` | Named export to load from the module. |
+| `--cursor` | Configure Cursor automatically. |
+| `--claude-code` | Configure Claude Code automatically. |
+| `--codex` | Configure Codex automatically. |
+| `--open-code` | Configure Open Code automatically. |
+| `--manual` | Print the generated MCP config instead of applying it. |
 | `--enabled` / `--no-enabled` | Turn the MCP server on or off. |
 | `--readonly` / `--no-readonly` | Expose only read-only tools or allow writes. |
 | `--include-raw` / `--no-include-raw` | Include raw provider payloads in tool output. |
@@ -125,5 +139,6 @@ The MCP server is designed to stay thin:
 - it exposes a small set of tools that mirror client behavior
 - it returns structured JSON instead of JSON-as-text
 - it keeps provider-specific details inside the client layer
+- `paymesh mcp` configures supported clients automatically instead of asking you to hand-write MCP config every time
 
 That makes it useful for support, finance, and operator workflows without adding a second billing model.
