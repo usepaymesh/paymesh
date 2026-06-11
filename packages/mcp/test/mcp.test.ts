@@ -21,6 +21,9 @@ afterEach(async () => {
 	}
 });
 
+// biome-ignore lint/suspicious/noExplicitAny: Any
+type Any = any;
+
 describe('@paymesh/mcp', () => {
 	test('resolves the client path from package.json', async () => {
 		const directory = await createTempProject();
@@ -163,11 +166,68 @@ describe('@paymesh/mcp', () => {
 		);
 
 		expect(tools.map((tool) => tool.name)).toEqual([
+			'capabilities_list',
+			'provider_info',
 			'customers_list',
 			'customers_get',
+			'customers_get_by_email',
+			'customers_get_by_external_id',
 			'pix_get',
 			'plugins_list',
 		]);
+	});
+
+	test('capabilities_list returns the enabled capabilities', async () => {
+		const client = createTestClient({
+			capabilities: {
+				customers: true,
+				pix: false,
+				checkout: true,
+			},
+		});
+		const tools = getRegisteredTools(client, resolveMcpConfig(client));
+		const tool = tools.find((entry) => entry.name === 'capabilities_list');
+
+		const result = await tool!.handler({});
+
+		expect(result.structuredContent).toEqual({
+			capabilities: ['checkout', 'customers'],
+		});
+	});
+
+	test('provider_info returns provider and sandbox details', async () => {
+		const client = createTestClient({
+			isSandbox: () => false,
+			$mcp: {
+				...DEFAULT_MCP_CONFIG,
+				allowLiveMode: true,
+			},
+			provider: {
+				id: 'provider_x',
+				capabilities: {
+					customers: true,
+					pix: true,
+				},
+			} as PaymeshClient<boolean>['provider'],
+			capabilities: {
+				customers: true,
+				pix: true,
+			},
+		});
+		const tools = getRegisteredTools(client, resolveMcpConfig(client));
+		const tool = tools.find((entry) => entry.name === 'provider_info');
+
+		const result = await tool!.handler({});
+
+		expect(result.structuredContent).toEqual({
+			client: {
+				sandbox: false,
+			},
+			provider: {
+				id: 'provider_x',
+				capabilities: ['customers', 'pix'],
+			},
+		});
 	});
 
 	test('customers_list delegates to client.customers.list', async () => {
@@ -199,6 +259,49 @@ describe('@paymesh/mcp', () => {
 			limit: 25,
 			sandbox: undefined,
 		});
+	});
+
+	test('customers_get_by_email delegates to client.customers.getByEmail', async () => {
+		const findByEmail = mock(() => Promise.resolve({ id: 'cus_123' }));
+		const client = createTestClient({
+			database: createTestClient().database,
+		});
+		client.database!.repositories.customers.findByEmail = findByEmail as Any;
+		const tools = getRegisteredTools(client, resolveMcpConfig(client));
+		const tool = tools.find((entry) => entry.name === 'customers_get_by_email');
+
+		await tool!.handler({ email: 'ada@example.com' });
+
+		expect(findByEmail).toHaveBeenCalledWith(
+			client.schema,
+			'stub',
+			true,
+			'ada@example.com',
+			{ includeRaw: false },
+		);
+	});
+
+	test('customers_get_by_external_id delegates to client.customers.getByExternalId', async () => {
+		const findByExternalId = mock(() => Promise.resolve({ id: 'cus_123' }));
+		const client = createTestClient({
+			database: createTestClient().database,
+		});
+		client.database!.repositories.customers.findByExternalId =
+			findByExternalId as Any;
+		const tools = getRegisteredTools(client, resolveMcpConfig(client));
+		const tool = tools.find(
+			(entry) => entry.name === 'customers_get_by_external_id',
+		);
+
+		await tool!.handler({ externalId: 'user_123' });
+
+		expect(findByExternalId).toHaveBeenCalledWith(
+			client.schema,
+			'stub',
+			true,
+			'user_123',
+			{ includeRaw: false },
+		);
 	});
 
 	test('payments_create delegates to client.payments.create', async () => {
@@ -302,6 +405,8 @@ function createTestClient(
 		customers: {
 			list: async () => ({ data: [], total: 0, next: null, previous: null }),
 			get: async () => ({ id: 'cus_123' }),
+			getByEmail: async () => ({ id: 'cus_123' }),
+			getByExternalId: async () => ({ id: 'cus_123' }),
 			upsert: async (data: unknown) => data,
 			delete: async (id: string) => ({ id }),
 		},
@@ -326,6 +431,70 @@ function createTestClient(
 		capabilities: {},
 		database: {
 			close: async () => {},
+			repositories: {
+				customers: {
+					list: async () => ({
+						data: [],
+						total: 0,
+						next: null,
+						previous: null,
+					}),
+					findByProviderId: async () => null,
+					upsert: async () => {},
+					markDeleted: async () => {},
+					findByEmail: async () => null,
+					findByExternalId: async () => null,
+				},
+				payments: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				pix: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				invoices: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				checkouts: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				subscriptions: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				webhookEvents: {
+					acquire: async () => ({ duplicate: false }),
+					markProcessed: async () => {},
+					markFailed: async () => {},
+				},
+				products: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				prices: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				paymentMethods: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				entitlements: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				usage: {
+					findByProviderId: async () => null,
+					upsert: async () => {},
+				},
+				migrations: {
+					list: async () => [],
+					apply: async () => {},
+				},
+			},
 		},
 	} as unknown as PaymeshClient<boolean>;
 

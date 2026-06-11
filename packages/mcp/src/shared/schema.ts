@@ -6,11 +6,19 @@ export const requestOptionsSchema = z.object({
 });
 
 export const dataInputSchema = requestOptionsSchema.extend({
-	data: z.object({}).passthrough(),
+	data: z.looseObject({}),
 });
 
 export const idInputSchema = requestOptionsSchema.extend({
 	id: z.string().min(1),
+});
+
+export const emailInputSchema = requestOptionsSchema.extend({
+	email: z.email(),
+});
+
+export const externalIdInputSchema = requestOptionsSchema.extend({
+	externalId: z.string().min(1),
 });
 
 export const customersListSchema = requestOptionsSchema.extend({

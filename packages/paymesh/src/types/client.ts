@@ -327,16 +327,6 @@ export interface PaymeshCustomersClient<
 		id: string,
 		options?: ProviderRequestOptions<CallIncludeRaw>,
 	): Promise<PaymeshCustomer<CallIncludeRaw, Schema>>;
-	/** Loads a customer from the database by email. */
-	getByEmail<CallIncludeRaw extends boolean = IncludeRaw>(
-		email: string,
-		options?: ProviderRequestOptions<CallIncludeRaw>,
-	): Promise<PaymeshCustomer<CallIncludeRaw, Schema>>;
-	/** Loads a customer from the database by external id. */
-	getByExternalId<CallIncludeRaw extends boolean = IncludeRaw>(
-		externalId: string,
-		options?: ProviderRequestOptions<CallIncludeRaw>,
-	): Promise<PaymeshCustomer<CallIncludeRaw, Schema>>;
 	/** Lists customers for the configured provider. */
 	list<CallIncludeRaw extends boolean = IncludeRaw>(
 		options?: PaymeshCustomerListOptions<CallIncludeRaw>,
