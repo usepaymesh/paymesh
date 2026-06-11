@@ -151,6 +151,11 @@ export const docsNavigation: DocNavGroup[] = [
 				icon: 'database',
 			},
 			{
+				label: 'Memory',
+				href: '/docs/database/memory',
+				icon: 'database',
+			},
+			{
 				label: 'Postgres',
 				href: '/docs/database/postgres',
 				icon: 'postgresql',

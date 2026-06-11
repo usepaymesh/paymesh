@@ -1430,6 +1430,87 @@ const databasePages: DocPage[] = [
 	},
 	{
 		group: 'Database',
+		slug: ['database', 'memory'],
+		title: 'Memory Adapter',
+		description:
+			'Use ephemeral in-memory persistence for tests, CI, demos, and local examples.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The memory adapter is useful when you want the Paymesh database
+							contract without durable SQL storage.
+						</Paragraph>
+						<DocCodeBlock
+							code={`import { createClient } from "paymesh";
+import { memory } from "@paymesh/memory";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe(),
+  database: memory({
+    seed: {
+      customers: [
+        {
+          id: "cus_seed",
+          provider: "stripe",
+          sandbox: true,
+          email: "ada@example.com",
+        },
+      ],
+    },
+  }),
+});`}
+							filename="src/server/paymesh.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'options',
+				title: 'Options',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Option', 'Meaning']}
+							rows={[
+								[
+									<InlineCode key="mem1">persistRaw</InlineCode>,
+									'Keep raw provider payloads in memory.',
+								],
+								[
+									<InlineCode key="mem2">strict</InlineCode>,
+									'Validate required fields, duplicate ids, and related entities.',
+								],
+								[
+									<InlineCode key="mem3">seed</InlineCode>,
+									'Preload built-in Paymesh tables at initialization.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'when',
+				title: 'When to Use It',
+				content: (
+					<div className="space-y-4">
+						<BulletList>
+							<li>Tests and CI should not depend on a database container.</li>
+							<li>You want a lightweight local demo or prototype.</li>
+							<li>You need seeded ephemeral state for docs or examples.</li>
+						</BulletList>
+					</div>
+				),
+			},
+		],
+	},
+	{
+		group: 'Database',
 		slug: ['database', 'postgres'],
 		title: 'Postgres Adapter',
 		description:

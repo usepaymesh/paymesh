@@ -17,6 +17,7 @@ const packageDocsLinks: Record<string, string> = {
 	'@paymesh/fastify': '/docs/adapters/fastify',
 	'@paymesh/hono': '/docs/adapters/hono',
 	'@paymesh/elysia': '/docs/adapters/elysia',
+	'@paymesh/memory': '/docs/database/memory',
 	'@paymesh/postgres': '/docs/database/postgres',
 	'@paymesh/drizzle': '/docs/database/drizzle',
 	'@paymesh/prisma': '/docs/database/prisma',
