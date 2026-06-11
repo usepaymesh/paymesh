@@ -8,6 +8,7 @@ import type {
 	PaymeshDatabaseDriver,
 	ResolvedDatabaseSchema,
 } from './database';
+import type { PaymeshMCPMetadata, PaymeshMCPOptions } from './mcp';
 import type {
 	AnyPaymeshPlugin,
 	LazyPluginExtension,
@@ -369,6 +370,8 @@ export interface PaymeshClient<
 	plugins: PaymeshPluginsClient<Plugins>;
 	/** Provider capabilities exposed by the provider instance. */
 	capabilities: ProviderCapabilities;
+	/** Metadata used by the `@paymesh/mcp` package. */
+	$mcp: PaymeshMCPMetadata;
 }
 
 /** Options accepted by `createClient`. */
@@ -400,4 +403,6 @@ export interface ClientOptions<
 	hooks?: PaymeshHooks<IncludeRaw, Plugins>;
 	/** Plugins to bootstrap alongside the client. */
 	plugins?: Plugins;
+	/** Options used by the `@paymesh/mcp` package. It's does not create the server, only metadata. */
+	mcp?: PaymeshMCPOptions;
 }
