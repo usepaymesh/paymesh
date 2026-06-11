@@ -35,9 +35,9 @@ export function createClientManagers<
 	IncludeRaw extends boolean,
 	Plugins extends readonly AnyPaymeshPlugin[],
 >({
-	provider,
-	options,
 	schema,
+	provider,
+	options: { mcp, ...options },
 }: CreateClientManagersOptions<Schema, P, IncludeRaw, Plugins>): PaymeshClient<
 	IncludeRaw,
 	Schema,
@@ -130,6 +130,19 @@ export function createClientManagers<
 			list: () => [],
 		},
 		capabilities: provider.capabilities,
+		$mcp: {
+			tools: {
+				pix: mcp?.tools?.pix ?? true,
+				payments: mcp?.tools?.payments ?? true,
+				customers: mcp?.tools?.customers ?? true,
+				plugins: mcp?.tools?.plugins ?? true,
+			},
+			enabled: mcp?.enabled ?? true,
+			readonly: mcp?.readonly ?? false,
+			includeRaw: mcp?.includeRaw ?? false,
+			maxListLimit: mcp?.maxListLimit ?? 50,
+			allowLiveMode: mcp?.allowLiveMode ?? false,
+		},
 	} as PaymeshClient<IncludeRaw, Schema, Plugins>;
 
 	const bootstrappedPlugins = bootstrapPlugins({

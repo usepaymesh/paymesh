@@ -16,7 +16,8 @@ export type PaymeshErrorCode =
 	| 'network_error'
 	| 'timeout'
 	| 'client_error'
-	| 'cli_error';
+	| 'cli_error'
+	| 'mcp_error';
 
 /**
  * Structured input used to build a `PaymeshError`.

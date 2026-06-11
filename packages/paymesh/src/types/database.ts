@@ -436,6 +436,28 @@ export interface PaymeshCustomersRepository {
 		id: string,
 		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
 	): Promise<TCustomer | null>;
+	/** Finds a customer by email. */
+	findByEmail?<
+		IncludeRaw extends boolean = false,
+		TCustomer extends Customer<IncludeRaw> = Customer<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		sandbox: boolean,
+		email: string,
+		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
+	): Promise<TCustomer | null>;
+	/** Finds a customer by external id. */
+	findByExternalId?<
+		IncludeRaw extends boolean = false,
+		TCustomer extends Customer<IncludeRaw> = Customer<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		sandbox: boolean,
+		externalId: string,
+		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
+	): Promise<TCustomer | null>;
 	/** Inserts or updates a customer row. */
 	upsert<TCustomer extends BaseCustomer = BaseCustomer>(
 		schema: ResolvedDatabaseSchema,

@@ -141,7 +141,7 @@ describe('cli helpers', () => {
 			expect(logs).toContain('status 200');
 			expect(listenerLine).toContain('source=trigger');
 			expect(listenerLine).toContain('event=payment.succeeded');
-			await expect(
+			expect(
 				fs.readFile(path.join(directory, 'trigger-log.json'), 'utf8'),
 			).rejects.toThrow();
 		} finally {
@@ -231,11 +231,100 @@ describe('cli helpers', () => {
 		).toContain('"code":"FILE10"');
 	});
 
+	test('prints a manual MCP config', async () => {
+		const directory = await createTempProject();
+		await fs.writeFile(
+			path.join(directory, 'paymesh-client.ts'),
+			'export default {};',
+		);
+
+		const output = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'mcp',
+					'--manual',
+					'--client',
+					'./paymesh-client.ts',
+					'--export',
+					'paymesh',
+				]);
+			}),
+		);
+
+		expect(output).toContain('[mcp_servers.paymesh]');
+		expect(output).toContain('command = "npx"');
+		expect(output).toContain('"@paymesh/mcp"');
+		expect(output).toContain('"--export"');
+		expect(output).toContain('"paymesh"');
+	});
+
+	test('prints a Codex MCP config', async () => {
+		const directory = await createTempProject();
+		await fs.writeFile(
+			path.join(directory, 'paymesh-client.ts'),
+			'export default {};',
+		);
+
+		const output = await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'mcp',
+					'--codex',
+					'--client',
+					'./paymesh-client.ts',
+				]);
+			}),
+		);
+
+		expect(output).toSatisfy(
+			(value) =>
+				value.includes('Codex configured successfully.') ||
+				value.includes('[mcp_servers.paymesh]'),
+		);
+	});
+
+	test('updates opencode.json when configuring Open Code', async () => {
+		const directory = await createTempProject();
+		await fs.writeFile(
+			path.join(directory, 'paymesh-client.ts'),
+			'export default {};',
+		);
+
+		await withinCwd(directory, () =>
+			captureLogs(async () => {
+				await createProgram().parseAsync([
+					'node',
+					'paymesh',
+					'mcp',
+					'--open-code',
+					'--client',
+					'./paymesh-client.ts',
+				]);
+			}),
+		);
+
+		const opencode = JSON.parse(
+			await fs.readFile(path.join(directory, 'opencode.json'), 'utf8'),
+		) as {
+			mcpServers: Record<string, { command: string; args: string[] }>;
+		};
+
+		expect(opencode.mcpServers.paymesh!.command).toBe('npx');
+		expect(opencode.mcpServers.paymesh!.args).toContain('@paymesh/mcp');
+		expect(opencode.mcpServers.paymesh!.args).toContain(
+			path.join(directory, 'paymesh-client.ts'),
+		);
+	});
+
 	test('rejects non-object built-in --data payloads', async () => {
 		const directory = await createTempProject();
 		await writeCliClient(directory);
 
-		await expect(
+		expect(
 			withinCwd(directory, () =>
 				createProgram().parseAsync([
 					'node',
@@ -258,7 +347,7 @@ describe('cli helpers', () => {
 		const directory = await createTempProject();
 		await writeCliClient(directory);
 
-		await expect(
+		expect(
 			withinCwd(directory, () =>
 				createProgram().parseAsync([
 					'node',
@@ -281,7 +370,7 @@ describe('cli helpers', () => {
 		const directory = await createTempProject();
 		await writeCliClient(directory);
 
-		await expect(
+		expect(
 			withinCwd(directory, () =>
 				createProgram().parseAsync([
 					'node',
@@ -303,7 +392,7 @@ describe('cli helpers', () => {
 		const directory = await createTempProject();
 		await writeCliClient(directory);
 
-		await expect(
+		expect(
 			withinCwd(directory, () =>
 				createProgram().parseAsync([
 					'node',
@@ -452,7 +541,7 @@ describe('cli helpers', () => {
 			const summaryLine = stripAnsi(lines[0] ?? '');
 
 			expect(response.status).toBe(405);
-			await expect(response.json()).resolves.toEqual({
+			expect(response.json()).resolves.toEqual({
 				error: 'method_not_allowed',
 			});
 			expect(summaryLine).toContain('405');
@@ -463,7 +552,7 @@ describe('cli helpers', () => {
 	});
 
 	test('fails to start the listener when provider does not support webhooks', async () => {
-		await expect(
+		expect(
 			startWebhookServer({
 				client: {
 					provider: defineProvider({
