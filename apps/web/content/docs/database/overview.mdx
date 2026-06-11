@@ -49,11 +49,12 @@ That means database shape is not just a static package concern. It depends on th
 
 First-party adapters in this repository are:
 
+- `@paymesh/memory`
 - `@paymesh/postgres`
 - `@paymesh/drizzle`
 - `@paymesh/prisma`
 
-All three expose the same Paymesh database driver contract:
+All four expose the same Paymesh database driver contract:
 
 - `query`
 - `execute`
@@ -61,7 +62,7 @@ All three expose the same Paymesh database driver contract:
 - `repositories`
 - optional `close`
 
-The difference is where the SQL ultimately runs.
+The difference is where persistence ultimately runs. `@paymesh/memory` is repository-backed and ephemeral. The others execute SQL through their respective runtimes.
 
 ## `persistRaw`
 
@@ -112,6 +113,7 @@ Use `schema.customTables` when you need additional app- or plugin-owned tables.
 
 ## Which adapter should you pick
 
+- use `@paymesh/memory` for tests, CI, demos, and local examples
 - use `@paymesh/postgres` when you want the simplest direct path with `pg`
 - use `@paymesh/drizzle` when your application already standardizes on Drizzle
 - use `@paymesh/prisma` when Prisma is your application’s database boundary

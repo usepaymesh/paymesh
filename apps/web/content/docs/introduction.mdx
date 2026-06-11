@@ -26,7 +26,7 @@ At runtime, Paymesh is built from four layers:
 
 1. A `client` created with `createClient`.
 2. A `provider` such as `@paymesh/stripe` or `@paymesh/polar`.
-3. An optional `database` adapter such as `@paymesh/postgres`, `@paymesh/drizzle`, or `@paymesh/prisma`.
+3. An optional `database` adapter such as `@paymesh/memory`, `@paymesh/postgres`, `@paymesh/drizzle`, or `@paymesh/prisma`.
 4. Optional `plugins` such as `@paymesh/dash` and `@paymesh/audit-logs`.
 
 ```ts title="src/lib/paymesh.ts"
@@ -76,7 +76,7 @@ The current repository exposes these first-party modules:
 | --- | --- |
 | Core client | `paymesh` |
 | Providers | `@paymesh/stripe`, `@paymesh/polar`, `@paymesh/abacatepay` |
-| Database adapters | `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma` |
+| Database adapters | `@paymesh/memory`, `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma` |
 | Framework adapters | `@paymesh/next`, `@paymesh/express`, `@paymesh/fastify`, `@paymesh/hono`, `@paymesh/elysia` |
 | Plugins | `@paymesh/dash`, `@paymesh/audit-logs` |
 | Tooling | `@paymesh/cli` |
