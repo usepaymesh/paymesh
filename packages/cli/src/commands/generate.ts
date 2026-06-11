@@ -4,6 +4,7 @@ import { confirm, isCancel, log, text } from '@clack/prompts';
 import type { Command } from 'commander';
 import pc from 'picocolors';
 import { loadClient } from '../lib/client';
+import { isMemoryDatabase } from '../lib/database';
 import {
 	DEFAULT_MIGRATIONS_DIR,
 	planGenerateMigrations,
@@ -30,6 +31,14 @@ export function registerGenerateCommand(program: Command) {
 					cwd: process.cwd(),
 					explicitPath: options.client,
 				});
+
+				if (isMemoryDatabase(client.database)) {
+					logInfo(
+						'Configured client uses @paymesh/memory. SQL migration generation does not apply.',
+					);
+
+					return;
+				}
 
 				const paymeshDir = path.join(process.cwd(), 'paymesh');
 				const isFirstRun = !existsSync(paymeshDir);

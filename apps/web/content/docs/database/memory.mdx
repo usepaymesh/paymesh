@@ -1,0 +1,105 @@
+---
+title: Memory
+description: Use the memory adapter for tests, CI, local demos, and ephemeral examples where you want the Paymesh database contract without durable SQL storage.
+---
+
+## Overview
+
+`@paymesh/memory` is a first-party in-memory adapter for Paymesh.
+
+It is designed for:
+
+- tests
+- CI
+- local demos
+- examples that should stay dependency-light
+
+It implements the same repository contract as the SQL-backed adapters, but keeps everything process-local and ephemeral.
+
+## Installation
+
+<InstallTabs packages="@paymesh/memory" />
+
+## Usage
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { memory } from "@paymesh/memory";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: memory({
+    seed: {
+      customers: [
+        {
+          id: "cus_seed",
+          provider: "stripe",
+          sandbox: true,
+          email: "ada@example.com",
+        },
+      ],
+    },
+  }),
+});
+```
+
+## Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `persistRaw` | `false` | Stores raw provider payloads in memory alongside normalized records. |
+| `strict` | `true` | Enforces relational-style validation such as required fields, related entity existence, and duplicate unique ids. |
+| `seed` | `undefined` | Preloads built-in Paymesh tables when the adapter is created. |
+
+## Seeded startup data
+
+Use `seed` when your tests or examples need initial local state:
+
+```ts
+memory({
+  seed: {
+    customers: [
+      {
+        id: "cus_123",
+        provider: "stripe",
+        sandbox: true,
+        email: "ada@example.com",
+      },
+    ],
+    products: [
+      {
+        id: "prod_123",
+        provider: "stripe",
+        sandbox: true,
+        name: "Pro",
+      },
+    ],
+  },
+})
+```
+
+When `strict` is enabled, seed data is validated during initialization so invalid fixtures fail early.
+
+## CLI behavior
+
+The memory adapter is not a SQL backend.
+
+That means:
+
+- `paymesh generate` is skipped
+- `paymesh migrate` is skipped
+- `paymesh status` still works, but reports the adapter as ephemeral instead of trying to run SQL-backed migration and count queries
+
+## When to choose this adapter
+
+Use `@paymesh/memory` when:
+
+- you want a first-party test adapter
+- CI should not depend on a database container
+- you need lightweight examples or prototypes
+
+Use `@paymesh/postgres`, `@paymesh/drizzle`, or `@paymesh/prisma` when you need durable storage.

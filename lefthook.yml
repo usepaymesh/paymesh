@@ -19,4 +19,34 @@ pre-commit:
         test:
             run: bun run test
         types:
-            run: bun run types
+            run: |
+                FILES=$(git diff --name-only --cached --diff-filter=ACMR)
+
+                if [ -z "$FILES" ]; then
+                  exit 0
+                fi
+
+                if echo "$FILES" | grep -q '^tsconfig.base.json$'; then
+                  bun run types
+                  exit $?
+                fi
+
+                FILTERS=$(echo "$FILES" | awk -F/ '
+                  /^packages\/[^/]+\// {
+                    if ($2 == "paymesh") print "paymesh";
+                    else print "@paymesh/" $2;
+                  }
+                  /^apps\/[^/]+\// {
+                    print "./apps/" $2;
+                  }
+                ' | sort -u)
+
+                if [ -z "$FILTERS" ]; then
+                  exit 0
+                fi
+
+                echo "$FILTERS" | while IFS= read -r filter; do
+                  if [ -n "$filter" ]; then
+                    bun run --filter "$filter" typecheck || exit $?
+                  fi
+                done

@@ -32,6 +32,7 @@ The schema layer knows about these built-in table keys:
 
 ## Adapter choice
 
+- Use `@paymesh/memory` for tests, CI, and non-production examples.
 - Use `@paymesh/postgres` for the shortest path to direct Postgres persistence.
 - Use `@paymesh/drizzle` if your app already owns a Drizzle instance.
 - Use `@paymesh/prisma` if your stack already standardizes on Prisma.

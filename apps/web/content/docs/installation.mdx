@@ -77,7 +77,36 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
 
     For anything beyond a toy integration, add one database adapter.
 
-    <Tabs items={["postgres", "drizzle", "prisma"]}>
+    <Tabs items={["memory", "postgres", "drizzle", "prisma"]}>
+      <Tab value="memory">
+        <InstallTabs packages="@paymesh/memory" />
+
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { memory } from "@paymesh/memory";
+        import { stripe } from "@paymesh/stripe";
+
+        export const paymesh = createClient({
+          provider: stripe({
+            secret: "sk_test_123",
+            webhookSecret: "whsec_123",
+          }),
+          database: memory({
+            seed: {
+              customers: [
+                {
+                  id: "cus_seed",
+                  provider: "stripe",
+                  sandbox: true,
+                  email: "ada@example.com",
+                },
+              ],
+            },
+          }),
+        });
+        ```
+      </Tab>
+
       <Tab value="postgres">
         <InstallTabs packages="@paymesh/postgres pg" />
 
@@ -147,6 +176,10 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
 
     <Callout>
       `persistRaw: true` stores provider payloads alongside normalized data. Use it when you need reconciliation, replay analysis, or provider-specific debugging. Leave it off when normalized records are enough.
+    </Callout>
+
+    <Callout type="info">
+      Use `@paymesh/memory` only for tests, CI, demos, and local examples. For production persistence, choose Postgres, Drizzle, or Prisma.
     </Callout>
   </Step>
 
