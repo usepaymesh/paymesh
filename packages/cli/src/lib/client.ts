@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { type PaymeshClient, PaymeshError } from 'paymesh';
+import { isPaymeshClient, PaymeshError } from 'paymesh';
 
 export async function loadClient({
 	cwd,
@@ -64,13 +64,4 @@ async function readClientPathFromPackageJson(cwd: string) {
 	} catch {
 		return undefined;
 	}
-}
-
-function isPaymeshClient(value: unknown): value is PaymeshClient<boolean> {
-	return (
-		typeof value === 'object' &&
-		value !== null &&
-		'provider' in value &&
-		'schema' in value
-	);
 }

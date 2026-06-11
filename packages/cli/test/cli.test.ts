@@ -53,7 +53,7 @@ describe('cli helpers', () => {
 		);
 		await fs.writeFile(
 			path.join(directory, 'src/paymesh-client.mjs'),
-			'export default { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule(),
 		);
 
 		const resolved = await resolveClientPath(directory);
@@ -64,12 +64,12 @@ describe('cli helpers', () => {
 		const defaultDirectory = await createTempProject();
 		await fs.writeFile(
 			path.join(defaultDirectory, 'default-client.mjs'),
-			'export default { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule(),
 		);
 		const namedDirectory = await createTempProject();
 		await fs.writeFile(
 			path.join(namedDirectory, 'named-client.mjs'),
-			'export const paymesh = { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule({ exportName: 'paymesh' }),
 		);
 
 		const defaultClient = await loadClient({
@@ -89,7 +89,7 @@ describe('cli helpers', () => {
 		const directory = await createTempProject();
 		await fs.writeFile(
 			path.join(directory, 'custom-client.mjs'),
-			'export const billing = { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule({ exportName: 'billing' }),
 		);
 
 		const client = await loadClient({
@@ -1386,6 +1386,48 @@ async function createTempProject() {
 	const directory = await fs.mkdtemp(path.join(tmpdir(), 'paymesh-cli-'));
 	tempDirectories.push(directory);
 	return directory;
+}
+
+function createLoaderClientModule(options?: { exportName?: string }) {
+	const paymeshModuleUrl = pathToFileURL(
+		path.resolve(
+			path.dirname(new URL(import.meta.url).pathname),
+			'../../paymesh/src/index.ts',
+		),
+	).href;
+	const exportStatement = options?.exportName
+		? `export const ${options.exportName} = createClient({`
+		: 'export default createClient({';
+
+	return `
+import { createClient, defineProvider } from ${JSON.stringify(paymeshModuleUrl)};
+
+${exportStatement}
+	provider: defineProvider({
+		id: 'stub',
+		isSandbox: () => false,
+		capabilities: {
+			customers: true,
+		},
+		payments: {
+			create: async () => {
+				throw new Error('not used');
+			},
+		},
+		customers: {
+			get: async () => {
+				throw new Error('not used');
+			},
+			upsert: async () => {
+				throw new Error('not used');
+			},
+			delete: async () => {
+				throw new Error('not used');
+			},
+		},
+	}),
+});
+`.trim();
 }
 
 async function writeCliClient(

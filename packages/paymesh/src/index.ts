@@ -4,6 +4,7 @@ import { resolveDatabaseSchema } from './database/schema';
 import { PaymeshError } from './errors';
 import { definePlugin, event, lazy } from './plugins';
 import { defineProvider } from './providers';
+import { isPaymeshClient, PAYMESH_CLIENT_SYMBOL } from './shared/client/marker';
 import { resolveClientSchemaOptions } from './shared/database/schema';
 import { withRaw } from './shared/raw';
 import { request } from './shared/request';
@@ -27,7 +28,9 @@ export {
 	definePlugin,
 	defineProvider,
 	event,
+	isPaymeshClient,
 	lazy,
+	PAYMESH_CLIENT_SYMBOL,
 	PaymeshError,
 	request,
 	resolveDatabaseSchema,

@@ -6,7 +6,9 @@ import {
 	definePlugin,
 	defineProvider,
 	event,
+	isPaymeshClient,
 	lazy,
+	PAYMESH_CLIENT_SYMBOL,
 	type Payment,
 	PaymeshError,
 	type Pix,
@@ -161,6 +163,31 @@ describe('client', () => {
 
 		expect(client.isSandbox()).toBe(true);
 		expect(client.provider.isSandbox()).toBe(true);
+	});
+
+	test('marks created clients with the paymesh client symbol', () => {
+		const client = createClient({
+			provider: createStubProvider(),
+		});
+
+		expect(isPaymeshClient(client)).toBe(true);
+		expect(
+			(client as unknown as Record<PropertyKey, unknown>)[
+				PAYMESH_CLIENT_SYMBOL
+			],
+		).toBe(true);
+		expect(
+			Object.prototype.propertyIsEnumerable.call(client, PAYMESH_CLIENT_SYMBOL),
+		).toBe(false);
+	});
+
+	test('does not treat shape-compatible objects as paymesh clients', () => {
+		expect(
+			isPaymeshClient({
+				provider: { id: 'stub' },
+				schema: { prefix: 'paymesh_', tables: {} },
+			}),
+		).toBe(false);
 	});
 
 	test('rejects createClient sandbox mismatch', () => {

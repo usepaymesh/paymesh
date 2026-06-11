@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { PaymeshClient } from 'paymesh';
 import {
 	DEFAULT_MCP_CONFIG,
@@ -47,13 +48,13 @@ describe('@paymesh/mcp', () => {
 		await writeModule(
 			defaultDirectory,
 			'default-client.mjs',
-			'export default { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule(),
 		);
 		const namedDirectory = await createTempProject();
 		await writeModule(
 			namedDirectory,
 			'named-client.mjs',
-			'export const billing = { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule({ exportName: 'billing' }),
 		);
 
 		const defaultClient = await loadPaymeshClient({
@@ -75,7 +76,7 @@ describe('@paymesh/mcp', () => {
 		await writeModule(
 			directory,
 			'ts-client.ts',
-			'export const billing = { provider: { id: "stub" }, schema: { prefix: "paymesh_", tables: {} } };',
+			createLoaderClientModule({ exportName: 'billing' }),
 		);
 
 		const client = await loadPaymeshClient({
@@ -502,6 +503,48 @@ function createTestClient(
 		...base,
 		...overrides,
 	};
+}
+
+function createLoaderClientModule(options?: { exportName?: string }) {
+	const paymeshModuleUrl = pathToFileURL(
+		path.resolve(
+			path.dirname(new URL(import.meta.url).pathname),
+			'../../paymesh/src/index.ts',
+		),
+	).href;
+	const exportStatement = options?.exportName
+		? `export const ${options.exportName} = createClient({`
+		: 'export default createClient({';
+
+	return `
+import { createClient, defineProvider } from ${JSON.stringify(paymeshModuleUrl)};
+
+${exportStatement}
+	provider: defineProvider({
+		id: 'stub',
+		isSandbox: () => false,
+		capabilities: {
+			customers: true,
+		},
+		payments: {
+			create: async () => {
+				throw new Error('not used');
+			},
+		},
+		customers: {
+			get: async () => {
+				throw new Error('not used');
+			},
+			upsert: async () => {
+				throw new Error('not used');
+			},
+			delete: async () => {
+				throw new Error('not used');
+			},
+		},
+	}),
+});
+`.trim();
 }
 
 async function createTempProject() {

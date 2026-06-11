@@ -1,5 +1,6 @@
 import { PaymeshError } from '../errors';
 import { bootstrapPlugins } from '../plugins/runtime';
+import { PAYMESH_CLIENT_SYMBOL } from '../shared/client/marker';
 import { createRequestOptionsMerger } from '../shared/client/request-options';
 import type {
 	ClientOptions,
@@ -71,79 +72,88 @@ export function createClientManagers<
 	let createHookDispatcher: unknown;
 	let hasHook: unknown;
 
-	const client = {
-		provider,
-		isSandbox: provider.isSandbox,
-		database,
-		schema,
-		hooks: options.hooks,
-		includeRaw: options.includeRaw,
-		payments: createPaymentsClient({
-			assertCapability,
-			database,
-			mergeOptions,
+	const client = Object.defineProperty(
+		{
 			provider,
-			schema,
-		}),
-		pix: createPixClient({
-			assertCapability,
+			isSandbox: provider.isSandbox,
 			database,
-			mergeOptions,
-			provider,
 			schema,
-		}),
-		customers: createCustomersClient({
-			assertCapability,
-			baseIncludeRaw,
-			database,
-			mergeOptions,
-			provider,
-			schema,
-		}),
-		webhooks: createWebhookClient({
-			baseIncludeRaw,
-			database,
-			provider,
-			schema,
-			getDispatchHook: (localHooks) => {
-				const dispatcher = createHookDispatcher as
-					| ((localHooks?: unknown) => RuntimeHookDispatcher)
-					| undefined;
+			hooks: options.hooks,
+			includeRaw: options.includeRaw,
+			payments: createPaymentsClient({
+				assertCapability,
+				database,
+				mergeOptions,
+				provider,
+				schema,
+			}),
+			pix: createPixClient({
+				assertCapability,
+				database,
+				mergeOptions,
+				provider,
+				schema,
+			}),
+			customers: createCustomersClient({
+				assertCapability,
+				baseIncludeRaw,
+				database,
+				mergeOptions,
+				provider,
+				schema,
+			}),
+			webhooks: createWebhookClient({
+				baseIncludeRaw,
+				database,
+				provider,
+				schema,
+				getDispatchHook: (localHooks) => {
+					const dispatcher = createHookDispatcher as
+						| ((localHooks?: unknown) => RuntimeHookDispatcher)
+						| undefined;
 
-				return dispatcher?.(localHooks);
-			},
-			getHasHook: (localHooks) => {
-				const detector = hasHook as
-					| ((hook: string, localHooks?: unknown) => boolean)
-					| undefined;
+					return dispatcher?.(localHooks);
+				},
+				getHasHook: (localHooks) => {
+					const detector = hasHook as
+						| ((hook: string, localHooks?: unknown) => boolean)
+						| undefined;
 
-				return detector ? (hook) => detector(hook, localHooks) : undefined;
+					return detector ? (hook) => detector(hook, localHooks) : undefined;
+				},
+			}),
+			routes: {
+				list: () => [],
+				handle: async () =>
+					Response.json({ error: 'route_not_found' }, { status: 404 }),
 			},
-		}),
-		routes: {
-			list: () => [],
-			handle: async () =>
-				Response.json({ error: 'route_not_found' }, { status: 404 }),
-		},
-		plugins: {
-			byId: {},
-			list: () => [],
-		},
-		capabilities: provider.capabilities,
-		$mcp: {
-			tools: {
-				pix: mcp?.tools?.pix ?? true,
-				payments: mcp?.tools?.payments ?? true,
-				customers: mcp?.tools?.customers ?? true,
-				plugins: mcp?.tools?.plugins ?? true,
+			plugins: {
+				byId: {},
+				list: () => [],
 			},
-			enabled: mcp?.enabled ?? true,
-			readonly: mcp?.readonly ?? false,
-			includeRaw: mcp?.includeRaw ?? false,
-			maxListLimit: mcp?.maxListLimit ?? 50,
-			allowLiveMode: mcp?.allowLiveMode ?? false,
+			capabilities: provider.capabilities,
+			$mcp: {
+				tools: {
+					pix: mcp?.tools?.pix ?? true,
+					payments: mcp?.tools?.payments ?? true,
+					customers: mcp?.tools?.customers ?? true,
+					plugins: mcp?.tools?.plugins ?? true,
+				},
+				enabled: mcp?.enabled ?? true,
+				readonly: mcp?.readonly ?? false,
+				includeRaw: mcp?.includeRaw ?? false,
+				maxListLimit: mcp?.maxListLimit ?? 50,
+				allowLiveMode: mcp?.allowLiveMode ?? false,
+			},
+		} as PaymeshClient<IncludeRaw, Schema, Plugins>,
+		PAYMESH_CLIENT_SYMBOL,
+		{
+			value: true,
+			writable: false,
+			enumerable: false,
+			configurable: false,
 		},
-	} as PaymeshClient<IncludeRaw, Schema, Plugins>;
+	);
 
 	const bootstrappedPlugins = bootstrapPlugins({
 		baseHooks: baseHooks as never,

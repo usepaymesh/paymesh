@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createJiti } from 'jiti';
-import { type PaymeshClient, PaymeshError } from 'paymesh';
+import { isPaymeshClient, type PaymeshClient, PaymeshError } from 'paymesh';
 import type { LoadPaymeshClientOptions } from '../types';
 
 export async function loadPaymeshClient({
@@ -20,12 +20,7 @@ export async function loadPaymeshClient({
 		? module[exportName]
 		: (module.default ?? module.paymesh);
 
-	if (
-		typeof client !== 'object' ||
-		client === null ||
-		!('provider' in client) ||
-		!('schema' in client)
-	)
+	if (!isPaymeshClient(client))
 		throw new PaymeshError({
 			code: 'client_error',
 			message: `The client module "${resolvedPath}" must export the Paymesh client as ${exportName ? `named export "${exportName}"` : 'default export or named export "paymesh"'}.`,
