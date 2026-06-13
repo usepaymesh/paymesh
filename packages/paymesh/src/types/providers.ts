@@ -62,6 +62,10 @@ export interface PaymentCreateData {
 	currency?: string;
 	/** Provider-specific product ids attached to the payment. Required by providers that price via catalog (e.g. AbacatePay). */
 	productIds?: string[];
+	/** Coupon or promotion code to pre-apply on the checkout. */
+	couponCode?: string;
+	/** Whether the hosted checkout should allow customers to enter coupon codes manually. */
+	allowCouponCodes?: boolean;
 
 	/** Optional customer context for the payment. */
 	customer?: PaymentCustomer;
@@ -204,6 +208,212 @@ export type CustomerDeleteResult<IncludeRaw extends boolean = false> = WithRaw<
 	BaseCustomerDeleteResult,
 	IncludeRaw
 >;
+
+/** Common coupon status values normalized across providers. */
+export type CouponStatus =
+	| 'active'
+	| 'inactive'
+	| 'scheduled'
+	| 'expired'
+	| 'deleted';
+
+/** Normalized coupon discount type. */
+export type CouponDiscountType = 'percentage' | 'fixed';
+
+/** Percentage-based discount definition. */
+export interface CouponPercentageDiscount {
+	type: 'percentage';
+	value: number;
+}
+
+/** Fixed-amount discount definition. */
+export interface CouponFixedDiscount {
+	type: 'fixed';
+	value: number;
+	currency?: string;
+	amounts?: Record<string, number>;
+}
+
+/** Normalized discount definition accepted and returned by the coupons API. */
+export type CouponDiscount = CouponPercentageDiscount | CouponFixedDiscount;
+
+/** Duration modes supported by provider-side coupons. */
+export interface CouponDuration {
+	type: 'once' | 'forever' | 'repeating';
+	durationInMonths?: number;
+}
+
+/** Product or price restrictions applied to a coupon. */
+export interface CouponAppliesTo {
+	products?: string[];
+	prices?: string[];
+}
+
+/** Redemption counters exposed by providers. */
+export interface CouponRedemptions {
+	count: number;
+	max: number | null;
+}
+
+/** Normalized coupon payload returned by providers. */
+export interface BaseCoupon {
+	id: string;
+	provider: string;
+	sandbox: boolean;
+	code: string;
+	name?: string;
+	status: CouponStatus;
+	active?: boolean;
+	discount: CouponDiscount;
+	duration?: CouponDuration;
+	startsAt?: string;
+	expiresAt?: string;
+	customerId?: string;
+	firstTimeOnly?: boolean;
+	minimumAmount?: number;
+	minimumAmountCurrency?: string;
+	appliesTo?: CouponAppliesTo;
+	redemptions: CouponRedemptions;
+	metadata?: Record<string, unknown>;
+}
+
+/** Coupon payload that optionally carries the raw provider response. */
+export type Coupon<IncludeRaw extends boolean = false> = WithRaw<
+	BaseCoupon,
+	IncludeRaw
+>;
+
+/** Input used to create a coupon or promotion code. */
+export interface CouponCreateData {
+	code: string;
+	name?: string;
+	discount: CouponDiscount;
+	duration?: CouponDuration;
+	startsAt?: Date | string;
+	expiresAt?: Date | string;
+	maxRedemptions?: number | null;
+	customerId?: string;
+	firstTimeOnly?: boolean;
+	minimumAmount?: number;
+	minimumAmountCurrency?: string;
+	appliesTo?: CouponAppliesTo;
+	metadata?: Record<string, string | number | boolean | null>;
+}
+
+/** Input used to update a coupon or promotion code. */
+export interface CouponUpdateData {
+	code?: string;
+	name?: string;
+	active?: boolean;
+	discount?: CouponDiscount;
+	duration?: CouponDuration;
+	startsAt?: Date | string | null;
+	expiresAt?: Date | string | null;
+	maxRedemptions?: number | null;
+	customerId?: string | null;
+	firstTimeOnly?: boolean;
+	minimumAmount?: number | null;
+	minimumAmountCurrency?: string | null;
+	appliesTo?: CouponAppliesTo;
+	metadata?: Record<string, string | number | boolean | null>;
+}
+
+/** Cursor-based filters supported when listing coupons. */
+export interface CouponListOptions {
+	limit?: number;
+	after?: string;
+	before?: string;
+	code?: string;
+	active?: boolean;
+	status?: CouponStatus;
+}
+
+/** Paginated coupon list response. */
+export interface CouponListResult<
+	IncludeRaw extends boolean = false,
+	TCoupon = Coupon<IncludeRaw>,
+> {
+	data: TCoupon[];
+	total: number;
+	previous: string | null;
+	next: string | null;
+}
+
+/** Returned after deleting a coupon or promotion code. */
+export interface BaseCouponDeleteResult {
+	id: string;
+	provider: string;
+	sandbox: boolean;
+	deleted: boolean;
+	code?: string;
+}
+
+/** Coupon delete payload that optionally carries the raw provider response. */
+export type CouponDeleteResult<IncludeRaw extends boolean = false> = WithRaw<
+	BaseCouponDeleteResult,
+	IncludeRaw
+>;
+
+/** Reasons returned when coupon validation fails. */
+export type CouponInvalidReason =
+	| 'not_found'
+	| 'inactive'
+	| 'expired'
+	| 'not_started'
+	| 'max_redemptions_reached'
+	| 'customer_not_eligible'
+	| 'product_not_eligible'
+	| 'currency_not_supported'
+	| 'minimum_amount_not_reached'
+	| 'provider_error';
+
+/** Price preview returned when checking a coupon against a cart. */
+export interface CouponCheckPreview {
+	subtotal: number;
+	discountTotal: number;
+	total: number;
+	currency: string;
+}
+
+/** Input accepted by `coupons.check()`. */
+export interface CouponCheckData {
+	code: string;
+	customerId?: string;
+	productIds?: string[];
+	priceIds?: string[];
+	amount?: number;
+	currency?: string;
+}
+
+/** Successful coupon validation result. */
+export interface CouponCheckValidResult<
+	IncludeRaw extends boolean = false,
+	TCoupon = Coupon<IncludeRaw>,
+> {
+	valid: true;
+	coupon: TCoupon;
+	preview?: CouponCheckPreview;
+}
+
+/** Failed coupon validation result. */
+export interface CouponCheckInvalidResult<
+	IncludeRaw extends boolean = false,
+	TCoupon = Coupon<IncludeRaw>,
+> {
+	valid: false;
+	reason: CouponInvalidReason;
+	message?: string;
+	coupon?: TCoupon;
+	preview?: CouponCheckPreview;
+}
+
+/** Coupon validation result union. */
+export type CouponCheckResult<
+	IncludeRaw extends boolean = false,
+	TCoupon = Coupon<IncludeRaw>,
+> =
+	| CouponCheckValidResult<IncludeRaw, TCoupon>
+	| CouponCheckInvalidResult<IncludeRaw, TCoupon>;
 
 /** Request-level overrides passed to provider methods. */
 export interface ProviderRequestOptions<IncludeRaw extends boolean = false> {
@@ -360,6 +570,41 @@ export interface ProviderCustomers {
 	): Promise<CustomerDeleteResult<IncludeRaw>>;
 }
 
+/** Coupon management contract. */
+export interface ProviderCoupons {
+	/** Loads a coupon by id. */
+	get<IncludeRaw extends boolean = false>(
+		id: string,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Coupon<IncludeRaw>>;
+	/** Creates a coupon or promotion code. */
+	create<IncludeRaw extends boolean = false>(
+		data: CouponCreateData,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Coupon<IncludeRaw>>;
+	/** Lists coupons exposed by the provider. */
+	list<IncludeRaw extends boolean = false>(
+		listOptions?: CouponListOptions,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<CouponListResult<IncludeRaw>>;
+	/** Updates a coupon or promotion code. */
+	update<IncludeRaw extends boolean = false>(
+		id: string,
+		data: CouponUpdateData,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<Coupon<IncludeRaw>>;
+	/** Deletes a coupon or promotion code. */
+	delete<IncludeRaw extends boolean = false>(
+		id: string,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<CouponDeleteResult<IncludeRaw>>;
+	/** Validates a coupon against the current cart or amount context. */
+	check<IncludeRaw extends boolean = false>(
+		data: CouponCheckData,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	): Promise<CouponCheckResult<IncludeRaw>>;
+}
+
 /** Context passed to webhook verification. */
 export interface ProviderVerifyWebhookContext {
 	request: Request;
@@ -456,6 +701,8 @@ export interface ProviderDefinition<Name extends string = string> {
 
 	/** Customer management contract. */
 	customers: ProviderCustomers;
+	/** Optional coupon management contract. */
+	coupons?: ProviderCoupons;
 
 	/** Optional webhook contract. */
 	webhooks?: ProviderWebhooks;

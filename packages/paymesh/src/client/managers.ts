@@ -13,6 +13,7 @@ import type {
 } from '../types/database';
 import type { AnyPaymeshPlugin } from '../types/plugins';
 import type { Provider, ProviderCapability } from '../types/providers';
+import { createCouponsClient } from './coupons';
 import { createCustomersClient } from './customers';
 import type { RuntimeHookDispatcher } from './helpers';
 import { createPaymentsClient } from './payments';
@@ -97,6 +98,14 @@ export function createClientManagers<
 				schema,
 			}),
 			customers: createCustomersClient({
+				assertCapability,
+				baseIncludeRaw,
+				database,
+				mergeOptions,
+				provider,
+				schema,
+			}),
+			coupons: createCouponsClient({
 				assertCapability,
 				baseIncludeRaw,
 				database,

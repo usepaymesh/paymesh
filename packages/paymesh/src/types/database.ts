@@ -1,11 +1,14 @@
 import type {
 	AnyPayment,
 	BaseAnyPayment,
+	BaseCoupon,
+	BaseCouponDeleteResult,
 	BaseCustomer,
 	BaseCustomerDeleteResult,
 	BasePayment,
 	BasePaymeshEvent,
 	BasePix,
+	Coupon,
 	Customer,
 	Pix,
 	ProviderCatalogPrice,
@@ -17,6 +20,7 @@ import type {
  */
 export type DatabaseTableKey =
 	| 'customers'
+	| 'coupons'
 	| 'pix'
 	| 'checkouts'
 	| 'invoices'
@@ -422,6 +426,43 @@ export interface PaymeshCustomerListResult<
 }
 
 /**
+ * Cursor and paging options for coupon lists.
+ */
+export interface PaymeshCouponListOptions<IncludeRaw extends boolean = false> {
+	/** Page size. */
+	limit?: number;
+	/** Cursor for results after the given page. */
+	after?: string;
+	/** Cursor for results before the given page. */
+	before?: string;
+	/** Filter by exact coupon code. */
+	code?: string;
+	/** Filter by active flag. */
+	active?: boolean;
+	/** Include raw payloads in returned values. Defaults to `false`. */
+	includeRaw?: IncludeRaw;
+	/** Overrides the sandbox mode for this query. Defaults to the provider sandbox mode. */
+	sandbox?: boolean;
+}
+
+/**
+ * Paginated coupon list response.
+ */
+export interface PaymeshCouponListResult<
+	IncludeRaw extends boolean = false,
+	TCoupon = Coupon<IncludeRaw>,
+> {
+	/** Page items. */
+	data: TCoupon[];
+	/** Total matching count. */
+	total: number;
+	/** Cursor for the previous page. */
+	previous: string | null;
+	/** Cursor for the next page. */
+	next: string | null;
+}
+
+/**
  * Repository interface for customer persistence.
  */
 export interface PaymeshCustomersRepository {
@@ -477,6 +518,54 @@ export interface PaymeshCustomersRepository {
 	markDeleted(
 		schema: ResolvedDatabaseSchema,
 		customer: BaseCustomerDeleteResult,
+	): Promise<void>;
+}
+
+/**
+ * Repository interface for coupon persistence.
+ */
+export interface PaymeshCouponsRepository {
+	/** Finds a coupon by provider id. */
+	findByProviderId<
+		IncludeRaw extends boolean = false,
+		TCoupon extends Coupon<IncludeRaw> = Coupon<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		sandbox: boolean,
+		id: string,
+		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
+	): Promise<TCoupon | null>;
+	/** Finds a coupon by code. */
+	findByCode?<
+		IncludeRaw extends boolean = false,
+		TCoupon extends Coupon<IncludeRaw> = Coupon<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		sandbox: boolean,
+		code: string,
+		options?: PaymeshRepositoryReadOptions<IncludeRaw>,
+	): Promise<TCoupon | null>;
+	/** Inserts or updates a coupon row. */
+	upsert<TCoupon extends BaseCoupon = BaseCoupon>(
+		schema: ResolvedDatabaseSchema,
+		coupon: TCoupon,
+	): Promise<void>;
+	/** Lists coupons for a provider. */
+	list<
+		IncludeRaw extends boolean = false,
+		TCoupon extends Coupon<IncludeRaw> = Coupon<IncludeRaw>,
+	>(
+		schema: ResolvedDatabaseSchema,
+		provider: string,
+		sandbox: boolean,
+		options?: PaymeshCouponListOptions<IncludeRaw>,
+	): Promise<PaymeshCouponListResult<IncludeRaw, TCoupon>>;
+	/** Marks a coupon as deleted. */
+	markDeleted(
+		schema: ResolvedDatabaseSchema,
+		coupon: BaseCouponDeleteResult,
 	): Promise<void>;
 }
 
@@ -627,6 +716,7 @@ export interface PaymeshMigrationsRepository {
  */
 export interface PaymeshDatabaseRepositories {
 	customers: PaymeshCustomersRepository;
+	coupons?: PaymeshCouponsRepository;
 	pix: PaymeshPixRepository;
 	checkouts: PaymeshCheckoutsRepository;
 	invoices: PaymeshInvoicesRepository;

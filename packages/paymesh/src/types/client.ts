@@ -3,6 +3,7 @@ import type {
 	DatabaseSchemaOptions,
 	DatabaseTableInputExtraFields,
 	DatabaseTableOutputExtraFields,
+	PaymeshCouponListOptions,
 	PaymeshCustomerListOptions,
 	PaymeshCustomerListResult,
 	PaymeshDatabaseDriver,
@@ -19,6 +20,13 @@ import type {
 } from './plugins';
 import type {
 	AnyPayment,
+	Coupon,
+	CouponCheckData,
+	CouponCheckResult,
+	CouponCreateData,
+	CouponDeleteResult,
+	CouponListResult,
+	CouponUpdateData,
 	Customer,
 	CustomerDeleteResult,
 	CustomerUpsertData,
@@ -283,6 +291,40 @@ export type PaymeshCustomerList<
 	PaymeshCustomerListResult<IncludeRaw, PaymeshCustomer<IncludeRaw, Schema>>
 >;
 
+/** Paymesh coupon input with schema-derived extra fields. */
+export type PaymeshCouponCreateData<
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	CouponCreateData & DatabaseTableInputExtraFields<Schema, 'coupons'>
+>;
+
+/** Paymesh coupon update input with schema-derived extra fields. */
+export type PaymeshCouponUpdateData<
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	CouponUpdateData & DatabaseTableInputExtraFields<Schema, 'coupons'>
+>;
+
+/** Paymesh coupon output with schema-derived extra fields. */
+export type PaymeshCoupon<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<
+	Coupon<IncludeRaw> & DatabaseTableOutputExtraFields<Schema, 'coupons'>
+>;
+
+/** Paginated coupon list using the Paymesh coupon shape. */
+export type PaymeshCouponList<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = Simplify<CouponListResult<IncludeRaw, PaymeshCoupon<IncludeRaw, Schema>>>;
+
+/** Coupon validation result using the Paymesh coupon shape. */
+export type PaymeshCouponCheckResult<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> = CouponCheckResult<IncludeRaw, PaymeshCoupon<IncludeRaw, Schema>>;
+
 /** Payments sub-client exposed by `createClient`. */
 export interface PaymeshPaymentsClient<
 	IncludeRaw extends boolean = false,
@@ -338,6 +380,45 @@ export interface PaymeshCustomersClient<
 	): Promise<CustomerDeleteResult<CallIncludeRaw>>;
 }
 
+/** Coupons sub-client exposed by `createClient`. */
+export interface PaymeshCouponsClient<
+	IncludeRaw extends boolean = false,
+	Schema extends DatabaseSchemaOptions = DatabaseSchemaOptions,
+> {
+	/** Creates a coupon through the configured provider. */
+	create<CallIncludeRaw extends boolean = IncludeRaw>(
+		data: PaymeshCouponCreateData<Schema>,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<PaymeshCoupon<CallIncludeRaw, Schema>>;
+	/** Loads a coupon from the database or provider. */
+	get<CallIncludeRaw extends boolean = IncludeRaw>(
+		id: string,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<PaymeshCoupon<CallIncludeRaw, Schema>>;
+	/** Lists coupons for the configured provider. */
+	list<CallIncludeRaw extends boolean = IncludeRaw>(
+		options?: PaymeshCouponListOptions<CallIncludeRaw>,
+	): Promise<PaymeshCouponList<CallIncludeRaw, Schema>>;
+	/** Updates a coupon through the configured provider. */
+	update<CallIncludeRaw extends boolean = IncludeRaw>(
+		id: string,
+		data: PaymeshCouponUpdateData<Schema>,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<PaymeshCoupon<CallIncludeRaw, Schema>>;
+	/** Deletes a coupon through the configured provider. */
+	delete<CallIncludeRaw extends boolean = IncludeRaw>(
+		id: string,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<CouponDeleteResult<CallIncludeRaw>>;
+	/** Validates a coupon code against the provided cart context. */
+	check<CallIncludeRaw extends boolean = IncludeRaw>(
+		data: CouponCheckData,
+		options?: ProviderRequestOptions<CallIncludeRaw>,
+	): Promise<
+		CouponCheckResult<CallIncludeRaw, PaymeshCoupon<CallIncludeRaw, Schema>>
+	>;
+}
+
 /** Full Paymesh client returned by `createClient`. */
 export interface PaymeshClient<
 	IncludeRaw extends boolean = false,
@@ -362,6 +443,8 @@ export interface PaymeshClient<
 	pix: PaymeshPixClient<IncludeRaw, Schema>;
 	/** Customers sub-client. */
 	customers: PaymeshCustomersClient<IncludeRaw, Schema>;
+	/** Coupons sub-client. */
+	coupons: PaymeshCouponsClient<IncludeRaw, Schema>;
 	/** Webhook handler contract. */
 	webhooks: PaymeshWebhookHandler<IncludeRaw, Plugins>;
 	/** Plugin route dispatcher. */

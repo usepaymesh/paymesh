@@ -22,6 +22,7 @@ export const PAYMESH_DEFAULT_SCHEMA_PREFIX = 'paymesh_';
  */
 export const PAYMESH_DATABASE_TABLE_NAMES = {
 	customers: 'customers',
+	coupons: 'coupons',
 	pix: 'pix',
 	checkouts: 'checkouts',
 	invoices: 'invoices',

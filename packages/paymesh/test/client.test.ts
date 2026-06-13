@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
+	type Coupon,
+	type CouponCheckData,
+	type CouponCheckResult,
+	type CouponCreateData,
 	type Customer,
 	createClient,
 	defineDatabaseAdapter,
@@ -154,6 +158,35 @@ describe('client', () => {
 		expect(globalRawPix.raw).toMatchObject({ id: 'raw_pix_123' });
 		expect(callNullPix.raw).toBeNull();
 		expect(defaultPix.method).toBe('pix');
+	});
+
+	test('exposes coupons client methods and raw payload controls', async () => {
+		const provider = createStubProvider();
+		const defaultClient = createClient({ provider });
+		const rawClient = createClient({ provider, includeRaw: true });
+
+		const defaultCoupon = await defaultClient.coupons.create({
+			code: 'WELCOME10',
+			discount: { type: 'percentage', value: 10 },
+		});
+		const rawCoupon = await rawClient.coupons.get('promo_123');
+		const checkResult = await defaultClient.coupons.check({
+			code: 'WELCOME10',
+			amount: 1000,
+			currency: 'USD',
+		});
+
+		expect(defaultCoupon.raw).toBeNull();
+		expect(rawCoupon.raw).toMatchObject({ id: 'raw_coupon_123' });
+		expect(checkResult).toMatchObject({
+			valid: true,
+			preview: {
+				subtotal: 1000,
+				discountTotal: 100,
+				total: 900,
+				currency: 'USD',
+			},
+		});
 	});
 
 	test('delegates client.isSandbox() to the provider', () => {
@@ -1510,6 +1543,9 @@ function createStubProvider({
 	onPixCreate,
 	onPixGet,
 	onCustomerUpsert,
+	onCouponCreate,
+	onCouponGet,
+	onCouponCheck,
 }: {
 	sandbox?: boolean;
 	onPaymentCreate?: <IncludeRaw extends boolean = false>(
@@ -1537,12 +1573,25 @@ function createStubProvider({
 		data: Record<string, unknown>,
 		options?: ProviderRequestOptions<IncludeRaw>,
 	) => Promise<Customer<IncludeRaw>>;
+	onCouponCreate?: <IncludeRaw extends boolean = false>(
+		data: CouponCreateData,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => Promise<Coupon<IncludeRaw>>;
+	onCouponGet?: <IncludeRaw extends boolean = false>(
+		id: string,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => Promise<Coupon<IncludeRaw>>;
+	onCouponCheck?: <IncludeRaw extends boolean = false>(
+		data: CouponCheckData,
+		options?: ProviderRequestOptions<IncludeRaw>,
+	) => Promise<CouponCheckResult<IncludeRaw>>;
 } = {}) {
 	return defineProvider({
 		id: 'stub',
 		isSandbox: () => sandbox,
 		capabilities: {
 			checkout: true,
+			coupons: true,
 			customers: true,
 			pix: true,
 		},
@@ -1564,6 +1613,110 @@ function createStubProvider({
 							},
 							options?.includeRaw,
 						),
+		},
+		coupons: {
+			create: onCouponCreate
+				? onCouponCreate
+				: async (_data, options) =>
+						withRaw(
+							{
+								id: 'promo_123',
+								provider: 'stub',
+								sandbox,
+								code: 'WELCOME10',
+								status: 'active' as const,
+								discount: { type: 'percentage' as const, value: 10 },
+								redemptions: { count: 0, max: null },
+							},
+							{ id: 'raw_coupon_123' },
+							options?.includeRaw,
+						),
+			get: onCouponGet
+				? onCouponGet
+				: async (_id, options) =>
+						withRaw(
+							{
+								id: 'promo_123',
+								provider: 'stub',
+								sandbox,
+								code: 'WELCOME10',
+								status: 'active' as const,
+								discount: { type: 'percentage' as const, value: 10 },
+								redemptions: { count: 0, max: null },
+							},
+							{ id: 'raw_coupon_123' },
+							options?.includeRaw,
+						),
+			list: async (_options, options) => ({
+				data: [
+					withRaw(
+						{
+							id: 'promo_123',
+							provider: 'stub',
+							sandbox,
+							code: 'WELCOME10',
+							status: 'active' as const,
+							discount: { type: 'percentage' as const, value: 10 },
+							redemptions: { count: 0, max: null },
+						},
+						{ id: 'raw_coupon_123' },
+						options?.includeRaw,
+					),
+				],
+				total: 1,
+				previous: null,
+				next: null,
+			}),
+			update: async (_id, _data, options) =>
+				withRaw(
+					{
+						id: 'promo_123',
+						provider: 'stub',
+						sandbox,
+						code: 'WELCOME10',
+						status: 'active' as const,
+						discount: { type: 'percentage' as const, value: 10 },
+						redemptions: { count: 0, max: null },
+					},
+					{ id: 'raw_coupon_123' },
+					options?.includeRaw,
+				),
+			delete: async (_id, options) =>
+				withRaw(
+					{
+						id: 'promo_123',
+						provider: 'stub',
+						sandbox,
+						deleted: true,
+						code: 'WELCOME10',
+					},
+					{ id: 'raw_coupon_123' },
+					options?.includeRaw,
+				),
+			check: onCouponCheck
+				? onCouponCheck
+				: async (_data, options) => ({
+						valid: true,
+						coupon: withRaw(
+							{
+								id: 'promo_123',
+								provider: 'stub',
+								sandbox,
+								code: 'WELCOME10',
+								status: 'active' as const,
+								discount: { type: 'percentage' as const, value: 10 },
+								redemptions: { count: 0, max: null },
+							},
+							{ id: 'raw_coupon_123' },
+							options?.includeRaw,
+						),
+						preview: {
+							subtotal: 1000,
+							discountTotal: 100,
+							total: 900,
+							currency: 'USD',
+						},
+					}),
 		},
 		pix: {
 			create: onPixCreate
