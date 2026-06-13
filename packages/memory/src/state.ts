@@ -9,6 +9,7 @@ import {
 } from './shared/schema';
 import type {
 	MemoryDatabaseSeed,
+	MemorySeedCoupon,
 	MemorySeedCustomer,
 	MemorySeedPayment,
 	MemorySeedPix,
@@ -32,6 +33,26 @@ export interface StoredCustomer extends Record<string, unknown> {
 	provider: string;
 	/** Whether this record belongs to the sandbox environment. */
 	sandbox: boolean;
+	/** ISO-8601 creation timestamp. */
+	createdAt: string;
+	/** ISO-8601 last update timestamp. */
+	updatedAt: string;
+	/** ISO-8601 soft-deletion timestamp, or `null` if active. */
+	deletedAt: string | null;
+	/** Persisted raw provider payload, or `null` when `persistRaw` is disabled. */
+	raw: unknown;
+}
+
+/** Shape of a coupon record as stored in the in-memory database. */
+export interface StoredCoupon extends Record<string, unknown> {
+	/** Unique coupon identifier assigned by the provider. */
+	id: string;
+	/** Provider identifier that owns this coupon. */
+	provider: string;
+	/** Whether this record belongs to the sandbox environment. */
+	sandbox: boolean;
+	/** Coupon code shown to end users. */
+	code: string;
 	/** ISO-8601 creation timestamp. */
 	createdAt: string;
 	/** ISO-8601 last update timestamp. */
@@ -137,6 +158,8 @@ export interface StoredCatalogRecord extends Record<string, unknown> {
 export interface MemoryDatabaseState {
 	/** Customer records indexed by composite entity key. */
 	customers: Map<string, StoredCustomer>;
+	/** Coupon records indexed by composite entity key. */
+	coupons: Map<string, StoredCoupon>;
 	/** Pix payment records indexed by composite entity key. */
 	pix: Map<string, StoredPayment>;
 	/** Checkout payment records indexed by composite entity key. */
@@ -159,6 +182,7 @@ export interface MemoryDatabaseState {
 export function createEmptyState(): MemoryDatabaseState {
 	return {
 		customers: new Map(),
+		coupons: new Map(),
 		pix: new Map(),
 		checkouts: new Map(),
 		invoices: new Map(),
@@ -179,6 +203,7 @@ export function createEmptyState(): MemoryDatabaseState {
 export function cloneState(state: MemoryDatabaseState): MemoryDatabaseState {
 	return {
 		customers: cloneMap(state.customers),
+		coupons: cloneMap(state.coupons),
 		pix: cloneMap(state.pix),
 		checkouts: cloneMap(state.checkouts),
 		invoices: cloneMap(state.invoices),
@@ -359,6 +384,10 @@ export function applySeed(
 		insertSeedCustomer(state, schema, customer, strict, persistRaw);
 	}
 
+	for (const coupon of seed.coupons ?? []) {
+		insertSeedCoupon(state, schema, coupon, strict, persistRaw);
+	}
+
 	for (const product of seed.products ?? []) {
 		insertSeedProduct(state, schema, product, strict, persistRaw);
 	}
@@ -451,6 +480,61 @@ function insertSeedCustomer(
 		deletedAt: customerRecord.deleted ? now : null,
 		raw: persistRaw
 			? (customerRecord.raw ?? getInternalRaw(customerRecord) ?? null)
+			: null,
+	} as never);
+}
+
+function insertSeedCoupon(
+	state: MemoryDatabaseState,
+	schema: ResolvedDatabaseSchema,
+	coupon: MemorySeedCoupon,
+	strict: boolean,
+	persistRaw: boolean,
+) {
+	validateRequiredString(coupon.id, 'id', schema.tables.coupons.name);
+	validateRequiredString(
+		coupon.provider,
+		'provider',
+		schema.tables.coupons.name,
+	);
+	validateRequiredBoolean(
+		coupon.sandbox,
+		'sandbox',
+		schema.tables.coupons.name,
+	);
+	validateRequiredString(coupon.code, 'code', schema.tables.coupons.name);
+
+	const next = applyTableFieldDefaults(
+		schema.tables.coupons,
+		coupon as unknown as Record<string, unknown>,
+	);
+	validateRequiredTableFields(schema, 'coupons', next);
+	const couponRecord = next as Record<string, unknown>;
+
+	const key = entityKey(
+		couponRecord.provider as string,
+		couponRecord.sandbox as boolean,
+		couponRecord.id as string,
+	);
+	validateUniqueInsert(
+		strict,
+		state.coupons.has(key),
+		schema.tables.coupons.name,
+		couponRecord.id as string,
+	);
+	const now =
+		typeof couponRecord.createdAt === 'string'
+			? couponRecord.createdAt
+			: new Date().toISOString();
+	state.coupons.set(key, {
+		...stripTableFieldKeys(couponRecord, schema, 'coupons'),
+		...couponRecord,
+		createdAt: now,
+		updatedAt:
+			typeof couponRecord.updatedAt === 'string' ? couponRecord.updatedAt : now,
+		deletedAt: couponRecord.deleted ? now : null,
+		raw: persistRaw
+			? (couponRecord.raw ?? getInternalRaw(couponRecord) ?? null)
 			: null,
 	} as never);
 }

@@ -1,5 +1,6 @@
 import type {
 	BaseAnyPayment,
+	BaseCoupon,
 	BaseCustomer,
 	BasePaymeshEvent,
 	BasePix,
@@ -19,6 +20,15 @@ export interface MemorySeedTimestamps {
 export type MemorySeedCustomer = BaseCustomer &
 	MemorySeedTimestamps & {
 		/** Marks the customer as soft-deleted at seed time. */
+		deleted?: boolean;
+		/** Optional raw provider payload to persist when `persistRaw` is enabled. */
+		raw?: unknown;
+	};
+
+/** Coupon record used for seeding the in-memory database. */
+export type MemorySeedCoupon = BaseCoupon &
+	MemorySeedTimestamps & {
+		/** Marks the coupon as soft-deleted at seed time. */
 		deleted?: boolean;
 		/** Optional raw provider payload to persist when `persistRaw` is enabled. */
 		raw?: unknown;
@@ -91,6 +101,8 @@ export type MemorySeedPrice = ProviderCatalogPrice &
 export interface MemoryDatabaseSeed {
 	/** Customer records to seed. */
 	customers?: MemorySeedCustomer[];
+	/** Coupon records to seed. */
+	coupons?: MemorySeedCoupon[];
 	/** Pix payment records to seed. */
 	pix?: MemorySeedPix[];
 	/** Checkout payment records to seed. */

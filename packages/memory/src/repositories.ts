@@ -1,6 +1,7 @@
 import type {
 	BaseAnyPayment,
 	BasePix,
+	PaymeshCouponListOptions,
 	PaymeshDatabaseRepositories,
 	PaymeshRepositoryReadOptions,
 	ResolvedDatabaseSchema,
@@ -232,6 +233,170 @@ export function createRepositories(
 					raw: getPersistableRaw(options.persistRaw, customer),
 					deleted: true,
 					version: getVersion(customer, getPersistableRaw(true, customer)),
+				});
+			},
+		},
+		coupons: {
+			async findByProviderId(_schema, provider, sandbox, id, readOptions) {
+				const coupon = options
+					.getState()
+					.coupons.get(entityKey(provider, sandbox, id));
+				if (!coupon || coupon.deletedAt) return null;
+
+				return mapStoredCoupon(coupon, readOptions) as never;
+			},
+			async findByCode(_schema, provider, sandbox, code, readOptions) {
+				const coupon = [...options.getState().coupons.values()].find(
+					(row) =>
+						row.provider === provider &&
+						row.sandbox === sandbox &&
+						row.deletedAt === null &&
+						row.code === code,
+				);
+				if (!coupon) return null;
+
+				return mapStoredCoupon(coupon, readOptions) as never;
+			},
+			async upsert(schema, coupon) {
+				validateRequiredString(coupon.id, 'id', schema.tables.coupons.name);
+				validateRequiredString(
+					coupon.provider,
+					'provider',
+					schema.tables.coupons.name,
+				);
+				validateRequiredBoolean(
+					coupon.sandbox,
+					'sandbox',
+					schema.tables.coupons.name,
+				);
+				validateRequiredString(coupon.code, 'code', schema.tables.coupons.name);
+
+				const prepared = applyTableFieldDefaults(
+					schema.tables.coupons,
+					coupon as Record<string, unknown>,
+				);
+				validateRequiredTableFields(schema, 'coupons', prepared);
+				const couponRecord = prepared as Record<string, unknown>;
+
+				const key = entityKey(
+					couponRecord.provider as string,
+					couponRecord.sandbox as boolean,
+					couponRecord.id as string,
+				);
+				const existing = options.getState().coupons.get(key);
+				const createdAt = existing?.createdAt ?? new Date().toISOString();
+				options.getState().coupons.set(key, {
+					...stripTableFieldKeys(withoutRaw(couponRecord), schema, 'coupons'),
+					...couponRecord,
+					createdAt,
+					updatedAt: new Date().toISOString(),
+					deletedAt: null,
+					raw: getPersistableRaw(options.persistRaw, coupon),
+					version: getVersion(coupon, getPersistableRaw(true, coupon)),
+				} as never);
+			},
+			async list(_schema, provider, sandbox, listOptions) {
+				const limit = listOptions?.limit ?? 20;
+				if (!Number.isInteger(limit) || limit <= 0) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: 'Coupon list limit must be a positive integer',
+					});
+				}
+				if (listOptions?.after && listOptions?.before) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: 'Coupon list accepts either "after" or "before", not both',
+					});
+				}
+
+				const cursor = decodeCustomerCursor(
+					listOptions?.before ?? listOptions?.after,
+					listOptions?.before ? 'before' : 'after',
+				);
+				const filtered = [...options.getState().coupons.values()]
+					.filter(
+						(coupon) =>
+							coupon.provider === provider &&
+							coupon.sandbox === sandbox &&
+							coupon.deletedAt === null &&
+							(listOptions?.code ? coupon.code === listOptions.code : true) &&
+							(typeof listOptions?.active === 'boolean'
+								? coupon.active === listOptions.active
+								: true),
+					)
+					.sort(compareCustomerRows);
+
+				let pageSource = filtered;
+				if (cursor?.mode === 'after') {
+					pageSource = filtered.filter(
+						(coupon) => compareCustomerRowToCursor(coupon, cursor.value) > 0,
+					);
+				} else if (cursor?.mode === 'before') {
+					pageSource = filtered
+						.filter(
+							(coupon) => compareCustomerRowToCursor(coupon, cursor.value) < 0,
+						)
+						.sort((left, right) => compareCustomerRows(right, left));
+				}
+
+				const hasExtra = pageSource.length > limit;
+				const windowRows = hasExtra ? pageSource.slice(0, limit) : pageSource;
+				const pageRows =
+					cursor?.mode === 'before' ? [...windowRows].reverse() : windowRows;
+				const data = pageRows.map((coupon) =>
+					mapStoredCoupon(coupon, listOptions),
+				);
+
+				return {
+					data,
+					total: filtered.length,
+					previous:
+						data.length === 0
+							? null
+							: cursor?.mode === 'before'
+								? hasExtra
+									? encodeCustomerCursor({
+											createdAt: pageRows[0]!.createdAt,
+											providerId: pageRows[0]!.id,
+										})
+									: null
+								: cursor
+									? encodeCustomerCursor({
+											createdAt: pageRows[0]!.createdAt,
+											providerId: pageRows[0]!.id,
+										})
+									: null,
+					next:
+						data.length === 0
+							? null
+							: cursor?.mode === 'before'
+								? encodeCustomerCursor({
+										createdAt: pageRows[pageRows.length - 1]!.createdAt,
+										providerId: pageRows[pageRows.length - 1]!.id,
+									})
+								: hasExtra
+									? encodeCustomerCursor({
+											createdAt: pageRows[pageRows.length - 1]!.createdAt,
+											providerId: pageRows[pageRows.length - 1]!.id,
+										})
+									: null,
+				} as never;
+			},
+			async markDeleted(_schema, coupon) {
+				const key = entityKey(coupon.provider, coupon.sandbox, coupon.id);
+				const existing = options.getState().coupons.get(key);
+				options.getState().coupons.set(key, {
+					id: coupon.id,
+					code: existing?.code ?? coupon.code ?? coupon.id,
+					provider: coupon.provider,
+					sandbox: coupon.sandbox,
+					createdAt: existing?.createdAt ?? new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+					deletedAt: new Date().toISOString(),
+					raw: getPersistableRaw(options.persistRaw, coupon),
+					deleted: true,
+					version: getVersion(coupon, getPersistableRaw(true, coupon)),
 				});
 			},
 		},
@@ -558,6 +723,27 @@ function mapStoredCustomer(
 		deletedAt: _deletedAt,
 		...data
 	} = customer;
+	return withRaw(cloneValue(data), raw, readOptions?.includeRaw) as never;
+}
+
+function mapStoredCoupon(
+	coupon: Record<string, unknown> & {
+		id: string;
+		provider: string;
+		sandbox: boolean;
+		raw: unknown;
+	},
+	readOptions?:
+		| PaymeshCouponListOptions<boolean>
+		| PaymeshRepositoryReadOptions<boolean>,
+) {
+	const {
+		raw,
+		createdAt: _createdAt,
+		updatedAt: _updatedAt,
+		deletedAt: _deletedAt,
+		...data
+	} = coupon;
 	return withRaw(cloneValue(data), raw, readOptions?.includeRaw) as never;
 }
 

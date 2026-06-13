@@ -279,6 +279,344 @@ export function createRepositories(
 					],
 				}),
 		},
+		coupons: {
+			async findByProviderId(schema, provider, sandbox, id, options) {
+				const fields = Object.values(schema.tables.coupons.fields);
+				const [row] = await executor.query<
+					{
+						active: boolean | null;
+						code: string;
+						customer_provider_id: string | null;
+						data: Record<string, unknown> | null;
+						deleted_at: Date | string | null;
+						discount_currency: string | null;
+						discount_type: string | null;
+						discount_value: number | string | null;
+						expires_at: Date | string | null;
+						max_redemptions: number | string | null;
+						metadata: Record<string, unknown> | null;
+						minimum_amount: number | string | null;
+						minimum_amount_currency: string | null;
+						name: string | null;
+						provider: string;
+						provider_id: string;
+						raw: unknown;
+						redemption_count: number | string | null;
+						sandbox: boolean | null;
+						starts_at: Date | string | null;
+						status: string | null;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, sandbox, code, name, status, active, customer_provider_id, discount_type, discount_value, discount_currency, starts_at, expires_at, max_redemptions, redemption_count, minimum_amount, minimum_amount_currency, metadata, data, raw, deleted_at${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'coupons')}
+						WHERE provider = $1 AND sandbox = $2 AND provider_id = $3 AND deleted_at IS NULL
+						LIMIT 1`,
+					params: [provider, sandbox, id],
+				});
+
+				if (!row) return null;
+
+				const data = hydrateStoredData(row.data, fields, row);
+
+				return withRaw(
+					{
+						...data,
+						id: row.provider_id,
+						provider: row.provider,
+						sandbox: row.sandbox ?? false,
+						code: row.code,
+						name: row.name ?? undefined,
+						status: (row.status ?? 'inactive') as never,
+						active: row.active ?? undefined,
+						customerId: row.customer_provider_id ?? undefined,
+						discount: {
+							type: (row.discount_type ?? 'percentage') as
+								| 'percentage'
+								| 'fixed',
+							value: toNullableNumber(row.discount_value) ?? 0,
+							currency: row.discount_currency ?? undefined,
+						},
+						startsAt: toIsoString(row.starts_at) ?? undefined,
+						expiresAt: toIsoString(row.expires_at) ?? undefined,
+						minimumAmount: toNullableNumber(row.minimum_amount) ?? undefined,
+						minimumAmountCurrency: row.minimum_amount_currency ?? undefined,
+						redemptions: {
+							count: toNullableNumber(row.redemption_count) ?? 0,
+							max: toNullableNumber(row.max_redemptions),
+						},
+						metadata: row.metadata ?? undefined,
+					},
+					row.raw,
+					options?.includeRaw,
+				) as never;
+			},
+			async findByCode(schema, provider, sandbox, code, options) {
+				const fields = Object.values(schema.tables.coupons.fields);
+				const [row] = await executor.query<
+					{
+						active: boolean | null;
+						code: string;
+						customer_provider_id: string | null;
+						data: Record<string, unknown> | null;
+						discount_currency: string | null;
+						discount_type: string | null;
+						discount_value: number | string | null;
+						expires_at: Date | string | null;
+						max_redemptions: number | string | null;
+						metadata: Record<string, unknown> | null;
+						minimum_amount: number | string | null;
+						minimum_amount_currency: string | null;
+						name: string | null;
+						provider: string;
+						provider_id: string;
+						raw: unknown;
+						redemption_count: number | string | null;
+						sandbox: boolean | null;
+						starts_at: Date | string | null;
+						status: string | null;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, sandbox, code, name, status, active, customer_provider_id, discount_type, discount_value, discount_currency, starts_at, expires_at, max_redemptions, redemption_count, minimum_amount, minimum_amount_currency, metadata, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'coupons')}
+						WHERE provider = $1 AND sandbox = $2 AND code = $3 AND deleted_at IS NULL
+						LIMIT 1`,
+					params: [provider, sandbox, code],
+				});
+
+				if (!row) return null;
+
+				const data = hydrateStoredData(row.data, fields, row);
+
+				return withRaw(
+					{
+						...data,
+						id: row.provider_id,
+						provider: row.provider,
+						sandbox: row.sandbox ?? false,
+						code: row.code,
+						name: row.name ?? undefined,
+						status: (row.status ?? 'inactive') as never,
+						active: row.active ?? undefined,
+						customerId: row.customer_provider_id ?? undefined,
+						discount: {
+							type: (row.discount_type ?? 'percentage') as
+								| 'percentage'
+								| 'fixed',
+							value: toNullableNumber(row.discount_value) ?? 0,
+							currency: row.discount_currency ?? undefined,
+						},
+						startsAt: toIsoString(row.starts_at) ?? undefined,
+						expiresAt: toIsoString(row.expires_at) ?? undefined,
+						minimumAmount: toNullableNumber(row.minimum_amount) ?? undefined,
+						minimumAmountCurrency: row.minimum_amount_currency ?? undefined,
+						redemptions: {
+							count: toNullableNumber(row.redemption_count) ?? 0,
+							max: toNullableNumber(row.max_redemptions),
+						},
+						metadata: row.metadata ?? undefined,
+					},
+					row.raw,
+					options?.includeRaw,
+				) as never;
+			},
+			async list(schema, provider, sandbox, options) {
+				const fields = Object.values(schema.tables.coupons.fields);
+				const limit = options?.limit ?? 20;
+				if (!Number.isInteger(limit) || limit <= 0) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: 'Coupon list limit must be a positive integer',
+					});
+				}
+				if (options?.after && options?.before) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: 'Coupon list accepts either "after" or "before", not both',
+					});
+				}
+
+				const cursor = decodeCustomerCursor(
+					options?.before ?? options?.after,
+					options?.before ? 'before' : 'after',
+				);
+				const includeRaw = options?.includeRaw;
+				const countParams: SqlValue[] = [provider, sandbox];
+				const countFilters: string[] = [
+					'provider = $1',
+					'sandbox = $2',
+					'deleted_at IS NULL',
+				];
+				if (options?.code) {
+					countParams.push(options.code);
+					countFilters.push(`code = $${countParams.length}`);
+				}
+				if (typeof options?.active === 'boolean') {
+					countParams.push(options.active);
+					countFilters.push(`active = $${countParams.length}`);
+				}
+				const [totalRow] = await executor.query<{ total: number | string }>({
+					sql: `SELECT COUNT(*) AS total FROM ${tableName(schema, 'coupons')} WHERE ${countFilters.join(' AND ')}`,
+					params: countParams,
+				});
+				const params: SqlValue[] = [...countParams];
+				const filters = [...countFilters];
+				let order = 'ASC';
+
+				if (cursor) {
+					params.push(cursor.value.createdAt, cursor.value.providerId);
+					filters.push(
+						cursor.mode === 'before'
+							? `(created_at, provider_id) < ($${params.length - 1}, $${params.length})`
+							: `(created_at, provider_id) > ($${params.length - 1}, $${params.length})`,
+					);
+					if (cursor.mode === 'before') order = 'DESC';
+				}
+
+				params.push(limit + 1);
+				const rows = await executor.query<
+					{
+						active: boolean | null;
+						code: string;
+						customer_provider_id: string | null;
+						created_at: Date | string;
+						data: Record<string, unknown> | null;
+						discount_currency: string | null;
+						discount_type: string | null;
+						discount_value: number | string | null;
+						expires_at: Date | string | null;
+						max_redemptions: number | string | null;
+						metadata: Record<string, unknown> | null;
+						minimum_amount: number | string | null;
+						minimum_amount_currency: string | null;
+						name: string | null;
+						provider: string;
+						provider_id: string;
+						raw: unknown;
+						redemption_count: number | string | null;
+						sandbox: boolean | null;
+						starts_at: Date | string | null;
+						status: string | null;
+					} & Record<string, unknown>
+				>({
+					sql: `SELECT provider, provider_id, sandbox, created_at, code, name, status, active, customer_provider_id, discount_type, discount_value, discount_currency, starts_at, expires_at, max_redemptions, redemption_count, minimum_amount, minimum_amount_currency, metadata, data, raw${fields.length === 0 ? '' : `, ${fields.map((field) => `${quoteIdentifier(field.column)} AS ${quoteIdentifier(field.key)}`).join(', ')}`}
+						FROM ${tableName(schema, 'coupons')}
+						WHERE ${filters.join(' AND ')}
+						ORDER BY created_at ${order}, provider_id ${order}
+						LIMIT $${params.length}`,
+					params,
+				});
+
+				const hasExtra = rows.length > limit;
+				const windowRows = hasExtra ? rows.slice(0, limit) : rows;
+				const pageRows =
+					cursor?.mode === 'before' ? [...windowRows].reverse() : windowRows;
+				const data = pageRows.map((row) => {
+					const data = hydrateStoredData(row.data, fields, row);
+
+					return withRaw(
+						{
+							...data,
+							id: row.provider_id,
+							provider: row.provider,
+							sandbox: row.sandbox ?? false,
+							code: row.code,
+							name: row.name ?? undefined,
+							status: (row.status ?? 'inactive') as never,
+							active: row.active ?? undefined,
+							customerId: row.customer_provider_id ?? undefined,
+							discount: {
+								type: (row.discount_type ?? 'percentage') as
+									| 'percentage'
+									| 'fixed',
+								value: toNullableNumber(row.discount_value) ?? 0,
+								currency: row.discount_currency ?? undefined,
+							},
+							startsAt: toIsoString(row.starts_at) ?? undefined,
+							expiresAt: toIsoString(row.expires_at) ?? undefined,
+							minimumAmount: toNullableNumber(row.minimum_amount) ?? undefined,
+							minimumAmountCurrency: row.minimum_amount_currency ?? undefined,
+							redemptions: {
+								count: toNullableNumber(row.redemption_count) ?? 0,
+								max: toNullableNumber(row.max_redemptions),
+							},
+							metadata: row.metadata ?? undefined,
+						},
+						row.raw,
+						includeRaw,
+					) as never;
+				});
+
+				return {
+					data,
+					total: Number(totalRow?.total ?? 0),
+					previous:
+						data.length === 0
+							? null
+							: cursor?.mode === 'before'
+								? hasExtra
+									? encodeCustomerCursor(pageRows[0]!)
+									: null
+								: cursor
+									? encodeCustomerCursor(pageRows[0]!)
+									: null,
+					next:
+						data.length === 0
+							? null
+							: cursor?.mode === 'before'
+								? encodeCustomerCursor(pageRows[pageRows.length - 1]!)
+								: hasExtra
+									? encodeCustomerCursor(pageRows[pageRows.length - 1]!)
+									: null,
+				};
+			},
+			upsert: (schema, coupon) =>
+				upsertByProviderId(executor, schema, 'coupons', {
+					provider: coupon.provider,
+					provider_id: coupon.id,
+					version: getVersion(coupon, getInternalRaw(coupon)),
+					sandbox: coupon.sandbox,
+					code: coupon.code,
+					name: coupon.name ?? null,
+					status: coupon.status,
+					active: coupon.active ?? null,
+					customer_provider_id: coupon.customerId ?? null,
+					discount_type: coupon.discount.type,
+					discount_value: coupon.discount.value,
+					discount_currency:
+						coupon.discount.type === 'fixed'
+							? (coupon.discount.currency ?? null)
+							: null,
+					starts_at: coupon.startsAt ?? null,
+					expires_at: coupon.expiresAt ?? null,
+					max_redemptions: coupon.redemptions.max,
+					redemption_count: coupon.redemptions.count,
+					minimum_amount: coupon.minimumAmount ?? null,
+					minimum_amount_currency: coupon.minimumAmountCurrency ?? null,
+					metadata: coupon.metadata ?? null,
+					data: withoutSchemaFields(
+						withoutRaw(coupon),
+						schema.tables.coupons.fields,
+					),
+					raw: getPersistableRaw(executor, coupon),
+					deleted_at: null,
+					updated_at: new Date().toISOString(),
+					...getExtraFieldValues(schema, 'coupons', coupon),
+				}),
+			markDeleted: (schema, coupon) =>
+				executor.execute({
+					sql: `UPDATE ${tableName(schema, 'coupons')}
+						SET version = $4, data = $5, raw = $6, deleted_at = NOW(), updated_at = NOW()
+						WHERE provider = $1 AND sandbox = $2 AND provider_id = $3`,
+					params: [
+						coupon.provider,
+						coupon.sandbox,
+						coupon.id,
+						getVersion(coupon, getInternalRaw(coupon)),
+						withoutRaw(coupon),
+						getPersistableRaw(executor, coupon),
+					],
+				}),
+		},
 		pix: {
 			async findByProviderId(schema, provider, sandbox, id, options) {
 				const fields = Object.values(schema.tables.pix.fields);
