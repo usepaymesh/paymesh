@@ -429,6 +429,47 @@ export const app = new Elysia().post(
   }),
 );`;
 
+const dodoSetupSnippet = `import { createClient } from "paymesh";
+import { dodo } from "@paymesh/dodo";
+
+export const client = createClient({
+  provider: dodo({
+    apiKey: process.env.DODO_PAYMENTS_API_KEY!,
+    webhookSecret: process.env.DODO_PAYMENTS_WEBHOOK_KEY,
+    baseUrl: "https://test.dodopayments.com",
+  }),
+});`;
+
+const dodoPaymentsSnippet = `const payment = await client.payments.create({
+  amount: 4900,
+  currency: "BRL",
+  productIds: ["prod_abc123"],
+  customer: {
+    email: "billing@example.com",
+    externalId: "order_42",
+    name: "Billing Team",
+  },
+  successUrl: "https://example.com/success",
+  cancelUrl: "https://example.com/cancel",
+  metadata: {
+    orderId: "order_42",
+  },
+});`;
+
+const dodoWebhookSnippet = `import { Elysia } from "elysia";
+import { Webhooks } from "@paymesh/elysia";
+
+export const app = new Elysia().post(
+  "/webhooks/dodo",
+  Webhooks({
+    client,
+
+    async onPaymentSucceeded(event) {
+      console.log("payment.succeeded", event.id);
+    },
+  }),
+);`;
+
 const postgresSnippet = `import { createClient } from "paymesh";
 import { postgres } from "@paymesh/postgres";
 import { stripe } from "@paymesh/stripe";
@@ -827,8 +868,8 @@ const guidePages: DocPage[] = [
 								],
 								[
 									'Dodo',
-									'Another billing route for teams that want optionality.',
-									'Roadmap-only in the current repo build.',
+									'Catalog-driven hosted checkout with Dodo Payments.',
+									'No native paymesh.pix flow; Pix only appears inside BRL hosted checkout.',
 								],
 							]}
 						/>
@@ -1904,7 +1945,7 @@ const docsNavigation: DocNavGroup[] = [
 				status: 'coming-soon',
 			},
 			{ label: 'PayPal', slug: ['providers', 'paypal'], status: 'coming-soon' },
-			{ label: 'Dodo', slug: ['providers', 'dodo'], status: 'coming-soon' },
+			{ label: 'Dodo', slug: ['providers', 'dodo'] },
 		],
 	},
 	{
@@ -2126,6 +2167,65 @@ const polarCapabilityRows: ReactNode[][] = [
 	],
 ];
 
+const dodoCapabilityRows: ReactNode[][] = [
+	[
+		<InlineCode key="dodo-cap1">checkout</InlineCode>,
+		<StatusPill key="dodo-s1" tone="success">
+			Available
+		</StatusPill>,
+		'Creates Dodo hosted payments through catalog-driven product carts.',
+	],
+	[
+		<InlineCode key="dodo-cap2">customers</InlineCode>,
+		<StatusPill key="dodo-s2" tone="success">
+			Available
+		</StatusPill>,
+		'Upserts and fetches Dodo customers.',
+	],
+	[
+		<InlineCode key="dodo-cap3">webhooks</InlineCode>,
+		<StatusPill key="dodo-s3" tone="success">
+			Available
+		</StatusPill>,
+		'Verifies webhook-id, webhook-timestamp, and webhook-signature headers before dispatching normalized hooks.',
+	],
+	[
+		<InlineCode key="dodo-cap4">subscriptions</InlineCode>,
+		<StatusPill key="dodo-s4" tone="success">
+			Advertised
+		</StatusPill>,
+		'Subscription webhook events and dashboard sync are implemented.',
+	],
+	[
+		<InlineCode key="dodo-cap5">pix</InlineCode>,
+		<StatusPill key="dodo-s5" tone="default">
+			False
+		</StatusPill>,
+		'Dodo can offer hosted Pix inside BRL checkout links, but it does not expose native paymesh.pix flows.',
+	],
+	[
+		<InlineCode key="dodo-cap6">refunds</InlineCode>,
+		<StatusPill key="dodo-s6" tone="default">
+			False
+		</StatusPill>,
+		'Refund webhooks are normalized, but the provider does not expose refund helpers as a public capability.',
+	],
+	[
+		<InlineCode key="dodo-cap7">customerPortal</InlineCode>,
+		<StatusPill key="dodo-s7" tone="default">
+			False
+		</StatusPill>,
+		'No dedicated customer portal helper is exposed by the package.',
+	],
+	[
+		<InlineCode key="dodo-cap8">coupons</InlineCode>,
+		<StatusPill key="dodo-s8" tone="default">
+			False
+		</StatusPill>,
+		'No coupon capability is exposed by the package.',
+	],
+];
+
 const polarEventRows: ReactNode[][] = [
 	['checkout.created', 'payment.created', 'onPaymentCreated'],
 	['checkout.updated', 'checkout.completed', 'onCheckoutCompleted'],
@@ -2274,6 +2374,10 @@ const docsPages: DocPage[] = [
 								[
 									<InlineCode key="pkg-polar">@paymesh/polar</InlineCode>,
 									'You are using Polar as the upstream merchant-of-record provider.',
+								],
+								[
+									<InlineCode key="pkg-dodo">@paymesh/dodo</InlineCode>,
+									'You are using Dodo Payments for catalog-driven hosted checkout flows.',
 								],
 								[
 									<InlineCode key="pkg-next">@paymesh/next</InlineCode>,
@@ -3277,10 +3381,10 @@ rawPayment.raw; // provider payload`}
 								],
 								[
 									'Dodo',
-									<StatusPill key="ps5" tone="soon">
-										Coming Soon
+									<StatusPill key="ps5" tone="success">
+										Available
 									</StatusPill>,
-									'Planned additional modern billing route.',
+									'Shipped catalog-driven provider with hosted checkout, customers, webhooks, catalog sync, and subscription sync.',
 								],
 							]}
 						/>
@@ -3702,6 +3806,120 @@ rawPayment.raw; // provider payload`}
 			},
 		],
 	},
+	{
+		group: 'Providers',
+		slug: ['providers', 'dodo'],
+		title: 'Dodo',
+		description:
+			'Dodo is a shipped Paymesh provider for catalog-driven hosted checkout, customer operations, catalog sync, and normalized webhook handling.',
+		sections: [
+			{
+				id: 'setup',
+				title: 'Setup',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The Dodo provider lives in <InlineCode>@paymesh/dodo</InlineCode>{' '}
+							and reads <InlineCode>DODO_PAYMENTS_API_KEY</InlineCode> and
+							optional <InlineCode>DODO_PAYMENTS_WEBHOOK_KEY</InlineCode> by
+							default.
+						</Paragraph>
+						<DocCodeBlock
+							code={dodoSetupSnippet}
+							filename="src/lib/paymesh.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'capabilities',
+				title: 'Capabilities',
+				content: (
+					<div className="space-y-4">
+						<DocTable
+							headers={['Capability', 'Status', 'Notes']}
+							rows={dodoCapabilityRows}
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'payments',
+				title: 'Hosted Checkout Flow',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Dodo payment creation is catalog-driven. You must provide at least
+							one <InlineCode>productIds</InlineCode> entry, and{' '}
+							<InlineCode>amount</InlineCode> is only accepted when exactly one
+							product id is present.
+						</Paragraph>
+						<DocCodeBlock
+							code={dodoPaymentsSnippet}
+							filename="src/server/payments.ts"
+						/>
+						<Callout title="Pix nuance">
+							For BRL hosted checkout links, the provider enables Dodo payment
+							methods that can include Pix inside the hosted checkout page. This
+							does not expose the dedicated <InlineCode>client.pix</InlineCode>{' '}
+							surface.
+						</Callout>
+					</div>
+				),
+			},
+			{
+				id: 'customers',
+				title: 'Customer Operations',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							The Dodo provider supports normalized{' '}
+							<InlineCode>upsert</InlineCode> and <InlineCode>get</InlineCode>{' '}
+							for customers. Delete is intentionally unsupported because the
+							package does not expose a provider-side customer delete endpoint.
+						</Paragraph>
+						<DocCodeBlock
+							code={customerSnippet}
+							filename="src/server/customers.ts"
+						/>
+					</div>
+				),
+			},
+			{
+				id: 'webhooks',
+				title: 'Webhook Mapping',
+				content: (
+					<div className="space-y-4">
+						<Paragraph>
+							Dodo webhook verification reconstructs the standard signed message
+							using <InlineCode>webhook-id</InlineCode>,{' '}
+							<InlineCode>webhook-timestamp</InlineCode>, and the raw request
+							body before comparing the expected HMAC-SHA256 signature with the
+							<InlineCode>v1</InlineCode> signature.
+						</Paragraph>
+						<DocCodeBlock
+							code={dodoWebhookSnippet}
+							filename="src/server/webhooks.ts"
+						/>
+						<DocTable
+							headers={['Dodo Event Family', 'Normalized Behavior']}
+							rows={[
+								[
+									'payment.*',
+									'Mapped into normalized payment events and hooks.',
+								],
+								['refund.*', 'Mapped into payment.refunded or payment.failed.'],
+								[
+									'subscription.*',
+									'Mapped into normalized subscription hooks.',
+								],
+							]}
+						/>
+					</div>
+				),
+			},
+		],
+	},
 	...[
 		{
 			slug: ['providers', 'abacatepay'],
@@ -3737,24 +3955,6 @@ rawPayment.raw; // provider payload`}
 				['customers', 'planned'],
 				['webhooks', 'planned'],
 				['refunds', 'planned'],
-			] as const,
-		},
-		{
-			slug: ['providers', 'dodo'],
-			title: 'Dodo',
-			packageName: '@paymesh/dodo',
-			notes:
-				'Planned additional modern billing route for teams that want optionality beyond the first provider.',
-			targets: [
-				'Consistent payment and customer primitives through the same core client.',
-				'Webhook normalization into Paymesh event hooks.',
-				'Provider capability modeling that matches the rest of the ecosystem.',
-			],
-			capabilities: [
-				['checkout', 'planned'],
-				['customers', 'planned'],
-				['webhooks', 'planned'],
-				['subscriptions', 'planned'],
 			] as const,
 		},
 	].map((provider) => ({
