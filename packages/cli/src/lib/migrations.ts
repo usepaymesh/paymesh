@@ -69,6 +69,7 @@ const PAYMESH_MIGRATIONS: readonly PaymeshMigrationDefinition[] = [
 
 const BUILT_IN_SANDBOX_TABLES: readonly DatabaseTableKey[] = [
 	'customers',
+	'coupons',
 	'pix',
 	'checkouts',
 	'invoices',
@@ -359,6 +360,7 @@ function createInitialMigrationSql(schema: ResolvedDatabaseSchema) {
 	return [
 		createMigrationsTableSql(schema),
 		createCustomersTableSql(schema),
+		createCouponsTableSql(schema),
 		createPixTableSql(schema),
 		createCheckoutsTableSql(schema),
 		createInvoicesTableSql(schema),
@@ -487,6 +489,10 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 		createIndexSql(schema, 'customers', ['provider', 'external_id']),
 		createIndexSql(schema, 'customers', ['provider', 'email']),
 		createIndexSql(schema, 'customers', ['provider', 'deleted_at']),
+		createIndexSql(schema, 'coupons', ['provider', 'code']),
+		createIndexSql(schema, 'coupons', ['provider', 'status']),
+		createIndexSql(schema, 'coupons', ['provider', 'expires_at']),
+		createIndexSql(schema, 'coupons', ['provider', 'deleted_at']),
 		createIndexSql(schema, 'pix', ['provider', 'customer_provider_id']),
 		createIndexSql(schema, 'pix', ['provider', 'status']),
 		createIndexSql(schema, 'pix', ['provider', 'expires_at']),
@@ -547,6 +553,24 @@ function createIndexesAndConstraintsSql(schema: ResolvedDatabaseSchema) {
 			'webhookEvents',
 			'attempts_valid',
 			'attempts >= 1',
+		),
+		createCheckConstraintSql(
+			schema,
+			'coupons',
+			'discount_value_valid',
+			'discount_value >= 0',
+		),
+		createCheckConstraintSql(
+			schema,
+			'coupons',
+			'redemption_count_valid',
+			'redemption_count >= 0',
+		),
+		createCheckConstraintSql(
+			schema,
+			'coupons',
+			'max_redemptions_valid',
+			'max_redemptions IS NULL OR max_redemptions >= 0',
 		),
 		createCheckConstraintSql(
 			schema,
@@ -623,6 +647,39 @@ CREATE TABLE IF NOT EXISTS ${table(schema, 'customers')} (
 	raw JSONB,
 	deleted_at TIMESTAMPTZ,
 ${extraTableColumnsSql(schema, 'customers')}
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	UNIQUE (provider, sandbox, provider_id)
+);`.trim();
+}
+
+function createCouponsTableSql(schema: ResolvedDatabaseSchema) {
+	return `
+CREATE TABLE IF NOT EXISTS ${table(schema, 'coupons')} (
+	id BIGSERIAL PRIMARY KEY,
+	provider TEXT NOT NULL,
+	provider_id TEXT NOT NULL,
+	version TEXT NOT NULL DEFAULT 'v1',
+	sandbox BOOLEAN NOT NULL DEFAULT FALSE,
+	code TEXT NOT NULL,
+	name TEXT,
+	status TEXT,
+	active BOOLEAN,
+	customer_provider_id TEXT,
+	discount_type TEXT NOT NULL,
+	discount_value NUMERIC NOT NULL,
+	discount_currency TEXT,
+	starts_at TIMESTAMPTZ,
+	expires_at TIMESTAMPTZ,
+	max_redemptions INTEGER,
+	redemption_count INTEGER NOT NULL DEFAULT 0,
+	minimum_amount BIGINT,
+	minimum_amount_currency TEXT,
+	metadata JSONB,
+	data JSONB NOT NULL DEFAULT '{}'::jsonb,
+	raw JSONB,
+	deleted_at TIMESTAMPTZ,
+${extraTableColumnsSql(schema, 'coupons')}
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	UNIQUE (provider, sandbox, provider_id)

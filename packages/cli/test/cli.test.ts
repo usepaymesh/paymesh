@@ -913,7 +913,7 @@ describe('cli helpers', () => {
 		const doBlocks = (sandboxMigration?.sql.match(/DO \$\$/g) ?? []).length;
 		// 11 built-in sandbox tables: customers, pix, checkouts, invoices,
 		// paymentMethods, entitlements, usage, webhookEvents, subscriptions, products, prices
-		expect(doBlocks).toBe(11);
+		expect(doBlocks).toBe(12);
 	});
 
 	test('schema sync migration includes sandbox column and constraint update', async () => {
