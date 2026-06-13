@@ -89,6 +89,16 @@
         "paymesh": ">=0.0.0",
       },
     },
+    "packages/dodo": {
+      "name": "@paymesh/dodo",
+      "version": "0.0.0",
+      "devDependencies": {
+        "paymesh": "workspace:*",
+      },
+      "peerDependencies": {
+        "paymesh": ">=0.0.0",
+      },
+    },
     "packages/drizzle": {
       "name": "@paymesh/drizzle",
       "version": "0.0.0",
@@ -513,6 +523,8 @@
     "@paymesh/cli": ["@paymesh/cli@workspace:packages/cli"],
 
     "@paymesh/dash": ["@paymesh/dash@workspace:packages/dash"],
+
+    "@paymesh/dodo": ["@paymesh/dodo@workspace:packages/dodo"],
 
     "@paymesh/drizzle": ["@paymesh/drizzle@workspace:packages/drizzle"],
 
