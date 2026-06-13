@@ -53,6 +53,7 @@ It accepts:
 The client managers exposed today are:
 
 - `payments`
+- `coupons`
 - `pix`
 - `customers`
 - `webhooks`
@@ -60,6 +61,20 @@ The client managers exposed today are:
 - `plugins`
 
 Plugins may add more client surface through `extends()`.
+
+`payments.create()` now also accepts:
+
+- `couponCode?`
+- `allowCouponCodes?`
+
+Providers that advertise `coupons` expose:
+
+- `coupons.create()`
+- `coupons.get()`
+- `coupons.list()`
+- `coupons.update()`
+- `coupons.delete()`
+- `coupons.check()`
 
 ## Capability model
 
