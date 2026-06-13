@@ -50,6 +50,7 @@ export function createClientManagers<
 		hooks: baseHooks,
 		includeRaw: baseIncludeRaw = false,
 		plugins = [] as unknown as Plugins,
+		trustedOrigins,
 	} = options;
 
 	const mergeOptions = createRequestOptionsMerger({
@@ -86,6 +87,7 @@ export function createClientManagers<
 				mergeOptions,
 				provider,
 				schema,
+				trustedOrigins,
 			}),
 			pix: createPixClient({
 				assertCapability,
@@ -162,6 +164,7 @@ export function createClientManagers<
 		plugins,
 		provider,
 		schema,
+		trustedOrigins,
 	});
 
 	createHookDispatcher = bootstrappedPlugins.createHookDispatcher as unknown;

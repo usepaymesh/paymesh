@@ -1,3 +1,4 @@
+import { assertTrustedRedirectUrls } from '../shared/client/trusted-origins';
 import { splitExtraFields } from '../shared/database/fields';
 import type { PaymeshPayment, PaymeshPaymentCreateData } from '../types/client';
 import type {
@@ -17,6 +18,7 @@ export function createPaymentsClient<
 	mergeOptions,
 	provider,
 	schema,
+	trustedOrigins,
 }: {
 	assertCapability: (capability: 'checkout') => void;
 	database?: PaymeshDatabaseDriver;
@@ -25,6 +27,7 @@ export function createPaymentsClient<
 	) => ProviderRequestOptions<CallIncludeRaw>;
 	provider: P;
 	schema: ResolvedDatabaseSchema;
+	trustedOrigins?: string[];
 }) {
 	return {
 		create: async <CallIncludeRaw extends boolean = IncludeRaw>(
@@ -32,6 +35,7 @@ export function createPaymentsClient<
 			requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 		) => {
 			assertCapability('checkout');
+			assertTrustedRedirectUrls(data, trustedOrigins);
 
 			const { input, extra } = splitExtraFields(
 				data,

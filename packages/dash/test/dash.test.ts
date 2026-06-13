@@ -194,11 +194,106 @@ describe('@paymesh/dash', () => {
 			}),
 		);
 	});
+
+	test('resolves relative checkout redirect URLs through the dashboard API', async () => {
+		const database = createDashboardDatabase();
+		let paymentInput:
+			| {
+					cancelUrl?: string;
+					returnUrl?: string;
+					successUrl?: string;
+			  }
+			| undefined;
+		const client = createClient({
+			provider: createDashboardProvider({
+				onPaymentCreate(data) {
+					paymentInput = data;
+				},
+			}),
+			database,
+			trustedOrigins: ['https://app.test'],
+			plugins: [
+				dash({
+					auth() {
+						return {
+							id: 'usr_pay',
+						};
+					},
+				}),
+			] as const,
+		});
+		const handler = Dashboard({ client });
+
+		const response = await handler(
+			new Request('https://app.test/admin/paymesh/api/payments', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					amount: 1200,
+					currency: 'USD',
+					successUrl: '/success',
+					cancelUrl: '/cancel',
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expect(paymentInput).toMatchObject({
+			successUrl: 'https://app.test/success',
+			cancelUrl: 'https://app.test/cancel',
+		});
+	});
+
+	test('rejects untrusted relative checkout redirect URLs through the dashboard API', async () => {
+		const database = createDashboardDatabase();
+		const client = createClient({
+			provider: createDashboardProvider(),
+			database,
+			trustedOrigins: ['https://app.test'],
+			plugins: [
+				dash({
+					auth() {
+						return {
+							id: 'usr_pay',
+						};
+					},
+				}),
+			] as const,
+		});
+		const handler = Dashboard({ client });
+
+		const response = await handler(
+			new Request('https://admin.test/admin/paymesh/api/payments', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					amount: 1200,
+					currency: 'USD',
+					successUrl: '/success',
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: 'invalid_request',
+			message: 'Untrusted origin for request origin: "https://admin.test".',
+		});
+	});
 });
 
 function createDashboardProvider(options?: {
 	onCustomerUpsert?(data: { email?: string; name?: string }): void;
 	onPixCreate?(data: { amount: number }): void;
+	onPaymentCreate?(data: {
+		cancelUrl?: string;
+		returnUrl?: string;
+		successUrl?: string;
+	}): void;
 }) {
 	return defineProvider({
 		id: 'stub',
@@ -211,7 +306,8 @@ function createDashboardProvider(options?: {
 			webhooks: true,
 		},
 		payments: {
-			async create() {
+			async create(data) {
+				options?.onPaymentCreate?.(data);
 				return {
 					id: 'pay_created',
 					provider: 'stub',

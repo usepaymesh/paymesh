@@ -5,6 +5,7 @@ import { PaymeshError } from './errors';
 import { definePlugin, event, lazy } from './plugins';
 import { defineProvider } from './providers';
 import { isPaymeshClient, PAYMESH_CLIENT_SYMBOL } from './shared/client/marker';
+import { normalizeTrustedOrigins } from './shared/client/trusted-origins';
 import { resolveClientSchemaOptions } from './shared/database/schema';
 import { withRaw } from './shared/raw';
 import { request } from './shared/request';
@@ -83,6 +84,7 @@ export function createClient<
 		options: {
 			...options,
 			plugins,
+			trustedOrigins: normalizeTrustedOrigins(options.trustedOrigins),
 		},
 		schema,
 	});

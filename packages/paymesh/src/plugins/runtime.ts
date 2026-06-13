@@ -1,4 +1,5 @@
 import { PaymeshError } from '../errors';
+import { resolveTrustedUrl } from '../shared/client/trusted-origins';
 import type {
 	PaymeshClient,
 	PaymeshHooks,
@@ -59,6 +60,7 @@ interface BootstrapPluginsOptions<
 	plugins: Plugins;
 	provider: Provider<string>;
 	schema: ResolvedDatabaseSchema;
+	trustedOrigins?: string[];
 }
 
 interface BootstrappedPlugins<
@@ -105,6 +107,7 @@ export function bootstrapPlugins<
 	plugins,
 	provider,
 	schema,
+	trustedOrigins,
 }: BootstrapPluginsOptions<
 	IncludeRaw,
 	Schema,
@@ -357,6 +360,8 @@ export function bootstrapPlugins<
 				locals: {},
 				params: resolved.params,
 				request,
+				resolveTrustedUrl: (url?: string) =>
+					resolveTrustedUrl(url, request, trustedOrigins),
 				route: resolved.metadata,
 				client: client as never,
 				plugin: resolved.pluginMetadata as never,
@@ -423,6 +428,7 @@ type RuntimeRouteContext<TClient> = {
 	locals: Record<string, unknown>;
 	params: Record<string, string>;
 	request: Request;
+	resolveTrustedUrl(url?: string): string | undefined;
 	route: RegisteredPluginRoute;
 	client: TClient;
 	plugin: RegisteredPaymeshPlugin;
