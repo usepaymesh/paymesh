@@ -82,7 +82,7 @@ npm install paymesh @paymesh/stripe @paymesh/prisma @prisma/client
 ```
 
 <p align="center">
-  Available providers currently include <a href="./packages/stripe/README.md">@paymesh/stripe</a> and <a href="./packages/polar/README.md">@paymesh/polar</a>.
+  Available providers currently include <a href="./packages/stripe/README.md">@paymesh/stripe</a>, <a href="./packages/polar/README.md">@paymesh/polar</a>, <a href="./packages/abacatepay/README.md">@paymesh/abacatepay</a>, and <a href="./packages/dodo/README.md">@paymesh/dodo</a>.
 </p>
 
 <p align="center">
@@ -97,6 +97,10 @@ npm install paymesh @paymesh/stripe @paymesh/prisma @prisma/client
 
 <p align="center">
   Native PIX flows live under <code>paymesh.pix</code>. Use <code>paymesh.payments</code> for generic checkout sessions and <code>paymesh.pix</code> when you need QR code, copia-e-cola, and expiration data as first-class fields.
+</p>
+
+<p align="center">
+  <code>@paymesh/dodo</code> supports hosted BRL checkout links that can present Pix inside the Dodo checkout page, but it intentionally does not expose <code>paymesh.pix</code> because Dodo does not currently document a native QR-code-first backend PIX flow.
 </p>
 
 <p align="center">

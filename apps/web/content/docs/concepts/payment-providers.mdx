@@ -54,6 +54,18 @@ AbacatePay currently implements:
 
 AbacatePay does **not** expose subscriptions, refunds, or customer portal in the current repository.
 
+### Dodo
+
+Dodo currently implements:
+
+- hosted checkout payments through Dodo product carts
+- customers
+- catalog reads
+- subscription-aware dashboard sync
+- webhook verification and event mapping
+
+Dodo does **not** expose `paymesh.pix` in the current repository. BRL hosted checkouts can still present Pix inside the Dodo checkout page, but the provider does not currently return a native QR-code-first PIX object.
+
 ## Capability flags
 
 Provider differences are carried through capability flags rather than hidden.
@@ -72,6 +84,7 @@ Some provider-specific differences still matter. For example:
 
 - Polar requires `productIds` for checkout creation
 - AbacatePay requires `productIds` for checkout creation and uses catalog-driven checkout
+- Dodo requires `productIds` for payment creation and can enable hosted Pix inside BRL checkouts
 - Stripe PIX supports `amountIncludesIof` and expiration settings
 - dashboard integrations vary by provider
 

@@ -29,6 +29,10 @@ npm install paymesh @paymesh/stripe @paymesh/postgres
   For tests, CI, and local examples, use <code>@paymesh/memory</code> instead of a production database adapter.
 </p>
 
+<p align="center">
+  Official provider packages currently include <code>@paymesh/stripe</code>, <code>@paymesh/polar</code>, <code>@paymesh/abacatepay</code>, and <code>@paymesh/dodo</code>.
+</p>
+
 <h2 align="center">Quickstart</h2>
 
 <p align="center">
@@ -75,6 +79,10 @@ console.log(payment.checkoutUrl, customer.email);
 
 <p align="center">
   For native PIX flows, use <code>paymesh.pix</code>. This is separate from <code>paymesh.payments</code> so providers can expose QR code, copia-e-cola, and expiration details directly.
+</p>
+
+<p align="center">
+  <code>@paymesh/dodo</code> supports hosted BRL checkout links that can offer Pix inside the redirect flow, but it intentionally does not expose <code>paymesh.pix</code> because Dodo does not currently document a native QR-code-first backend PIX flow.
 </p>
 
 ```ts

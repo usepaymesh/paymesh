@@ -25,7 +25,7 @@ Paymesh exists to normalize those concerns.
 At runtime, Paymesh is built from four layers:
 
 1. A `client` created with `createClient`.
-2. A `provider` such as `@paymesh/stripe` or `@paymesh/polar`.
+2. A `provider` such as `@paymesh/stripe`, `@paymesh/polar`, or `@paymesh/dodo`.
 3. An optional `database` adapter such as `@paymesh/memory`, `@paymesh/postgres`, `@paymesh/drizzle`, or `@paymesh/prisma`.
 4. Optional `plugins` such as `@paymesh/dash` and `@paymesh/audit-logs`.
 
@@ -75,14 +75,14 @@ The current repository exposes these first-party modules:
 | Area | Package |
 | --- | --- |
 | Core client | `paymesh` |
-| Providers | `@paymesh/stripe`, `@paymesh/polar`, `@paymesh/abacatepay` |
+| Providers | `@paymesh/stripe`, `@paymesh/polar`, `@paymesh/abacatepay`, `@paymesh/dodo` |
 | Database adapters | `@paymesh/memory`, `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma` |
 | Framework adapters | `@paymesh/next`, `@paymesh/express`, `@paymesh/fastify`, `@paymesh/hono`, `@paymesh/elysia` |
 | Plugins | `@paymesh/dash`, `@paymesh/audit-logs` |
 | Tooling | `@paymesh/cli` |
 
 <Callout type="info">
-  The docs below stay anchored to what is actually exported in the repository. Planned providers like PayPal and Dodo are treated as planned work, not presented like shipped integrations.
+  The docs below stay anchored to what is actually exported in the repository. PayPal remains planned work. Dodo is shipped as a catalog-driven hosted checkout provider with customer, subscription, catalog, and webhook support.
 </Callout>
 
 ## Read this documentation like a system

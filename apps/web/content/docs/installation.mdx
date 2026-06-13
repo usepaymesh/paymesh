@@ -19,6 +19,10 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
 
     <InstallTabs packages="paymesh @paymesh/abacatepay" />
 
+    If you need Dodo's catalog-driven hosted checkout flow:
+
+    <InstallTabs packages="paymesh @paymesh/dodo" />
+
     <Callout type="info">
       You do not need a database on day one, but most real installations should add one quickly so webhook state, customers, PIX objects, and catalog snapshots are queryable locally.
     </Callout>
@@ -29,7 +33,7 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
 
     Put the client in a stable server-side module such as `src/lib/paymesh.ts`, `src/server/paymesh.ts`, or `app/lib/paymesh.ts`.
 
-    <Tabs items={["stripe", "polar", "abacatepay"]}>
+    <Tabs items={["stripe", "polar", "abacatepay", "dodo"]}>
       <Tab value="stripe">
         ```ts title="src/lib/paymesh.ts"
         import { createClient } from "paymesh";
@@ -69,7 +73,25 @@ description: Install Paymesh, wire a provider, optionally add persistence, and m
         });
         ```
       </Tab>
+      <Tab value="dodo">
+        ```ts title="src/lib/paymesh.ts"
+        import { createClient } from "paymesh";
+        import { dodo } from "@paymesh/dodo";
+
+        export const paymesh = createClient({
+          provider: dodo({
+            apiKey: process.env.DODO_PAYMENTS_API_KEY!,
+            webhookSecret: process.env.DODO_PAYMENTS_WEBHOOK_KEY,
+            baseUrl: "https://test.dodopayments.com",
+          }),
+        });
+        ```
+      </Tab>
     </Tabs>
+
+    <Callout type="info">
+      `@paymesh/dodo` is catalog-driven like Polar and AbacatePay checkout flows. You create hosted payments with `productIds`. For BRL payments, the Dodo hosted checkout can offer Pix, but the provider does not expose `paymesh.pix`.
+    </Callout>
   </Step>
 
   <Step>
