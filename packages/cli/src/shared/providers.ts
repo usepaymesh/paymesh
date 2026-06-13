@@ -13,6 +13,13 @@ export const PROVIDERS = {
 		webhookSecretEnv: 'POLAR_WEBHOOK_SECRET',
 		paramName: 'accessToken',
 	},
+	dodo: {
+		label: 'Dodo Payments',
+		package: '@paymesh/dodo',
+		apiKeyEnv: 'DODO_PAYMENTS_API_KEY',
+		webhookSecretEnv: 'DODO_PAYMENTS_WEBHOOK_KEY',
+		paramName: 'apiKey',
+	},
 	custom: {
 		label: 'Custom — I will configure later',
 		package: null,
