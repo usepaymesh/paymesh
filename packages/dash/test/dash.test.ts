@@ -284,6 +284,51 @@ describe('@paymesh/dash', () => {
 			message: 'Untrusted origin for request origin: "https://admin.test".',
 		});
 	});
+
+	test('resolves relative checkout redirect URLs with wildcard trusted origins', async () => {
+		const database = createDashboardDatabase();
+		let paymentInput:
+			| {
+					successUrl?: string;
+			  }
+			| undefined;
+		const client = createClient({
+			provider: createDashboardProvider({
+				onPaymentCreate(data) {
+					paymentInput = data;
+				},
+			}),
+			database,
+			trustedOrigins: ['rewritetoday.com*'],
+			plugins: [
+				dash({
+					auth() {
+						return {
+							id: 'usr_pay',
+						};
+					},
+				}),
+			] as const,
+		});
+		const handler = Dashboard({ client });
+
+		const response = await handler(
+			new Request('https://rewritetoday.com/admin/paymesh/api/payments', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					amount: 1200,
+					currency: 'USD',
+					successUrl: '/success',
+				}),
+			}),
+		);
+
+		expect(response.status).toBe(200);
+		expect(paymentInput?.successUrl).toBe('https://rewritetoday.com/success');
+	});
 });
 
 function createDashboardProvider(options?: {

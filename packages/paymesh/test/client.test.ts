@@ -548,6 +548,51 @@ describe('client', () => {
 		});
 	});
 
+	test('allows any origin when trustedOrigins contains "*" ', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['*'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://evil.test/success',
+			}),
+		).resolves.toBeDefined();
+	});
+
+	test('matches wildcard host patterns in trustedOrigins', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['*.com.br'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://foo.com.br/success',
+			}),
+		).resolves.toBeDefined();
+	});
+
+	test('matches wildcard prefix host patterns in trustedOrigins', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['rewritetoday.com*'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://rewritetoday.com/success',
+			}),
+		).resolves.toBeDefined();
+	});
+
 	test('resolves trusted route URLs inside plugin routes', async () => {
 		const client = createClient({
 			provider: createStubProvider(),

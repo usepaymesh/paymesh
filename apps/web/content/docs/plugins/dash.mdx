@@ -43,6 +43,7 @@ The key design detail is that `auth()` receives the request object. That lets yo
 ## Relative checkout redirects
 
 When the client is configured with `trustedOrigins`, the dashboard payment API can accept relative checkout redirect URLs and resolve them against the incoming request origin.
+That allowlist can contain exact origins or wildcard patterns like `*`, `*.com.br`, or `rewritetoday.com*`.
 
 ```ts title="src/lib/paymesh.ts"
 export const paymesh = createClient({

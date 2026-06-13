@@ -1,4 +1,4 @@
-import { assertTrustedRedirectUrls } from '../shared/client/trusted-origins';
+import { PaymeshError } from '../errors';
 import { splitExtraFields } from '../shared/database/fields';
 import type { PaymeshPayment, PaymeshPaymentCreateData } from '../types/client';
 import type {
@@ -35,7 +35,58 @@ export function createPaymentsClient<
 			requestOptions?: ProviderRequestOptions<CallIncludeRaw>,
 		) => {
 			assertCapability('checkout');
-			assertTrustedRedirectUrls(data, trustedOrigins);
+
+			for (const field of ['successUrl', 'cancelUrl', 'returnUrl'] as const) {
+				const value = data[field];
+				if (!value) continue;
+
+				let url: URL;
+
+				try {
+					url = new URL(value);
+				} catch {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: `Payment ${field} must be an absolute URL.`,
+					});
+				}
+
+				if (!trustedOrigins?.length) continue;
+
+				let trusted = false;
+				for (const trustedOrigin of trustedOrigins) {
+					if (trustedOrigin === '*') {
+						trusted = true;
+						break;
+					}
+
+					if (!trustedOrigin.includes('*')) {
+						if (url.origin === trustedOrigin) {
+							trusted = true;
+							break;
+						}
+
+						continue;
+					}
+
+					const pattern = trustedOrigin.includes('://') ? url.origin : url.host;
+					const regexp = new RegExp(
+						`^${trustedOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('\\*', '.*')}$`,
+					);
+
+					if (regexp.test(pattern)) {
+						trusted = true;
+						break;
+					}
+				}
+
+				if (!trusted) {
+					throw new PaymeshError({
+						code: 'invalid_request',
+						message: `Untrusted origin for ${field}: "${url.origin}".`,
+					});
+				}
+			}
 
 			const { input, extra } = splitExtraFields(
 				data,

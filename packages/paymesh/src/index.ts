@@ -5,7 +5,6 @@ import { PaymeshError } from './errors';
 import { definePlugin, event, lazy } from './plugins';
 import { defineProvider } from './providers';
 import { isPaymeshClient, PAYMESH_CLIENT_SYMBOL } from './shared/client/marker';
-import { normalizeTrustedOrigins } from './shared/client/trusted-origins';
 import { resolveClientSchemaOptions } from './shared/database/schema';
 import { withRaw } from './shared/raw';
 import { request } from './shared/request';
@@ -75,6 +74,49 @@ export function createClient<
 		});
 
 	const plugins = options.plugins ?? ([] as unknown as Plugins);
+
+	const trustedOrigins = options.trustedOrigins?.map((value) => {
+		if (value === '*') return value;
+
+		if (value.includes('*')) {
+			const candidate = value.includes('://')
+				? value.replaceAll('*', 'placeholder')
+				: `https://${value.replaceAll('*', 'placeholder')}`;
+
+			const url = new URL(candidate);
+
+			if (
+				url.username ||
+				url.password ||
+				url.pathname !== '/' ||
+				url.search ||
+				url.hash
+			)
+				throw new PaymeshError({
+					code: 'invalid_request',
+					message: `Invalid trusted origin "${value}". trustedOrigins entries must be origin-only patterns.`,
+				});
+
+			return value;
+		}
+
+		const url = new URL(value);
+
+		if (
+			url.username ||
+			url.password ||
+			url.pathname !== '/' ||
+			url.search ||
+			url.hash
+		)
+			throw new PaymeshError({
+				code: 'invalid_request',
+				message: `Invalid trusted origin "${value}". trustedOrigins entries must be origin-only URLs.`,
+			});
+
+		return url.origin;
+	});
+
 	const schema = resolveDatabaseSchema(
 		resolveClientSchemaOptions(options.schema, plugins),
 	);
@@ -84,7 +126,7 @@ export function createClient<
 		options: {
 			...options,
 			plugins,
-			trustedOrigins: normalizeTrustedOrigins(options.trustedOrigins),
+			trustedOrigins,
 		},
 		schema,
 	});
