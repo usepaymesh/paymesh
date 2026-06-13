@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/cli",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "CLI for Paymesh database migrations, catalog sync, and status checks.",
 	"type": "module",
 	"license": "MIT",

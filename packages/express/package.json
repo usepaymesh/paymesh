@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/express",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Express webhook adapter for Paymesh.",
 	"type": "module",
 	"license": "MIT",
