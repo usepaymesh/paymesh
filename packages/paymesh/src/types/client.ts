@@ -393,6 +393,8 @@ export interface ClientOptions<
 	timeout?: number;
 	/** Explicit sandbox expectation for the configured provider. Throws when it mismatches `provider.isSandbox()`. */
 	sandbox?: boolean;
+	/** Allowlist of trusted origins used to validate checkout redirect URLs. */
+	trustedOrigins?: string[];
 	/** Default retry configuration. */
 	retry?: RetryOptions;
 	/** Fetch implementation to use. */

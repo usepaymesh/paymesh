@@ -33,6 +33,8 @@ export interface DashboardRequestContext {
 	actor: DashActor;
 	client: PaymeshClient<boolean>;
 	database: PaymeshDatabaseDriver;
+	request: Request;
+	resolveTrustedUrl(url?: string): string | undefined;
 	schema: ResolvedDatabaseSchema;
 }
 

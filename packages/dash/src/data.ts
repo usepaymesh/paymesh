@@ -502,7 +502,12 @@ export async function createPayment(
 		successUrl?: string;
 	},
 ) {
-	return context.client.payments.create(body);
+	return context.client.payments.create({
+		...body,
+		cancelUrl: context.resolveTrustedUrl(body.cancelUrl),
+		returnUrl: context.resolveTrustedUrl(body.returnUrl),
+		successUrl: context.resolveTrustedUrl(body.successUrl),
+	});
 }
 
 export async function createPix(

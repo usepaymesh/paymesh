@@ -577,6 +577,8 @@ function getDashboardContext(
 		actor: getActor(context),
 		client: context.client as PaymeshClient<boolean>,
 		database: ensureDatabase(context.client as PaymeshClient<boolean>),
+		request: context.request,
+		resolveTrustedUrl: context.resolveTrustedUrl,
 		schema: context.schema,
 	};
 }

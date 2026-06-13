@@ -464,6 +464,233 @@ describe('client', () => {
 		expect(calls[0]).toHaveProperty('sandbox', undefined);
 	});
 
+	test('normalizes trusted origins at client creation', async () => {
+		let redirectUrl: string | undefined;
+		const client = createClient({
+			provider: createStubProvider({
+				onPaymentCreate(data) {
+					redirectUrl = data.successUrl;
+					return Promise.resolve(
+						withRaw(
+							{
+								id: 'pay_trusted',
+								provider: 'stub',
+								sandbox: false,
+								amount: 1000,
+								currency: 'usd',
+								status: 'paid' as const,
+							},
+							null,
+							false,
+						),
+					);
+				},
+			}),
+			trustedOrigins: ['https://app.test/'],
+		});
+
+		await client.payments.create({
+			amount: 1000,
+			currency: 'USD',
+			successUrl: 'https://app.test/success',
+		});
+
+		expect(redirectUrl).toBe('https://app.test/success');
+	});
+
+	test('rejects invalid trusted origins at client creation', () => {
+		expect(() =>
+			createClient({
+				provider: createStubProvider(),
+				trustedOrigins: ['https://app.test/path'],
+			}),
+		).toThrow(
+			new PaymeshError({
+				code: 'invalid_request',
+				message:
+					'Invalid trusted origin "https://app.test/path". trustedOrigins entries must be origin-only URLs.',
+			}),
+		);
+	});
+
+	test('rejects relative checkout redirect URLs in direct payments.create calls', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: '/success',
+			}),
+		).rejects.toMatchObject({
+			code: 'invalid_request',
+			message: 'Payment successUrl must be an absolute URL.',
+		});
+	});
+
+	test('rejects untrusted absolute checkout redirect URLs', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['https://app.test'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://evil.test/success',
+			}),
+		).rejects.toMatchObject({
+			code: 'invalid_request',
+			message: 'Untrusted origin for successUrl: "https://evil.test".',
+		});
+	});
+
+	test('allows any origin when trustedOrigins contains "*" ', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['*'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://evil.test/success',
+			}),
+		).resolves.toBeDefined();
+	});
+
+	test('matches wildcard host patterns in trustedOrigins', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['*.com.br'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://foo.com.br/success',
+			}),
+		).resolves.toBeDefined();
+	});
+
+	test('matches wildcard prefix host patterns in trustedOrigins', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['rewritetoday.com*'],
+		});
+
+		await expect(
+			client.payments.create({
+				amount: 1000,
+				currency: 'USD',
+				successUrl: 'https://rewritetoday.com/success',
+			}),
+		).resolves.toBeDefined();
+	});
+
+	test('resolves trusted route URLs inside plugin routes', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['https://app.test'],
+			plugins: [
+				definePlugin({
+					id: 'route-helper',
+					routes: [
+						{
+							method: 'POST',
+							path: '/resolve',
+							async handler(context) {
+								return Response.json({
+									url: context.resolveTrustedUrl('/success'),
+								});
+							},
+						},
+					],
+				}),
+			] as const,
+		});
+
+		const response = await client.routes.handle(
+			new Request('https://app.test/resolve', { method: 'POST' }),
+		);
+
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({
+			url: 'https://app.test/success',
+		});
+	});
+
+	test('rejects relative route URLs when request origin is not trusted', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['https://app.test'],
+			plugins: [
+				definePlugin({
+					id: 'route-helper',
+					routes: [
+						{
+							method: 'POST',
+							path: '/resolve',
+							async handler(context) {
+								return Response.json({
+									url: context.resolveTrustedUrl('/success'),
+								});
+							},
+						},
+					],
+				}),
+			] as const,
+		});
+
+		const response = await client.routes.handle(
+			new Request('https://admin.test/resolve', { method: 'POST' }),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: 'invalid_request',
+			message: 'Untrusted origin for request origin: "https://admin.test".',
+		});
+	});
+
+	test('rejects untrusted absolute route URLs inside plugin routes', async () => {
+		const client = createClient({
+			provider: createStubProvider(),
+			trustedOrigins: ['https://app.test'],
+			plugins: [
+				definePlugin({
+					id: 'route-helper',
+					routes: [
+						{
+							method: 'POST',
+							path: '/resolve',
+							async handler(context) {
+								return Response.json({
+									url: context.resolveTrustedUrl('https://evil.test/success'),
+								});
+							},
+						},
+					],
+				}),
+			] as const,
+		});
+
+		const response = await client.routes.handle(
+			new Request('https://app.test/resolve', { method: 'POST' }),
+		);
+
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: 'invalid_request',
+			message: 'Untrusted origin for redirect URL: "https://evil.test".',
+		});
+	});
+
 	test('types onEvent as a discriminated union of normalized webhook events', () => {
 		const client = createClient({
 			provider: createStubProvider(),
@@ -1286,7 +1513,13 @@ function createStubProvider({
 }: {
 	sandbox?: boolean;
 	onPaymentCreate?: <IncludeRaw extends boolean = false>(
-		data: { amount: number; currency: string },
+		data: {
+			amount: number;
+			currency: string;
+			cancelUrl?: string;
+			returnUrl?: string;
+			successUrl?: string;
+		},
 		options?: ProviderRequestOptions<IncludeRaw>,
 	) => Promise<Payment<IncludeRaw>>;
 	onPixCreate?: <IncludeRaw extends boolean = false>(

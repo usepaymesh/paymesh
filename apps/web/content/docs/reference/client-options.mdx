@@ -12,6 +12,7 @@ Every Paymesh installation starts from `createClient`. This is the composition p
 - how built-in tables are named
 - whether plugins extend routes, hooks, and schema
 - whether normalized objects should carry raw provider payloads
+- which origins are allowed for checkout redirect URLs
 
 ```ts title="src/lib/paymesh.ts"
 import { createClient } from "paymesh";
@@ -61,6 +62,7 @@ export const paymesh = createClient({
 | `provider` | yes | none | The provider implementation created by packages such as `@paymesh/stripe` or `@paymesh/polar`. |
 | `database` | no | `undefined` | Persists normalized data, enables migrations, webhook deduplication, catalog sync, plugins that require storage, and operational tooling. |
 | `includeRaw` | no | `false` | Propagates raw provider payloads through client reads and webhook events when enabled. |
+| `trustedOrigins` | no | `undefined` | Allowlist of origins accepted for checkout redirect URLs. |
 | `sandbox` | no | `undefined` | Asserts sandbox mode matches the provider. Throws if the provider reports a different mode. |
 | `schema` | no | generated defaults | Renames built-in tables, changes the prefix, and adds extra columns or custom tables. |
 | `plugins` | no | `[]` | Registers plugin routes, hooks, schema extensions, setup logic, and runtime client extensions. |
@@ -208,6 +210,86 @@ Use `includeRaw` when:
 - you are debugging webhook mappings
 
 Keep it off when you want application code to stay strict about the normalized contract.
+
+## `trustedOrigins`
+
+`trustedOrigins` lets you restrict which origins Paymesh will accept in checkout redirect fields such as `successUrl`, `cancelUrl`, and `returnUrl`.
+It accepts exact origins and simple wildcard patterns.
+
+```ts title="src/lib/paymesh.ts"
+createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+  }),
+  trustedOrigins: [
+    "https://app.example.com",
+    "http://localhost:3000",
+    "*.com.br",
+    "rewritetoday.com*",
+    "*",
+  ],
+});
+```
+
+Rules:
+
+- exact entries must be absolute origins only
+- wildcard entries can use `*` anywhere and are matched against the request origin or host
+- `*` allows any origin
+- direct `payments.create()` calls must still pass absolute redirect URLs
+- when `trustedOrigins` is configured, direct checkout calls are rejected if a redirect URL points at an untrusted origin
+- relative redirect URLs are only supported inside request-backed plugin routes that explicitly resolve them against the current request
+
+### What gets checked
+
+Paymesh validates these fields when present:
+
+- `successUrl`
+- `cancelUrl`
+- `returnUrl`
+
+If any of them is absolute, its origin must be in `trustedOrigins`.
+If any of them is relative, Paymesh rejects it in direct client calls and only allows it when a request-backed route resolves it first.
+
+Wildcard examples:
+
+- `*.com.br` matches `https://foo.com.br`
+- `rewritetoday.com*` matches `https://rewritetoday.com` and `https://rewritetoday.com.br`
+- `*` matches every origin
+
+Wildcard rules stay on the origin/host boundary. Paymesh does not use these patterns to match paths.
+
+### Practical examples
+
+```ts title="src/server/checkout.ts"
+// Allowed: absolute URL on a trusted origin.
+await paymesh.payments.create({
+  amount: 5900,
+  currency: "USD",
+  successUrl: "https://app.example.com/success",
+});
+
+// Rejected: relative URL from direct app code.
+await paymesh.payments.create({
+  amount: 5900,
+  currency: "USD",
+  successUrl: "/success",
+});
+```
+
+```ts title="src/server/dash.ts"
+// Allowed inside a request-backed route when Dash resolves the URL.
+const successUrl = context.resolveTrustedUrl("/success");
+```
+
+### Failure modes
+
+Paymesh throws `invalid_request` when:
+
+- a `trustedOrigins` entry is not an origin-only URL
+- a `trustedOrigins` wildcard pattern is malformed
+- a redirect URL points at an origin that is not trusted
+- a relative redirect URL is used without a request-backed route to resolve it
 
 ## `schema`
 

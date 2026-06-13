@@ -240,6 +240,8 @@ export interface PluginRouteContext<
 	params: PluginRouteParams;
 	/** Incoming request. */
 	request: Request;
+	/** Resolves and validates redirect URLs against the client trusted origin allowlist. */
+	resolveTrustedUrl(url?: string): string | undefined;
 	/** Route metadata. */
 	route: RegisteredPluginRoute<TPluginId>;
 }

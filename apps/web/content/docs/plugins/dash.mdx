@@ -39,3 +39,38 @@ dash({
 ## Auth callback
 
 The key design detail is that `auth()` receives the request object. That lets you integrate the dashboard with your own session, header, proxy, or gateway logic without coupling Dash to a specific auth library.
+
+## Relative checkout redirects
+
+When the client is configured with `trustedOrigins`, the dashboard payment API can accept relative checkout redirect URLs and resolve them against the incoming request origin.
+That allowlist can contain exact origins or wildcard patterns like `*`, `*.com.br`, or `rewritetoday.com*`.
+
+```ts title="src/lib/paymesh.ts"
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+  }),
+  trustedOrigins: [
+    "https://app.example.com",
+    "http://localhost:3000",
+  ],
+  plugins: [
+    dash({
+      path: "/admin/paymesh",
+      auth({ request }) {
+        const email = request.headers.get("x-user-email");
+
+        if (!email) {
+          throw new Error("Unauthorized");
+        }
+
+        return { id: "user_123", email };
+      },
+    }),
+  ],
+});
+```
+
+In that setup, dashboard requests can submit values like `"/success"` and `"/cancel"`. Dash resolves them to absolute URLs only when the current request origin is present in `trustedOrigins`.
+
+If the request comes from an origin outside the allowlist, Dash rejects the redirect URL before it reaches the provider client. That keeps the redirect surface explicit and avoids silently accepting a hostile origin.

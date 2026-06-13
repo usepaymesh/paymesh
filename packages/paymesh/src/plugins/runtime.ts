@@ -59,6 +59,7 @@ interface BootstrapPluginsOptions<
 	plugins: Plugins;
 	provider: Provider<string>;
 	schema: ResolvedDatabaseSchema;
+	trustedOrigins?: string[];
 }
 
 interface BootstrappedPlugins<
@@ -105,6 +106,7 @@ export function bootstrapPlugins<
 	plugins,
 	provider,
 	schema,
+	trustedOrigins,
 }: BootstrapPluginsOptions<
 	IncludeRaw,
 	Schema,
@@ -357,6 +359,102 @@ export function bootstrapPlugins<
 				locals: {},
 				params: resolved.params,
 				request,
+				resolveTrustedUrl: (value?: string) => {
+					if (!value) return;
+
+					try {
+						const url = new URL(value);
+
+						if (trustedOrigins?.length) {
+							let trusted = false;
+							for (const trustedOrigin of trustedOrigins) {
+								if (trustedOrigin === '*') {
+									trusted = true;
+									break;
+								}
+
+								if (!trustedOrigin.includes('*')) {
+									if (url.origin === trustedOrigin) {
+										trusted = true;
+										break;
+									}
+
+									continue;
+								}
+
+								const pattern = trustedOrigin.includes('://')
+									? url.origin
+									: url.host;
+								const regexp = new RegExp(
+									`^${trustedOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('\\*', '.*')}$`,
+								);
+
+								if (regexp.test(pattern)) {
+									trusted = true;
+									break;
+								}
+							}
+
+							if (!trusted) {
+								throw new PaymeshError({
+									code: 'invalid_request',
+									message: `Untrusted origin for redirect URL: "${url.origin}".`,
+								});
+							}
+						}
+
+						return url.toString();
+					} catch (error) {
+						if (error instanceof PaymeshError) throw error;
+					}
+
+					if (!trustedOrigins?.length) {
+						throw new PaymeshError({
+							code: 'invalid_request',
+							message:
+								'Relative redirect URLs require createClient({ trustedOrigins }).',
+						});
+					}
+
+					const requestOrigin = new URL(request.url).origin;
+					let trusted = false;
+					for (const trustedOrigin of trustedOrigins) {
+						if (trustedOrigin === '*') {
+							trusted = true;
+							break;
+						}
+
+						if (!trustedOrigin.includes('*')) {
+							if (requestOrigin === trustedOrigin) {
+								trusted = true;
+								break;
+							}
+
+							continue;
+						}
+
+						const pattern = trustedOrigin.includes('://')
+							? requestOrigin
+							: new URL(requestOrigin).host;
+						const regexp = new RegExp(
+							`^${trustedOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('\\*', '.*')}$`,
+						);
+
+						if (regexp.test(pattern)) {
+							trusted = true;
+							break;
+						}
+					}
+
+					if (!trusted) {
+						throw new PaymeshError({
+							code: 'invalid_request',
+							message: `Untrusted origin for request origin: "${requestOrigin}".`,
+						});
+					}
+
+					return new URL(value, request.url).toString();
+				},
 				route: resolved.metadata,
 				client: client as never,
 				plugin: resolved.pluginMetadata as never,
@@ -423,6 +521,7 @@ type RuntimeRouteContext<TClient> = {
 	locals: Record<string, unknown>;
 	params: Record<string, string>;
 	request: Request;
+	resolveTrustedUrl(url?: string): string | undefined;
 	route: RegisteredPluginRoute;
 	client: TClient;
 	plugin: RegisteredPaymeshPlugin;
