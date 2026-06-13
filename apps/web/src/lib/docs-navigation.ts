@@ -50,6 +50,11 @@ export const docsNavigation: DocNavGroup[] = [
 				href: '/docs/concepts/client',
 				icon: 'terminal-square',
 			},
+			{
+				label: 'Coupons',
+				href: '/docs/concepts/coupons',
+				icon: 'ticket-percent',
+			},
 			{ label: 'Sandbox', href: '/docs/concepts/sandbox', icon: 'flask' },
 			{ label: 'Hooks', href: '/docs/concepts/hooks', icon: 'hook' },
 			{

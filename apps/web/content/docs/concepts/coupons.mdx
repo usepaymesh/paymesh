@@ -1,0 +1,440 @@
+---
+title: Coupons
+description: Learn the full Paymesh coupons surface, including CRUD, checkout integration, validation previews, database persistence, provider support, and current provider-specific limits.
+---
+
+## Overview
+
+Paymesh exposes coupons as a first-party client surface:
+
+- `paymesh.coupons.create()`
+- `paymesh.coupons.get()`
+- `paymesh.coupons.list()`
+- `paymesh.coupons.update()`
+- `paymesh.coupons.delete()`
+- `paymesh.coupons.check()`
+
+This is the normalized layer for provider-native coupon systems. In the current repository, coupon support is implemented for:
+
+- `@paymesh/stripe`
+- `@paymesh/polar`
+
+Providers that do not advertise `capabilities.coupons === true` do not expose this surface.
+
+## Capability matrix
+
+| Provider | `coupons` | Notes |
+| --- | --- | --- |
+| Stripe | yes | Backed by Stripe coupons + promotion codes. |
+| Polar | yes | Backed by Polar discounts. |
+| AbacatePay | no | No coupon surface in the current provider package. |
+| Dodo | no | No coupon surface in the current provider package. |
+
+## Quick start
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { postgres } from "@paymesh/postgres";
+import { stripe } from "@paymesh/stripe";
+
+export const paymesh = createClient({
+  provider: stripe({
+    secret: "sk_test_123",
+    webhookSecret: "whsec_123",
+  }),
+  database: postgres("postgres://postgres:postgres@localhost:5432/paymesh"),
+});
+```
+
+```ts title="src/server/coupons.ts"
+const coupon = await paymesh.coupons.create({
+  code: "WELCOME10",
+  name: "Welcome 10%",
+  discount: {
+    type: "percentage",
+    value: 10,
+  },
+  duration: {
+    type: "once",
+  },
+});
+```
+
+## Coupon shape
+
+The normalized coupon returned by Paymesh contains:
+
+```ts title="shape.ts"
+type Coupon = {
+  id: string;
+  provider: string;
+  sandbox: boolean;
+  code: string;
+  name?: string;
+  status: "active" | "inactive" | "scheduled" | "expired" | "deleted";
+  active?: boolean;
+  discount:
+    | {
+        type: "percentage";
+        value: number;
+      }
+    | {
+        type: "fixed";
+        value: number;
+        currency?: string;
+        amounts?: Record<string, number>;
+      };
+  duration?: {
+    type: "once" | "forever" | "repeating";
+    durationInMonths?: number;
+  };
+  startsAt?: string;
+  expiresAt?: string;
+  customerId?: string;
+  firstTimeOnly?: boolean;
+  minimumAmount?: number;
+  minimumAmountCurrency?: string;
+  appliesTo?: {
+    products?: string[];
+    prices?: string[];
+  };
+  redemptions: {
+    count: number;
+    max: number | null;
+  };
+  metadata?: Record<string, unknown>;
+};
+```
+
+## Creating coupons
+
+### Percentage discount
+
+```ts title="percentage.ts"
+const coupon = await paymesh.coupons.create({
+  code: "WELCOME10",
+  name: "Welcome 10%",
+  discount: {
+    type: "percentage",
+    value: 10,
+  },
+  duration: {
+    type: "once",
+  },
+});
+```
+
+### Fixed discount
+
+```ts title="fixed.ts"
+const coupon = await paymesh.coupons.create({
+  code: "SAVE20",
+  name: "Save $20",
+  discount: {
+    type: "fixed",
+    value: 2000,
+    currency: "USD",
+  },
+  duration: {
+    type: "once",
+  },
+});
+```
+
+### Product-scoped coupon
+
+```ts title="scoped.ts"
+const coupon = await paymesh.coupons.create({
+  code: "PRO20",
+  discount: {
+    type: "percentage",
+    value: 20,
+  },
+  appliesTo: {
+    products: ["prod_pro"],
+  },
+});
+```
+
+### Expiration and redemption limits
+
+```ts title="limits.ts"
+const coupon = await paymesh.coupons.create({
+  code: "LAUNCH50",
+  discount: {
+    type: "percentage",
+    value: 50,
+  },
+  expiresAt: "2026-12-31T23:59:59.000Z",
+  maxRedemptions: 100,
+});
+```
+
+## Reading and listing coupons
+
+```ts title="get.ts"
+const coupon = await paymesh.coupons.get("promo_abc");
+```
+
+```ts title="list.ts"
+const page = await paymesh.coupons.list({
+  limit: 20,
+  code: "WELCOME10",
+});
+```
+
+`list()` is paginated and returns:
+
+```ts title="list-result.ts"
+{
+  data: Coupon[];
+  total: number;
+  previous: string | null;
+  next: string | null;
+}
+```
+
+## Updating coupons
+
+```ts title="update.ts"
+const coupon = await paymesh.coupons.update("promo_abc", {
+  active: false,
+  name: "Paused campaign",
+});
+```
+
+Update support is provider-dependent. Paymesh only forwards updates that the active provider supports with equivalent semantics.
+
+If the update request includes fields the provider cannot honor safely, Paymesh throws `invalid_request` instead of silently weakening the rule set.
+
+## Deleting coupons
+
+```ts title="delete.ts"
+const result = await paymesh.coupons.delete("promo_abc");
+```
+
+The normalized delete result is:
+
+```ts title="delete-result.ts"
+{
+  id: "promo_abc",
+  provider: "stripe",
+  sandbox: true,
+  deleted: true,
+  code: "WELCOME10",
+}
+```
+
+## Checkout integration
+
+Coupons are integrated directly into `payments.create()`.
+
+### Pre-apply a coupon code
+
+```ts title="checkout-coupon.ts"
+const checkout = await paymesh.payments.create({
+  amount: 4900,
+  currency: "USD",
+  productIds: ["prod_pro"],
+  couponCode: "PRO20",
+});
+```
+
+### Allow manual coupon entry in hosted checkout
+
+```ts title="checkout-allow.ts"
+const checkout = await paymesh.payments.create({
+  amount: 4900,
+  currency: "USD",
+  productIds: ["prod_pro"],
+  allowCouponCodes: true,
+});
+```
+
+### Use both
+
+```ts title="checkout-both.ts"
+const checkout = await paymesh.payments.create({
+  amount: 4900,
+  currency: "USD",
+  productIds: ["prod_pro"],
+  couponCode: "PRO20",
+  allowCouponCodes: true,
+});
+```
+
+Current provider behavior:
+
+- Stripe enables `allow_promotion_codes` and pre-applies a matching promotion code.
+- Polar enables `allow_discount_codes` and resolves `couponCode` into a `discount_id`.
+
+## Coupon validation with preview
+
+`coupons.check()` validates a code against the current cart or amount context and returns a normalized preview when Paymesh can calculate one safely.
+
+```ts title="check.ts"
+const result = await paymesh.coupons.check({
+  code: "WELCOME10",
+  amount: 10000,
+  currency: "USD",
+  productIds: ["prod_pro"],
+});
+```
+
+Successful result:
+
+```ts title="check-valid.ts"
+{
+  valid: true,
+  coupon: {
+    id: "promo_abc",
+    code: "WELCOME10",
+    discount: {
+      type: "percentage",
+      value: 10,
+    },
+  },
+  preview: {
+    subtotal: 10000,
+    discountTotal: 1000,
+    total: 9000,
+    currency: "USD",
+  },
+}
+```
+
+Failed result:
+
+```ts title="check-invalid.ts"
+{
+  valid: false,
+  reason: "minimum_amount_not_reached",
+  coupon: {
+    id: "promo_abc",
+    code: "WELCOME10",
+  },
+}
+```
+
+### Invalid reasons
+
+`coupons.check()` may return:
+
+- `not_found`
+- `inactive`
+- `expired`
+- `not_started`
+- `max_redemptions_reached`
+- `customer_not_eligible`
+- `product_not_eligible`
+- `currency_not_supported`
+- `minimum_amount_not_reached`
+- `provider_error`
+
+### Preview sources
+
+Paymesh currently computes previews using the provider surface that exists today:
+
+- explicit `amount` + `currency`
+- provider price lookups when the provider makes that practical
+- product-based cart resolution when the provider catalog can be queried safely
+
+If the provider cannot validate a requested restriction with strong guarantees, the result is `valid: false` with `reason: "provider_error"` instead of a guessed approval.
+
+## Database persistence
+
+If a Paymesh database adapter is configured, coupons are persisted automatically.
+
+That persistence is useful for:
+
+- operational visibility
+- local list queries
+- stable coupon lookup by provider id
+- keeping a normalized coupon record beside provider raw payloads
+
+The built-in schema now includes a `coupons` table. Paymesh stores normalized columns such as:
+
+- `provider`
+- `provider_id`
+- `code`
+- `status`
+- `active`
+- `discount_type`
+- `discount_value`
+- `discount_currency`
+- `starts_at`
+- `expires_at`
+- `max_redemptions`
+- `redemption_count`
+- `minimum_amount`
+- `minimum_amount_currency`
+- `metadata`
+- `data`
+- `raw`
+
+## Provider-specific behavior
+
+### Stripe
+
+Stripe coupon support is modeled around:
+
+- Stripe `coupon`
+- Stripe `promotion_code`
+
+Important details:
+
+- the Paymesh `Coupon.id` maps to the Stripe promotion code id
+- `couponCode` in checkout resolves a Stripe promotion code by `code`
+- `allowCouponCodes` maps to Stripe Checkout `allow_promotion_codes`
+- `startsAt` is not supported with equivalent semantics and is rejected
+- `appliesTo.prices` is not supported and is rejected
+- Stripe updates are intentionally narrow in the current implementation; only safe fields such as `active` and `metadata` are updated
+- first-time-only restrictions may cause `check()` to return `provider_error` when Stripe cannot be validated locally with strong guarantees
+
+See [Stripe](/home/almeida/Documents/Projects/paymesh/paymesh/apps/web/content/docs/providers/stripe.mdx).
+
+### Polar
+
+Polar coupon support is modeled around Polar discounts.
+
+Important details:
+
+- `couponCode` in checkout resolves a Polar discount and passes its `discount_id`
+- `allowCouponCodes` maps to Polar checkout manual discount entry
+- `appliesTo.products` is supported
+- `appliesTo.prices` is not supported and is rejected
+- some Polar accounts may require `organizationId` in provider config for discount APIs
+
+See [Polar](/home/almeida/Documents/Projects/paymesh/paymesh/apps/web/content/docs/providers/polar.mdx).
+
+## Error behavior
+
+Paymesh treats unsupported coupon fields as hard errors.
+
+That means this fails intentionally:
+
+```ts title="unsupported.ts"
+await paymesh.coupons.create({
+  code: "PRICE20",
+  discount: {
+    type: "percentage",
+    value: 20,
+  },
+  appliesTo: {
+    prices: ["price_monthly_pro"],
+  },
+});
+```
+
+The goal is to avoid creating a provider-side coupon that is looser than the caller requested.
+
+## Recommended usage
+
+Use coupons when:
+
+- the provider already has native discount infrastructure you want to preserve
+- the checkout should remain provider-hosted
+- you want normalized CRUD and validation flows across providers
+- you want coupon data persisted locally alongside the rest of the billing state
+
+Avoid assuming every provider supports identical coupon semantics. Paymesh normalizes the common surface, but provider-native rules still matter at the edges.
