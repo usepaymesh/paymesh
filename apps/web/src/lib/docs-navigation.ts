@@ -114,8 +114,8 @@ export const docsNavigation: DocNavGroup[] = [
 			},
 			{
 				label: 'Dodo',
-				description: 'Planned provider',
-				status: 'planned',
+				href: '/docs/providers/dodo',
+				description: 'Catalog-driven Dodo Payments provider.',
 				icon: 'dodo',
 			},
 		],

@@ -1,0 +1,203 @@
+---
+title: Dodo
+description: "Detailed guide to the Dodo provider: setup options, catalog-driven hosted payments, customers, catalog reads, dashboard sync helpers, and webhook normalization."
+---
+
+## Overview
+
+`@paymesh/dodo` is the first-party Paymesh provider for Dodo Payments. It is the right choice when you want:
+
+- catalog-driven hosted checkout payments
+- normalized customer lifecycle methods
+- catalog reads from Dodo products
+- subscription-aware webhook mapping
+- dashboard sync helpers for customer, payment, and subscription state
+
+Unlike Stripe and AbacatePay, Dodo in this repository does **not** expose `paymesh.pix`. For BRL checkouts, the Dodo hosted checkout can still offer Pix inside the redirect flow.
+
+## Installation
+
+<InstallTabs packages="paymesh @paymesh/dodo" />
+
+## Provider options
+
+| Option | Required | Description |
+| --- | --- | --- |
+| `apiKey` | yes in practice | Dodo API key used for authenticated requests. Defaults to `process.env.DODO_PAYMENTS_API_KEY`. |
+| `webhookSecret` | recommended | Secret used to verify `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers. Defaults to `process.env.DODO_PAYMENTS_WEBHOOK_KEY`. |
+| `sandbox` | no | Forces sandbox mode. Auto-detected from the base URL when omitted. |
+| `baseUrl` | no | Overrides the Dodo API base URL. Defaults to `https://live.dodopayments.com`. Use `https://test.dodopayments.com` for sandbox. |
+| `retry` | no | Retry policy forwarded to the shared request layer. |
+| `timeout` | no | Per-request timeout in milliseconds. |
+| `fetch` | no | Custom fetch implementation for tests or runtime-specific environments. |
+
+```ts title="src/lib/paymesh.ts"
+import { createClient } from "paymesh";
+import { dodo } from "@paymesh/dodo";
+
+export const paymesh = createClient({
+  provider: dodo({
+    apiKey: process.env.DODO_PAYMENTS_API_KEY!,
+    webhookSecret: process.env.DODO_PAYMENTS_WEBHOOK_KEY,
+    baseUrl: "https://test.dodopayments.com",
+  }),
+});
+```
+
+## Capability profile
+
+| Capability | Supported |
+| --- | --- |
+| `checkout` | yes |
+| `pix` | no |
+| `customers` | yes |
+| `subscriptions` | yes |
+| `webhooks` | yes |
+| `refunds` | no |
+| `customerPortal` | no |
+| `coupons` | no |
+
+## Hosted checkout payments
+
+Dodo payment creation is catalog-driven. You must pass `productIds`.
+
+```ts title="src/server/payments.ts"
+const payment = await paymesh.payments.create({
+  amount: 4900,
+  currency: "BRL",
+  productIds: ["prod_abc123"],
+  customer: {
+    email: "billing@example.com",
+    externalId: "order_42",
+    name: "Billing Team",
+  },
+  successUrl: "http://localhost:3000/success",
+  cancelUrl: "http://localhost:3000/cancel",
+  metadata: {
+    orderId: "order_42",
+  },
+});
+```
+
+### Important constraints
+
+- `productIds` is required
+- `customer.id` or `customer.email` is required
+- `amount` can only be passed when exactly one product id is provided
+
+### Request mapping details
+
+- `productIds` maps to `product_cart`
+- `amount` maps into the product cart entry when one product id is present
+- `currency` maps to `billing_currency`
+- `customer.id` maps to `customer.customer_id`
+- `customer.email`, `customer.name`, and `customer.phone` map into the embedded customer payload when no `customer.id` exists
+- `metadata` values are serialized to strings before sending to Dodo
+- `successUrl`, `cancelUrl`, and `returnUrl` resolve into one `return_url`
+
+For BRL checkouts, the provider also enables Dodo's hosted Pix-capable payment method set automatically.
+
+## PIX note
+
+`@paymesh/dodo` does not implement `paymesh.pix`.
+
+That is deliberate. Dodo can present Pix inside the hosted checkout page for BRL payments, but the current Dodo API documentation does not describe a backend-native PIX flow that returns Paymesh's QR-code-first PIX fields such as `copyPasteCode` and `qrCodeImageUrlPng`.
+
+If your product needs native PIX payload fields, choose `@paymesh/stripe` or `@paymesh/abacatepay` instead.
+
+## Customer operations
+
+Dodo customer methods are normalized through `paymesh.customers`.
+
+```ts title="src/server/customers.ts"
+const customer = await paymesh.customers.upsert({
+  email: "billing@example.com",
+  externalId: "org_42",
+  name: "ACME Corp",
+  phone: "+55 11 99999-9999",
+  metadata: {
+    segment: "enterprise",
+  },
+});
+```
+
+### Customer mapping notes
+
+- `externalId` is stored in Dodo metadata as `externalId`
+- create uses `POST /customers`
+- update uses `PATCH /customers/:id`
+- delete is intentionally unsupported by this provider package
+
+If you attempt to create a customer without `email`, the provider throws `invalid_request`.
+
+## Catalog reads
+
+Dodo exposes `provider.catalog.list()` and reads products from `/products`.
+
+Paymesh normalizes:
+
+- products
+- one synthetic price entry per product when price data exists
+- recurring interval metadata when Dodo exposes recurring pricing fields
+
+```ts title="src/server/catalog.ts"
+const catalog = await paymesh.provider.catalog?.list();
+
+console.log(catalog?.products.length, catalog?.prices.length);
+```
+
+## Dashboard helpers
+
+Dodo ships `provider.dashboard` with:
+
+- customer sync
+- payment sync
+- subscription sync
+
+`getResourceUrl()` currently returns `null`, so operational dashboards should not assume Dodo deep links are available.
+
+## Webhook verification
+
+The provider verifies Dodo webhooks using:
+
+- `webhook-id`
+- `webhook-timestamp`
+- `webhook-signature`
+
+It rebuilds the signed message in the standard Dodo format and checks the `v1` HMAC-SHA256 signature against the configured webhook secret.
+
+If `webhookSecret` is missing, verification returns `false`.
+
+## Webhook normalization
+
+The provider currently normalizes these Dodo event families:
+
+| Dodo event | Paymesh event |
+| --- | --- |
+| `payment.succeeded` | `payment.succeeded` |
+| `payment.failed` | `payment.failed` |
+| `payment.processing` | `payment.created` |
+| `payment.cancelled` | `payment.canceled` |
+| `refund.succeeded` | `payment.refunded` |
+| `refund.failed` | `payment.failed` |
+| `subscription.active` | `subscription.created` |
+| `subscription.renewed` | `subscription.updated` |
+| `subscription.on_hold` | `subscription.updated` |
+| `subscription.paused` | `subscription.updated` |
+| `subscription.cancelled` | `subscription.canceled` |
+| `subscription.failed` | `subscription.updated` |
+| `subscription.expired` | `subscription.canceled` |
+| `subscription.plan_changed` | `subscription.updated` |
+| `subscription.updated` | `subscription.updated` |
+
+Pix-shaped Dodo payment payloads are still normalized as payments with `method: "pix"` when the webhook includes Pix-specific fields.
+
+## Choosing Dodo
+
+Use Dodo when:
+
+- your checkout flow is catalog-driven
+- you want Dodo Payments as the upstream billing system
+- you need hosted BRL checkout links that may offer Pix without building a native PIX flow
+
+Do not choose Dodo when your product requires `paymesh.pix` with QR code, copia-e-cola, or explicit PIX expiration fields as first-class backend data.

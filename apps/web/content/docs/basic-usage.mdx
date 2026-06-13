@@ -113,7 +113,7 @@ console.log(pix.expiresAt);
 ```
 
 <Callout type="info">
-  In the current repository, native `pix` capability is implemented by `@paymesh/stripe` and `@paymesh/abacatepay`. The Polar provider intentionally does not advertise PIX support.
+  In the current repository, native `pix` capability is implemented by `@paymesh/stripe` and `@paymesh/abacatepay`. `@paymesh/polar` and `@paymesh/dodo` intentionally advertise `pix: false`. Dodo can still show Pix inside BRL hosted checkout links created through `paymesh.payments.create()`.
 </Callout>
 
 ## Upsert and read a customer

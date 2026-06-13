@@ -127,12 +127,12 @@ const providerCards: ProviderCard[] = [
 	{
 		id: '05',
 		name: 'Dodo Payments',
-		status: 'coming soon',
-		headline: 'Dodo is queued.',
+		status: 'supported',
+		headline: 'Dodo is live.',
 		description:
-			'Internet-native billing for teams that want optionality without integration churn.',
+			'Catalog-driven hosted payments, customers, subscriptions, and webhook normalization through the same Paymesh client.',
 		icon: 'dodo',
-		tags: ['global', 'merchant', 'tax'],
+		tags: ['catalog', 'hosted', 'webhooks'],
 	},
 	{
 		id: '06',

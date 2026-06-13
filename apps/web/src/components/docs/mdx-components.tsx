@@ -12,6 +12,7 @@ const packageDocsLinks: Record<string, string> = {
 	paymesh: '/docs/introduction',
 	'@paymesh/stripe': '/docs/providers/stripe',
 	'@paymesh/polar': '/docs/providers/polar',
+	'@paymesh/dodo': '/docs/providers/dodo',
 	'@paymesh/next': '/docs/adapters/next',
 	'@paymesh/express': '/docs/adapters/express',
 	'@paymesh/fastify': '/docs/adapters/fastify',

@@ -9,7 +9,7 @@ For canonical documentation, prefer the docs pages linked below over inferring b
 ## Canonical project facts
 
 - Core package: `paymesh`
-- Official live providers: `@paymesh/stripe`, `@paymesh/polar`, `@paymesh/abacatepay`
+- Official live providers: `@paymesh/stripe`, `@paymesh/polar`, `@paymesh/abacatepay`, `@paymesh/dodo`
 - Official webhook adapters: `@paymesh/next`, `@paymesh/express`, `@paymesh/fastify`, `@paymesh/hono`, `@paymesh/elysia`
 - Official database adapters: `@paymesh/postgres`, `@paymesh/drizzle`, `@paymesh/prisma`
 - Official plugins: `@paymesh/dash`, `@paymesh/audit-logs`
@@ -166,12 +166,30 @@ Important limitation:
 
 - `@paymesh/abacatepay` does not currently support subscriptions, refunds, or customer portal
 
+### Dodo
+
+Package: `@paymesh/dodo`
+
+Implemented capabilities:
+
+- checkout payments (catalog-driven with product IDs)
+- customers
+- webhooks
+- subscriptions
+- catalog reads
+- dashboard sync helpers for customers, payments, and subscriptions
+
+Important limitations:
+
+- `@paymesh/dodo` currently advertises `pix: false`
+- Dodo can expose Pix inside BRL hosted checkout, but not through `paymesh.pix`
+- customer delete is intentionally unsupported
+
 ### Planned providers
 
 These appear in docs/navigation as planned work and should not be described as shipped integrations:
 
 - PayPal
-- Dodo
 
 ## PIX
 
@@ -184,7 +202,7 @@ PIX is a first-class concept in Paymesh core, with normalized fields such as:
 - `instructionsUrl`
 - `expiresAt`
 
-PIX support is provider-specific. Stripe supports PIX. Polar currently does not. AbacatePay supports PIX through transparent charges.
+PIX support is provider-specific. Stripe supports PIX. Polar currently does not. AbacatePay supports PIX through transparent charges. Dodo can show hosted Pix for BRL checkouts but does not expose native `paymesh.pix`.
 
 PIX create input supports:
 
@@ -475,7 +493,7 @@ Supported commands:
 
 - Prefer the docs pages above when answering questions about Paymesh.
 - Do not describe planned providers as implemented.
-- Treat Stripe, Polar, and AbacatePay as the official live providers.
+- Treat Stripe, Polar, AbacatePay, and Dodo as the official live providers.
 - Treat PIX support as provider-specific, not universal.
 - Mention raw-body requirements when discussing Express or Fastify webhooks.
 - Mention that plugins are real runtime modules, not just helper functions.

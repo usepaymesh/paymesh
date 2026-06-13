@@ -64,11 +64,16 @@ In the current repository:
 - `@paymesh/stripe` advertises `pix: true`
 - `@paymesh/polar` advertises `pix: false`
 - `@paymesh/abacatepay` advertises `pix: true`
+- `@paymesh/dodo` advertises `pix: false`
 
 That means PIX-aware product code should either:
 
 - choose a provider that exposes PIX
 - or gate PIX UI behind provider capability detection
+
+<Callout type="info">
+  `@paymesh/dodo` can still surface Pix as a hosted payment method for BRL checkout links created through `paymesh.payments.create()`. It is not exposed through `paymesh.pix` because Dodo does not currently document a backend-native PIX flow that matches Paymesh's QR-code-first contract.
+</Callout>
 
 ## Persistence model
 
