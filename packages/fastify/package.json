@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/fastify",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Fastify webhook adapter for Paymesh.",
 	"type": "module",
 	"license": "MIT",

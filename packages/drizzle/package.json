@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/drizzle",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Drizzle database adapter for Paymesh.",
 	"type": "module",
 	"license": "MIT",

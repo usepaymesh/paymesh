@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/postgres",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Postgres database adapter for Paymesh.",
 	"type": "module",
 	"license": "MIT",

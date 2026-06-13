@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/dash",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Standalone admin dashboard plugin for Paymesh.",
 	"type": "module",
 	"license": "MIT",

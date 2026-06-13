@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/mcp",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Official MCP package for Paymesh.",
 	"type": "module",
 	"license": "MIT",

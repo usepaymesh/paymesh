@@ -1,6 +1,6 @@
 {
 	"name": "@paymesh/audit-logs",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"description": "Audit logs plugin for Paymesh.",
 	"type": "module",
 	"license": "MIT",
